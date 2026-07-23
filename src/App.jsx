@@ -43,7 +43,8 @@ export default function App() {
 
   const activeClientRef = useRef(null);
   const syncTimerRef = useRef(null);
-  const lastKnownCloudTimeRef = useRef(0);
+  const lastKnownCloudIndexTimeRef = useRef(0);
+  const shardTimestampsRef = useRef({});
   const currentProfileRef = useRef(null);
 
   const currentProfile = profiles.find(p => p.id === activeProfileId) || null;
@@ -304,53 +305,100 @@ export default function App() {
     try {
       const client = activeClientRef.current;
       
-      // Auto-create WebDAV directory structure if missing
       if (typeof client.ensureDirectoriesExist === 'function') {
         await client.ensureDirectoriesExist();
       }
 
-      const cloudTime = await client.getLastModified('chat_history.json');
-      
-      if (cloudTime === 0) {
-        // Cloud file doesn't exist yet
-        setStatusText('Connected (No history file)');
-        setStatusDotClass('bg-green-500');
-        setIsSyncing(false);
-        return;
+      const cloudIndexTime = await client.getLastModified('chat_index.json');
+      let indexData = {};
+      let needsMigration = false;
+
+      if (cloudIndexTime === 0) {
+        const oldTime = await client.getLastModified('chat_history.json');
+        if (oldTime > 0) {
+          needsMigration = true;
+        } else {
+          setStatusText('Connected (No history file)');
+          setStatusDotClass('bg-green-500');
+          setIsSyncing(false);
+          return;
+        }
       }
 
-      if (force || cloudTime > lastKnownCloudTimeRef.current) {
-        // Download history
-        const blob = await client.downloadFile('chat_history.json');
-        const text = await blob.text();
-        const rawCloudMessages = JSON.parse(text);
-        const { sanitized: cloudMessages, repairedCount } = sanitizeMessages(rawCloudMessages);
+      if (force || cloudIndexTime > lastKnownCloudIndexTimeRef.current || needsMigration) {
+        let downloadedMessages = [];
+        let anyShardChanged = false;
+        let repairedTotal = 0;
 
-        lastKnownCloudTimeRef.current = cloudTime;
+        if (needsMigration) {
+            const blob = await client.downloadFile('chat_history.json');
+            const text = await blob.text();
+            const rawCloudMessages = JSON.parse(text);
+            const { sanitized, repairedCount } = sanitizeMessages(rawCloudMessages);
+            downloadedMessages = sanitized;
+            repairedTotal = repairedCount;
+            anyShardChanged = true;
+        } else {
+            const indexBlob = await client.downloadFile('chat_index.json');
+            const indexText = await indexBlob.text();
+            indexData = JSON.parse(indexText);
 
-        // Merge with local sending/failed states
-        setMessages(prev => {
-          const localOnly = prev.filter(m => m.status === 'SENDING' || m.status === 'FAILED');
-          const merged = [...cloudMessages, ...localOnly];
-          merged.sort((a, b) => a.timestamp - b.timestamp);
+            for (const [shardName, timestamp] of Object.entries(indexData)) {
+                if (timestamp > (shardTimestampsRef.current[shardName] || 0)) {
+                    try {
+                        const shardBlob = await client.downloadFile(shardName);
+                        const shardText = await shardBlob.text();
+                        const rawMsgs = JSON.parse(shardText);
+                        const { sanitized, repairedCount } = sanitizeMessages(rawMsgs);
+                        downloadedMessages = [...downloadedMessages, ...sanitized];
+                        shardTimestampsRef.current[shardName] = timestamp;
+                        anyShardChanged = true;
+                        repairedTotal += repairedCount;
+                    } catch (e) {
+                        console.error("Failed to fetch shard", shardName, e);
+                    }
+                }
+            }
+        }
 
-          // Write local cache
-          cacheFile(`history_array_${currentProfileRef.current.id}`, merged);
-          
-          // Resolve media files asynchronously
-          resolveLocalMediaUrls(merged);
-          
-          // If we repaired invalid/corrupted cloud entries, rewrite clean history to cloud immediately
-          if (repairedCount > 0 || cloudMessages.length !== rawCloudMessages.length) {
-            pushHistoryToCloud(merged);
-          }
+        if (anyShardChanged) {
+          lastKnownCloudIndexTimeRef.current = cloudIndexTime;
 
-          return merged;
-        });
+          setMessages(prev => {
+            let mergedMap = new Map();
+            prev.forEach(m => mergedMap.set(m.id, m));
 
-        setStatusText('Synchronized');
-        setStatusDotClass('bg-green-500');
-        setTimeout(() => scrollToBottom(), 150);
+            downloadedMessages.forEach(m => {
+                const existing = mergedMap.get(m.id);
+                if (existing) {
+                    if ((m.lastModified || 0) >= (existing.lastModified || 0)) {
+                        mergedMap.set(m.id, m);
+                    }
+                } else {
+                    mergedMap.set(m.id, m);
+                }
+            });
+
+            const merged = Array.from(mergedMap.values());
+            merged.sort((a, b) => a.timestamp - b.timestamp);
+
+            cacheFile(`history_array_${currentProfileRef.current.id}`, merged);
+            resolveLocalMediaUrls(merged);
+            
+            if (needsMigration || repairedTotal > 0) {
+              pushHistoryToCloud(merged);
+            }
+
+            return merged;
+          });
+
+          setStatusText('Synchronized');
+          setStatusDotClass('bg-green-500');
+          setTimeout(() => scrollToBottom(), 150);
+        } else {
+          setStatusText('Synchronized');
+          setStatusDotClass('bg-green-500');
+        }
       } else {
         setStatusText('Synchronized');
         setStatusDotClass('bg-green-500');
@@ -369,19 +417,35 @@ export default function App() {
     const client = activeClientRef.current;
 
     const targetList = overrideMsgs || messages;
-    
-    // Save locally
     cacheFile(`history_array_${currentProfile.id}`, targetList);
 
     try {
-      const cleanJson = JSON.stringify(targetList.map(m => {
-        const { isOutgoing, url, ...clean } = m;
-        return clean;
-      }));
-      await client.uploadText(cleanJson, 'chat_history.json');
-      lastKnownCloudTimeRef.current = await client.getLastModified('chat_history.json');
+      const shards = {};
+      targetList.forEach(m => {
+          const date = new Date(m.timestamp);
+          const yyyy = date.getFullYear();
+          const mm = String(date.getMonth() + 1).padStart(2, '0');
+          const shardName = `chat_history_${yyyy}_${mm}.json`;
+          if (!shards[shardName]) shards[shardName] = [];
+          
+          const { isOutgoing, url, ...clean } = m;
+          shards[shardName].push(clean);
+      });
+
+      const newIndexData = {};
+      for (const [shardName, msgs] of Object.entries(shards)) {
+          const cleanJson = JSON.stringify(msgs);
+          await client.uploadText(cleanJson, shardName);
+          const shardTime = await client.getLastModified(shardName);
+          newIndexData[shardName] = shardTime;
+          shardTimestampsRef.current[shardName] = shardTime;
+      }
+
+      await client.uploadText(JSON.stringify(newIndexData), 'chat_index.json');
+      lastKnownCloudIndexTimeRef.current = await client.getLastModified('chat_index.json');
+
     } catch (e) {
-      console.error('Failed to push history file:', e);
+      console.error('Failed to push history shards:', e);
     }
   };
 
@@ -614,36 +678,16 @@ export default function App() {
         const selectedContents = new Set(selectedMsgs.map(m => m.content).filter(Boolean));
         const selectedTimestamps = new Set(selectedMsgs.map(m => m.timestamp));
 
-        const toDelete = messages.filter(m => 
-          idsToDelete.has(m.id) || 
-          (m.content && selectedContents.has(m.content) && selectedTimestamps.has(m.timestamp))
-        );
-
-        const kept = messages.filter(m => 
-          !idsToDelete.has(m.id) && 
-          !(m.content && selectedContents.has(m.content) && selectedTimestamps.has(m.timestamp))
-        );
-
-        setMessages(kept);
-        setSelectedMessageIds(new Set());
-        await pushHistoryToCloud(kept);
-
-        // Delete/Recycle attached files asynchronously
-        for (const msg of toDelete) {
-          if (msg.type !== 'TEXT') {
-            try {
-              await client.recycleFile(msg.content);
-              if (msg.thumbnailUrl) await client.recycleFile(msg.thumbnailUrl);
-              if (msg.isChunked) {
-                for (let i = 0; i < msg.totalChunks; i++) {
-                  await client.recycleFile(`${msg.content}.part${i}`);
-                }
-              }
-            } catch (err) {
-              console.warn(err);
-            }
+        const updatedMessages = messages.map(m => {
+          if (idsToDelete.has(m.id) || (m.content && selectedContents.has(m.content) && selectedTimestamps.has(m.timestamp))) {
+            return { ...m, isDeleted: true, lastModified: Date.now() };
           }
-        }
+          return m;
+        });
+
+        setMessages(updatedMessages);
+        setSelectedMessageIds(new Set());
+        await pushHistoryToCloud(updatedMessages);
       }
     });
     setConfirmOpen(true);
@@ -658,23 +702,15 @@ export default function App() {
         const client = activeClientRef.current;
         if (!client) return;
 
-        const kept = messages.filter(m => m.id !== msg.id && !(m.content && m.content === msg.content && m.timestamp === msg.timestamp));
-        setMessages(kept);
-        await pushHistoryToCloud(kept);
-
-        if (msg.type !== 'TEXT') {
-          try {
-            await client.recycleFile(msg.content);
-            if (msg.thumbnailUrl) await client.recycleFile(msg.thumbnailUrl);
-            if (msg.isChunked) {
-              for (let i = 0; i < msg.totalChunks; i++) {
-                await client.recycleFile(`${msg.content}.part${i}`);
-              }
-            }
-          } catch (err) {
-            console.warn(err);
+        const updatedMessages = messages.map(m => {
+          if (m.id === msg.id || (m.content && m.content === msg.content && m.timestamp === msg.timestamp)) {
+            return { ...m, isDeleted: true, lastModified: Date.now() };
           }
-        }
+          return m;
+        });
+        setMessages(updatedMessages);
+        await pushHistoryToCloud(updatedMessages);
+
       }
     });
     setConfirmOpen(true);
@@ -967,7 +1003,7 @@ export default function App() {
         onOpenSettings={() => setSettingsOpen(true)}
         onSync={() => syncHistory(true)}
         isSyncing={isSyncing}
-        messages={messages}
+        messages={messages.filter(m => !m.isDeleted)}
         statusText={statusText}
         statusDotClass={statusDotClass}
       />
@@ -975,7 +1011,7 @@ export default function App() {
       {/* Main Chat Area */}
       <ChatArea 
         currentProfile={currentProfile}
-        messages={messages}
+        messages={messages.filter(m => !m.isDeleted)}
         activeCategory={activeCategory}
         selectedMessageIds={selectedMessageIds}
         activeUploads={activeUploads}

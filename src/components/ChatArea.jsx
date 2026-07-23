@@ -1154,20 +1154,7 @@ export default function ChatArea({
       {/* Inputs Footer Area - Zero rounding to save space, flat alignment */}
       <footer className="border-t border-borderColor bg-bgSecondary p-2 shrink-0">
         <div className="flex gap-2 items-end">
-          <input 
-            type="file" 
-            multiple
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            style={{ display: 'none' }}
-          />
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="w-9 h-9 rounded flex items-center justify-center text-textSecondary hover:text-accentColor hover:bg-white/5 transition-all shrink-0"
-            title="Attach File"
-          >
-            <i className="fa-solid fa-paperclip text-base"></i>
-          </button>
+          {/* File attachment disabled per requirements */}
           <button 
             onClick={handleShareLocation}
             className="w-9 h-9 rounded flex items-center justify-center text-textSecondary hover:text-accentColor hover:bg-white/5 transition-all shrink-0"
