@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bgPrimary: #0f172a;
+  --color-bgSecondary: #1e293b;
+  --color-accentColor: #6366f1;
+  --color-accentHover: #4f46e5;
+  --color-textPrimary: #f8fafc;
+  --color-textSecondary: #cbd5e1;
+  --color-textMuted: #64748b;
+  --color-borderColor: #334155;
+}
+
+/* Custom premium scrollbars & overall typography */
+* {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+body {
+  margin: 0;
+  background-color: #0f172a;
+  color: #f8fafc;
+  overflow: hidden;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+.scale-in {
+  animation: scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-slide-down {
+  animation: slideDown 0.2s ease-out forwards;
+}
+
+/* Compact message media styling */
+.message-media {
+  max-width: 240px;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  margin-top: 4px;
+}
+.message-media img,
+.message-media video {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 180px;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+/* Double-guaranteed hover menu visibility */
+.group:hover .bubble-hover-menu {
+  display: flex !important;
+}
+
+/* GPU-Accelerated Swipe Page Turn Slide Transitions */
+@keyframes slideFromLeft {
+  from { transform: translateX(-40px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideFromRight {
+  from { transform: translateX(40px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-slide-left {
+  animation: slideFromLeft 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.animate-slide-right {
+  animation: slideFromRight 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+
