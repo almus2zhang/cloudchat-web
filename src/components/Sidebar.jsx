@@ -31,7 +31,7 @@ export default function Sidebar({
   };
 
   messages.forEach(msg => {
-    if (msg.categories) {
+    if (Array.isArray(msg.categories)) {
       msg.categories.forEach(cat => {
         // Normalize
         const catId = cat === '工作' ? 'work' : (cat === '日记' ? 'diary' : (cat === '传输' ? 'transfer' : (cat === '隐私' ? 'privacy' : cat)));

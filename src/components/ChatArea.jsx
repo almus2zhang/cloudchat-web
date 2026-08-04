@@ -535,7 +535,7 @@ export default function ChatArea({
       }
       // 3. Category filter
       if (activeCategory === 'all') return true;
-      return msg.categories && msg.categories.map(normalizeCategory).includes(normalizeCategory(activeCategory));
+      return Array.isArray(msg.categories) && msg.categories.map(normalizeCategory).includes(normalizeCategory(activeCategory));
     });
 
     // Slice only the latest visibleCount messages to optimize DOM node performance
@@ -1154,7 +1154,16 @@ export default function ChatArea({
       {/* Inputs Footer Area - Zero rounding to save space, flat alignment */}
       <footer className="border-t border-borderColor bg-bgSecondary p-2 shrink-0">
         <div className="flex gap-2 items-end">
-          {/* File attachment disabled per requirements */}
+          <label className="w-9 h-9 rounded flex items-center justify-center text-textSecondary hover:text-accentColor hover:bg-white/5 transition-all cursor-pointer shrink-0">
+            <input 
+              type="file" 
+              multiple 
+              onChange={handleFileChange}
+              className="hidden" 
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.zip"
+            />
+            <i className="fa-solid fa-plus text-lg"></i>
+          </label>
           <button 
             onClick={handleShareLocation}
             className="w-9 h-9 rounded flex items-center justify-center text-textSecondary hover:text-accentColor hover:bg-white/5 transition-all shrink-0"

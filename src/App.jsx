@@ -44,6 +44,7 @@ export default function App() {
   const activeClientRef = useRef(null);
   const syncTimerRef = useRef(null);
   const lastKnownCloudIndexTimeRef = useRef(0);
+  const legacyHistoryMissingRef = useRef(false);
   const shardTimestampsRef = useRef({});
   const currentProfileRef = useRef(null);
 
@@ -90,11 +91,11 @@ export default function App() {
         }
       } else {
         const targetMsgId = typeof e.detail === 'string' ? e.detail : e.detail.msgId;
-        const normalize = (cat) => cat === '工作' ? 'work' : (cat === '日记' ? 'diary' : (cat === '传输' ? 'transfer' : (cat === '隐私' ? 'privacy' : cat)));
+        const normalize = (cat) => cat === '工作' ? 'work' : (cat === '日记' ? 'diary' : (cat === '传输' ? '传输' : (cat === '隐私' ? 'privacy' : cat)));
         const list = messages.filter(m => {
           if (m.type !== 'IMAGE' && m.type !== 'VIDEO') return false;
           if (activeCategory !== 'all') {
-            return m.categories && m.categories.map(normalize).includes(normalize(activeCategory));
+            return Array.isArray(m.categories) && m.categories.map(normalize).includes(normalize(activeCategory));
           }
           return true;
         });
@@ -126,8 +127,9 @@ export default function App() {
       try {
         const dbMsgs = await getCachedFile(`history_array_${activeProfileId}`);
         if (dbMsgs && Array.isArray(dbMsgs)) {
-          setMessages(dbMsgs);
-          resolveLocalMediaUrls(dbMsgs);
+          const { sanitized } = sanitizeMessages(dbMsgs);
+          setMessages(sanitized);
+          resolveLocalMediaUrls(sanitized);
           return;
         }
       } catch (e) {
@@ -138,10 +140,11 @@ export default function App() {
       if (cached) {
         try {
           const msgs = JSON.parse(cached);
-          setMessages(msgs);
-          resolveLocalMediaUrls(msgs);
+          const { sanitized } = sanitizeMessages(msgs);
+          setMessages(sanitized);
+          resolveLocalMediaUrls(sanitized);
           // Migrate legacy cache to DB
-          cacheFile(`history_array_${activeProfileId}`, msgs);
+          cacheFile(`history_array_${activeProfileId}`, sanitized);
           localStorage.removeItem(`cloudchat_history_${activeProfileId}`);
         } catch (e) {
           setMessages([]);
@@ -153,7 +156,8 @@ export default function App() {
     loadCache();
 
     // Reset sync state
-    lastKnownCloudTimeRef.current = 0;
+    lastKnownCloudIndexTimeRef.current = 0;
+    legacyHistoryMissingRef.current = false;
     setStatusText('Connecting...');
     setStatusDotClass('bg-yellow-500');
 
@@ -268,7 +272,6 @@ export default function App() {
         repairedCount++;
       }
 
-      // Infer type if missing or null
       let safeType = msg.type;
       if (!safeType || safeType === 'TEXT') {
         const textContent = msg.content || '';
@@ -283,6 +286,13 @@ export default function App() {
         }
       }
 
+      let safeCategories = [];
+      if (Array.isArray(msg.categories)) {
+        safeCategories = msg.categories;
+      } else if (msg.categories && typeof msg.categories === 'string') {
+        safeCategories = [msg.categories];
+      }
+
       return {
         ...msg,
         id: safeId,
@@ -290,7 +300,8 @@ export default function App() {
         timestamp: safeTimestamp,
         type: safeType,
         sender: msg.sender || 'Unknown',
-        senderName: msg.senderName || msg.sender || 'Unknown'
+        senderName: msg.senderName || msg.sender || 'Unknown',
+        categories: safeCategories
       };
     }).filter(Boolean);
 
@@ -314,10 +325,16 @@ export default function App() {
       let needsMigration = false;
 
       if (cloudIndexTime === 0) {
-        const oldTime = await client.getLastModified('chat_history.json');
-        if (oldTime > 0) {
-          needsMigration = true;
-        } else {
+        if (!legacyHistoryMissingRef.current) {
+          const oldTime = await client.getLastModified('chat_history.json');
+          if (oldTime > 0) {
+            needsMigration = true;
+          } else {
+            legacyHistoryMissingRef.current = true;
+          }
+        }
+        
+        if (!needsMigration) {
           setStatusText('Connected (No history file)');
           setStatusDotClass('bg-green-500');
           setIsSyncing(false);
@@ -341,9 +358,18 @@ export default function App() {
         } else {
             const indexBlob = await client.downloadFile('chat_index.json');
             const indexText = await indexBlob.text();
-            indexData = JSON.parse(indexText);
+            let parsedData = JSON.parse(indexText);
+            const isArrayFormat = Array.isArray(parsedData);
+            const shardList = isArrayFormat ? parsedData : Object.keys(parsedData);
 
-            for (const [shardName, timestamp] of Object.entries(indexData)) {
+            for (const shardName of shardList) {
+                let timestamp = 0;
+                if (!isArrayFormat && parsedData[shardName]) {
+                    timestamp = parsedData[shardName];
+                } else {
+                    timestamp = await client.getLastModified(shardName);
+                }
+
                 if (timestamp > (shardTimestampsRef.current[shardName] || 0)) {
                     try {
                         const shardBlob = await client.downloadFile(shardName);
@@ -432,12 +458,11 @@ export default function App() {
           shards[shardName].push(clean);
       });
 
-      const newIndexData = {};
-      for (const [shardName, msgs] of Object.entries(shards)) {
-          const cleanJson = JSON.stringify(msgs);
+      const newIndexData = Object.keys(shards);
+      for (const shardName of newIndexData) {
+          const cleanJson = JSON.stringify(shards[shardName]);
           await client.uploadText(cleanJson, shardName);
           const shardTime = await client.getLastModified(shardName);
-          newIndexData[shardName] = shardTime;
           shardTimestampsRef.current[shardName] = shardTime;
       }
 
@@ -526,8 +551,9 @@ export default function App() {
       // Cache file locally
       cacheFile(newMsg.id, file);
 
-      const updatedMsgs = [...messages, newMsg];
-      setMessages(updatedMsgs);
+      setMessages(prev => {
+        return [...prev, newMsg];
+      });
       setTimeout(() => scrollToBottom(), 150);
 
       // Perform upload asynchronously
@@ -606,11 +632,17 @@ export default function App() {
             delete next[newMsg.id];
             return next;
           });
+          
+          let updatedList = [];
           setMessages(prev => {
-            const list = prev.map(m => m.id === newMsg.id ? { ...m, status: 'SUCCESS' } : m);
-            pushHistoryToCloud(list);
-            return list;
+            updatedList = prev.map(m => m.id === newMsg.id ? { ...m, status: 'SUCCESS' } : m);
+            return updatedList;
           });
+          
+          setTimeout(() => {
+            if (updatedList.length > 0) pushHistoryToCloud(updatedList);
+          }, 0);
+          
         } catch (e) {
           console.error(e);
           newMsg.status = 'FAILED';
@@ -625,7 +657,7 @@ export default function App() {
 
     } else if (text.trim()) {
       const newMsg = {
-        id: 'msg_' + Date.now(),
+        id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
         sender: currentProfile.username,
         senderName: currentProfile.username,
         content: text,
@@ -636,9 +668,16 @@ export default function App() {
         categories: activeCategory !== 'all' ? [activeCategory] : []
       };
 
-      const updated = [...messages, newMsg];
-      setMessages(updated);
-      pushHistoryToCloud(updated);
+      let updatedList = [];
+      setMessages(prev => {
+        updatedList = [...prev, newMsg];
+        return updatedList;
+      });
+      
+      setTimeout(() => {
+        if (updatedList.length > 0) pushHistoryToCloud(updatedList);
+        scrollToBottom();
+      }, 0);
     }
   };
 

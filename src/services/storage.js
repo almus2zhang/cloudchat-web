@@ -380,12 +380,16 @@ class WebDavStorageClient {
         const url = this.getUrl(fileName);
         try {
             const response = await fetch(url, {
-                method: 'HEAD',
-                headers: { 'Authorization': this.getAuthHeader() }
+                method: 'PROPFIND',
+                headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
             });
             if (response.ok) {
-                const dateStr = response.headers.get('Last-Modified');
-                return dateStr ? new Date(dateStr).getTime() : 0;
+                const text = await response.text();
+                const match = text.match(/<[a-zA-Z0-9:]*getlastmodified[^>]*>(.*?)<\/[a-zA-Z0-9:]*getlastmodified>/i);
+                if (match && match[1]) {
+                    const dateStr = match[1];
+                    return new Date(dateStr).getTime() || 0;
+                }
             }
         } catch (e) {}
         return 0;
