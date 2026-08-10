@@ -24,7 +24,6 @@ export default function SettingsModal({
   storageClient
 }) {
   const [editingProfile, setEditingProfile] = useState(null);
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -85,26 +84,11 @@ export default function SettingsModal({
     reader.readAsDataURL(file);
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!editingProfile.name.trim()) return;
-
-    if (editingProfile.avatar && editingProfile.avatar.startsWith('data:image/') && storageClient) {
-      try {
-        setIsUploadingAvatar(true);
-        const res = await fetch(editingProfile.avatar);
-        const blob = await res.blob();
-        // Use user-specific filename to avoid conflicts between accounts
-        const userId = editingProfile.saveDir || editingProfile.id || 'user';
-        const avatarFileName = `avatar_${userId}.png`;
-        const serverAvatarUrl = await storageClient.uploadFile(blob, avatarFileName, 'image/png');
-        editingProfile.avatar = serverAvatarUrl || storageClient.getUrl(avatarFileName);
-      } catch (err) {
-        console.warn('Avatar upload to server warning:', err);
-      } finally {
-        setIsUploadingAvatar(false);
-      }
-    }
-
+    // Avatar is stored as data URL or preset https:// URL directly in profile (localStorage).
+    // Do NOT upload to WebDAV/S3 — image tags cannot pass auth headers and would
+    // trigger browser login popups for protected storage URLs.
     onSaveProfile(editingProfile);
   };
 

@@ -1181,15 +1181,23 @@ export default function ChatArea({
                   <span className="text-[11px] font-semibold text-textMuted leading-tight whitespace-nowrap max-w-[72px] text-right truncate">
                     {item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User')}
                   </span>
-                  <img 
-                    src={
-                      item.senderAvatar ||
-                      (item.isOutgoing ? currentProfile?.avatar : undefined) ||
-                      `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User'))}`
-                    } 
-                    alt="Avatar"
-                    className="w-11 h-11 rounded-2xl object-cover border-2 border-borderColor/60 bg-bgSecondary shadow-sm"
-                  />
+                  {(() => {
+                    // Only use avatar URLs that are safe to load in an <img> without auth headers.
+                    // data: URLs (base64) and https://api.dicebear.com presets are safe.
+                    // WebDAV / S3 server paths require auth and cause browser login popups.
+                    const isSafe = (url) => url && (url.startsWith('data:') || url.startsWith('https://api.dicebear.com'));
+                    const senderName = item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User');
+                    const fallback = `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(senderName)}`;
+                    const rawAvatar = item.senderAvatar || (item.isOutgoing ? currentProfile?.avatar : null);
+                    const avatarSrc = isSafe(rawAvatar) ? rawAvatar : fallback;
+                    return (
+                      <img 
+                        src={avatarSrc}
+                        alt="Avatar"
+                        className="w-11 h-11 rounded-2xl object-cover border-2 border-borderColor/60 bg-bgSecondary shadow-sm"
+                      />
+                    );
+                  })()}
                 </div>
               </div>
             );
