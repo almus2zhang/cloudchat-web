@@ -107,7 +107,14 @@ export default function DiaryExportModal({
 
       setExportProgress(100);
       setExportStatusText('🎉 日记网页生成部署成功！');
-      setResultUrl(uploadedUrl || storageClient.getUrl(targetSubPath));
+
+      let finalPublicUrl = uploadedUrl || storageClient.getUrl(targetSubPath);
+      if (currentProfile && currentProfile.diaryBaseUrl && currentProfile.diaryBaseUrl.trim()) {
+        const base = currentProfile.diaryBaseUrl.trim().replace(/\/+$/, '');
+        finalPublicUrl = `${base}/${targetSubPath}`;
+      }
+
+      setResultUrl(finalPublicUrl);
       setResultPath(targetSubPath);
     } catch (err) {
       console.error('Export diary error:', err);

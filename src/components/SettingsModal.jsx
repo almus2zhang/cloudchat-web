@@ -33,6 +33,7 @@ export default function SettingsModal({
       syncInterval: 5,
       serverPath: 'CloudChat',
       saveDir: 'user_default',
+      diaryBaseUrl: '',
       webDavUrl: 'https://dav.jianguoyun.com/dav/',
       webDavUser: '',
       webDavPass: '',
@@ -323,6 +324,23 @@ export default function SettingsModal({
                   />
                   <span className="text-[10px] text-textMuted mt-0.5">Isolated directory for this profile.</span>
                 </div>
+              </div>
+
+              {/* Diary Base URL / Public Root URL */}
+              <div className="flex flex-col gap-1.5 border-t border-borderColor/40 pt-3">
+                <label className="text-xs font-semibold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <i className="fa-solid fa-globe text-cyan-400"></i> 日记对外访问根 URL (Diary Base URL)
+                </label>
+                <input 
+                  type="url" 
+                  value={editingProfile.diaryBaseUrl || ''}
+                  onChange={(e) => handleFieldChange('diaryBaseUrl', e.target.value)}
+                  placeholder="例如: https://diary.example.com 或 https://mywebdav.com/chat/save/"
+                  className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-cyan-500 transition-colors w-full"
+                />
+                <span className="text-[10px] text-textMuted mt-0.5">
+                  配置 WebDAV/S3 映射的 Web 访问绝对根域名。日记生成后自动拼接公开访问链接（留空时默认使用服务器文件原始 URL）。
+                </span>
               </div>
 
               {/* Username & Sync interval */}
