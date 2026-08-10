@@ -135,7 +135,7 @@ export default function DiaryExportModal({
       setExportProgress(50);
       setExportStatusText('正在解析宫格条目与提取图片注释...');
 
-      // 2. Generate HTML code string
+      // 2. Generate HTML code string with live progress feedback
       const htmlContent = await generateDiaryHtml({
         folderName: title.trim() || '精选日记',
         author: author.trim() || 'CloudChat User',
@@ -145,10 +145,14 @@ export default function DiaryExportModal({
         messages: folderMessages,
         storageClient,
         targetDirClean,
-        exportMode
+        exportMode,
+        onProgress: (pct, text) => {
+          setExportProgress(pct);
+          setExportStatusText(text);
+        }
       });
 
-      setExportProgress(75);
+      setExportProgress(88);
       setExportStatusText('正在将 index.html 覆盖推送至服务器存储...');
 
       // 3. Create HTML Blob file and upload to storage client
@@ -157,7 +161,7 @@ export default function DiaryExportModal({
         blob,
         targetSubPath,
         'text/html; charset=utf-8',
-        (pct) => setExportProgress(75 + Math.round(pct * 0.25))
+        (pct) => setExportProgress(88 + Math.round(pct * 0.12))
       );
 
       setExportProgress(100);

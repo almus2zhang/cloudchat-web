@@ -170,7 +170,7 @@ self.addEventListener('fetch', (event) => {
 });
 `;
 
-export async function generateDiaryHtml({ folderName, author, avatar, templateId = 'wechat', password = '', messages = [], storageClient, targetDirClean = 'diary/export', exportMode = 'relative' }) {
+export async function generateDiaryHtml({ folderName, author, avatar, templateId = 'wechat', password = '', messages = [], storageClient, targetDirClean = 'diary/export', exportMode = 'relative', onProgress }) {
   const isWeChat = templateId === 'wechat';
   const sortedMsgs = [...messages].sort((a, b) => isWeChat ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
 
@@ -210,28 +210,48 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
     passwordHash = await computeSha256Hex(password.trim());
   }
 
-  // 4. Sync / Resolve all message media
+  // 4. Parallel Sync / Resolve all message media with progress updates
+  const mediaMsgs = sortedMsgs.filter(m => m.type === 'IMAGE' || m.type === 'VIDEO' || m.type === 'AUDIO');
+  const totalMedia = mediaMsgs.length;
+  let processedCount = 0;
+
+  if (onProgress) {
+    onProgress(50, `正在准备解析 ${sortedMsgs.length} 条记录 (${totalMedia} 个大媒体资源)...`);
+  }
+
   const mediaUrlMap = {};
-  for (const msg of sortedMsgs) {
-    if (msg.type === 'IMAGE' || msg.type === 'VIDEO' || msg.type === 'AUDIO') {
-      if (isSingleFile) {
-        mediaUrlMap[msg.id] = await getBase64MediaUrl(msg, storageClient);
+
+  const processMediaItem = async (msg) => {
+    if (isSingleFile) {
+      mediaUrlMap[msg.id] = await getBase64MediaUrl(msg, storageClient);
+    } else {
+      const sourceName = msg.content || `${msg.id}.jpg`;
+      const cleanFileName = sourceName.split('/').pop().replace(/[\\/:*?"<>|]/g, '_');
+      const isImg = msg.type === 'IMAGE';
+      const relativeUrl = await syncAssetToDiaryFolder(sourceName, cleanFileName, targetAssetsDir, storageClient, isImg);
+      if (relativeUrl) {
+        mediaUrlMap[msg.id] = relativeUrl;
+      } else if (msg.url && msg.url.startsWith('data:')) {
+        mediaUrlMap[msg.id] = msg.url;
+      } else if (storageClient && msg.content) {
+        mediaUrlMap[msg.id] = storageClient.getUrl(msg.content);
       } else {
-        const sourceName = msg.content || `${msg.id}.jpg`;
-        const cleanFileName = sourceName.split('/').pop().replace(/[\\/:*?"<>|]/g, '_');
-        const isImg = msg.type === 'IMAGE';
-        const relativeUrl = await syncAssetToDiaryFolder(sourceName, cleanFileName, targetAssetsDir, storageClient, isImg);
-        if (relativeUrl) {
-          mediaUrlMap[msg.id] = relativeUrl;
-        } else if (msg.url && msg.url.startsWith('data:')) {
-          mediaUrlMap[msg.id] = msg.url;
-        } else if (storageClient && msg.content) {
-          mediaUrlMap[msg.id] = storageClient.getUrl(msg.content);
-        } else {
-          mediaUrlMap[msg.id] = msg.remoteUrl || msg.content || '';
-        }
+        mediaUrlMap[msg.id] = msg.remoteUrl || msg.content || '';
       }
     }
+
+    processedCount++;
+    if (onProgress && totalMedia > 0) {
+      const pct = 50 + Math.round((processedCount / totalMedia) * 35);
+      onProgress(pct, `⚡ 正在压缩同步媒体资源 [ ${processedCount} / ${totalMedia} ]...`);
+    }
+  };
+
+  // Run 3 tasks in parallel at a time for fast non-blocking export
+  const CONCURRENCY = 3;
+  for (let i = 0; i < mediaMsgs.length; i += CONCURRENCY) {
+    const batch = mediaMsgs.slice(i, i + CONCURRENCY);
+    await Promise.all(batch.map(msg => processMediaItem(msg)));
   }
 
   // Helper to resolve media URL for template renderers
