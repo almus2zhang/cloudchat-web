@@ -848,8 +848,18 @@ export default function ChatArea({
                   onContextMenu={handleRowContextMenu}
                   className="flex flex-col max-w-[85%] md:max-w-[70%] min-w-0 relative message-bubble"
                 >
-                  {/* Sender Name & Hidden Badge */}
-                  <div className="text-[10px] font-semibold text-textMuted mb-0.5 select-none flex items-center gap-1.5 justify-start">
+                  {/* Sender Avatar & Name & Hidden Badge */}
+                  <div className={`text-[11px] font-semibold text-textMuted mb-1 select-none flex items-center gap-1.5 ${item.isOutgoing ? 'justify-end' : 'justify-start'}`}>
+                    <img 
+                      src={
+                        item.isOutgoing 
+                          ? (currentProfile?.avatar || `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(currentProfile?.username || 'Me')}`)
+                          : `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(item.senderName || item.sender || 'Sender')}`
+                      } 
+                      alt="Avatar"
+                      className="w-4 h-4 rounded-full object-cover border border-borderColor/60 shrink-0"
+                    />
+                    <span>{item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User')}</span>
                     {isPrivacyMode && item.isHidden && (
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-mono flex items-center gap-1 leading-none">
                         <i className="fa-solid fa-eye-slash text-[8px]"></i> 隐藏
