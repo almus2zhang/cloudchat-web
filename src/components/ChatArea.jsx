@@ -815,7 +815,7 @@ export default function ChatArea({
               <div 
                 key={item.id} 
                 onContextMenu={handleRowContextMenu}
-                className="flex gap-3 min-w-0 group relative"
+                className={`flex gap-3 min-w-0 group relative my-1 items-start ${item.isOutgoing ? 'justify-end' : 'justify-start'}`}
               >
                 {/* Selection Checkbox */}
                 {selectedMessageIds.size > 0 && (
@@ -825,7 +825,7 @@ export default function ChatArea({
                       onToggleMessageSelection(msgIdOrIds);
                       setSelectionMenuCoords({ x: e.clientX, y: e.clientY });
                     }}
-                    className="flex items-center justify-center cursor-pointer px-1 shrink-0 select-none animate-fade-in checkbox-container"
+                    className="flex items-center justify-center cursor-pointer px-1 shrink-0 select-none animate-fade-in checkbox-container self-center"
                   >
                     <i className={`text-base fa-regular ${
                       allSelected 
@@ -837,6 +837,18 @@ export default function ChatArea({
                   </div>
                 )}
                 
+                {/* Left Side Avatar for Incoming Messages */}
+                {!item.isOutgoing && (
+                  <img 
+                    src={
+                      item.senderAvatar || 
+                      `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(item.senderName || item.sender || 'Sender')}`
+                    } 
+                    alt="Avatar"
+                    className="w-11 h-11 rounded-2xl object-cover border-2 border-borderColor/60 bg-bgSecondary shrink-0 shadow-sm mt-0.5"
+                  />
+                )}
+
                 {/* Bubble Wrapper */}
                 <div 
                   onMouseDown={(e) => handleTouchStart(e, gestureMsgId)}
@@ -846,19 +858,10 @@ export default function ChatArea({
                   onTouchEnd={(e) => handleTouchEnd(e, gestureMsgId)}
                   onTouchMove={(e) => handleTouchMove(e, gestureMsgId)}
                   onContextMenu={handleRowContextMenu}
-                  className="flex flex-col max-w-[85%] md:max-w-[70%] min-w-0 relative message-bubble"
+                  className={`flex flex-col max-w-[80%] md:max-w-[68%] min-w-0 relative message-bubble ${item.isOutgoing ? 'items-end' : 'items-start'}`}
                 >
-                  {/* Sender Avatar & Name & Hidden Badge */}
+                  {/* Sender Name & Hidden Badge */}
                   <div className={`text-[11px] font-semibold text-textMuted mb-1 select-none flex items-center gap-1.5 ${item.isOutgoing ? 'justify-end' : 'justify-start'}`}>
-                    <img 
-                      src={
-                        item.isOutgoing 
-                          ? (currentProfile?.avatar || `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(currentProfile?.username || 'Me')}`)
-                          : `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(item.senderName || item.sender || 'Sender')}`
-                      } 
-                      alt="Avatar"
-                      className="w-4 h-4 rounded-full object-cover border border-borderColor/60 shrink-0"
-                    />
                     <span>{item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User')}</span>
                     {isPrivacyMode && item.isHidden && (
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-mono flex items-center gap-1 leading-none">
@@ -1188,6 +1191,19 @@ export default function ChatArea({
                     )}
                   </div>
                 </div>
+
+                {/* Right Side Avatar for Outgoing Messages */}
+                {item.isOutgoing && (
+                  <img 
+                    src={
+                      item.senderAvatar || 
+                      currentProfile?.avatar || 
+                      `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(currentProfile?.username || 'Me')}`
+                    } 
+                    alt="Avatar"
+                    className="w-11 h-11 rounded-2xl object-cover border-2 border-accentColor/40 bg-bgSecondary shrink-0 shadow-sm mt-0.5"
+                  />
+                )}
               </div>
             );
           })

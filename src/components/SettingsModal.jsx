@@ -20,9 +20,11 @@ export default function SettingsModal({
   onClose, 
   onSaveProfile, 
   onDeleteProfile,
-  onSwitchProfile
+  onSwitchProfile,
+  storageClient
 }) {
   const [editingProfile, setEditingProfile] = useState(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -83,8 +85,23 @@ export default function SettingsModal({
     reader.readAsDataURL(file);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingProfile.name.trim()) return;
+
+    if (editingProfile.avatar && editingProfile.avatar.startsWith('data:image/') && storageClient) {
+      try {
+        setIsUploadingAvatar(true);
+        const res = await fetch(editingProfile.avatar);
+        const blob = await res.blob();
+        const serverAvatarUrl = await storageClient.uploadFile(blob, 'avatar.png', 'image/png');
+        editingProfile.avatar = serverAvatarUrl || storageClient.getUrl('avatar.png');
+      } catch (err) {
+        console.warn('Avatar upload to server warning:', err);
+      } finally {
+        setIsUploadingAvatar(false);
+      }
+    }
+
     onSaveProfile(editingProfile);
   };
 

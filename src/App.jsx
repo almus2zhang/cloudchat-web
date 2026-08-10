@@ -541,6 +541,7 @@ export default function App() {
         id: 'msg_' + Date.now(),
         sender: currentProfile.username,
         senderName: currentProfile.username,
+        senderAvatar: currentProfile.avatar || '',
         content: fileName,
         timestamp: Date.now(),
         type: type,
@@ -671,6 +672,7 @@ export default function App() {
         id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
         sender: currentProfile.username,
         senderName: currentProfile.username,
+        senderAvatar: currentProfile.avatar || '',
         content: text,
         timestamp: Date.now(),
         type: (text.startsWith('[位置] ')) ? 'LOCATION' : 'TEXT',
@@ -1223,6 +1225,7 @@ export default function App() {
         onSaveProfile={handleSaveProfile}
         onDeleteProfile={handleDeleteProfile}
         onSwitchProfile={(pId) => { setActiveProfileId(pId); localStorage.setItem('cloudchat_web_active_profile_id', pId); }}
+        storageClient={activeClientRef.current}
       />
 
       {/* Category Selection Modal */}
