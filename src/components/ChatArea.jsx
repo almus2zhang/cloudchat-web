@@ -837,18 +837,6 @@ export default function ChatArea({
                   </div>
                 )}
                 
-                {/* Left Side Avatar for Incoming Messages */}
-                {!item.isOutgoing && (
-                  <img 
-                    src={
-                      item.senderAvatar || 
-                      `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(item.senderName || item.sender || 'Sender')}`
-                    } 
-                    alt="Avatar"
-                    className="w-11 h-11 rounded-2xl object-cover border-2 border-borderColor/60 bg-bgSecondary shrink-0 shadow-sm mt-0.5"
-                  />
-                )}
-
                 {/* Bubble Wrapper */}
                 <div 
                   onMouseDown={(e) => handleTouchStart(e, gestureMsgId)}
@@ -860,19 +848,8 @@ export default function ChatArea({
                   onContextMenu={handleRowContextMenu}
                   className="flex flex-col max-w-[80%] md:max-w-[68%] min-w-0 relative message-bubble items-start"
                 >
-                  {/* Sender Name for incoming — hidden for outgoing (handled in right column) */}
-                  {!item.isOutgoing && (
-                    <div className="text-[11px] font-semibold text-textMuted mb-1 select-none flex items-center gap-1.5">
-                      <span>{item.senderName || item.sender || 'User'}</span>
-                      {isPrivacyMode && item.isHidden && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-mono flex items-center gap-1 leading-none">
-                          <i className="fa-solid fa-eye-slash text-[8px]"></i> 隐藏
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {item.isOutgoing && isPrivacyMode && item.isHidden && (
-                    <div className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-mono flex items-center gap-1 leading-none mb-1 self-end">
+                  {isPrivacyMode && item.isHidden && (
+                    <div className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-mono flex items-center gap-1 leading-none mb-1">
                       <i className="fa-solid fa-eye-slash text-[8px]"></i> 隐藏
                     </div>
                   )}
@@ -1199,23 +1176,21 @@ export default function ChatArea({
                   </div>
                 </div>
 
-                {/* Right Side Column (name + avatar) for Outgoing Messages */}
-                {item.isOutgoing && (
-                  <div className="flex flex-col items-center gap-1 shrink-0 mt-0.5">
-                    <span className="text-[11px] font-semibold text-textMuted leading-tight whitespace-nowrap max-w-[72px] text-right truncate">
-                      {item.senderName || item.sender || (currentProfile?.username || 'Me')}
-                    </span>
-                    <img 
-                      src={
-                        item.senderAvatar || 
-                        currentProfile?.avatar || 
-                        `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(currentProfile?.username || 'Me')}`
-                      } 
-                      alt="Avatar"
-                      className="w-11 h-11 rounded-2xl object-cover border-2 border-accentColor/40 bg-bgSecondary shadow-sm"
-                    />
-                  </div>
-                )}
+                {/* Right Side Column (name + avatar) for ALL messages */}
+                <div className="flex flex-col items-center gap-1 shrink-0 mt-0.5">
+                  <span className="text-[11px] font-semibold text-textMuted leading-tight whitespace-nowrap max-w-[72px] text-right truncate">
+                    {item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User')}
+                  </span>
+                  <img 
+                    src={
+                      item.senderAvatar ||
+                      (item.isOutgoing ? currentProfile?.avatar : undefined) ||
+                      `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User'))}`
+                    } 
+                    alt="Avatar"
+                    className="w-11 h-11 rounded-2xl object-cover border-2 border-borderColor/60 bg-bgSecondary shadow-sm"
+                  />
+                </div>
               </div>
             );
           })
