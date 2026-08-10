@@ -12,6 +12,8 @@ export default function DiaryExportModal({
   const [templateId, setTemplateId] = useState('wechat');
   const [title, setTitle] = useState(folderMsg ? (folderMsg.content || '文件夹日记') : '精选日记');
   const [author, setAuthor] = useState(currentProfile ? currentProfile.username : 'CloudChat User');
+  const [enablePassword, setEnablePassword] = useState(false);
+  const [password, setPassword] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStatusText, setExportStatusText] = useState('');
@@ -85,10 +87,11 @@ export default function DiaryExportModal({
       setExportStatusText('正在解析宫格条目与提取图片注释...');
 
       // 2. Generate HTML code string
-      const htmlContent = generateDiaryHtml({
+      const htmlContent = await generateDiaryHtml({
         folderName: title.trim() || cleanFolderName,
         author: author.trim() || 'CloudChat User',
         templateId,
+        password: enablePassword ? password : '',
         messages: folderMessages,
         storageClient
       });
@@ -215,6 +218,37 @@ export default function DiaryExportModal({
                     placeholder="输入作者名称"
                   />
                 </div>
+              </div>
+
+              {/* Password Protection Option */}
+              <div className="p-3 bg-black/20 rounded-xl border border-borderColor/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <i className="fa-solid fa-lock text-cyan-400 text-xs"></i>
+                    <span className="text-xs font-semibold text-textPrimary">启用网页访问密码锁</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={enablePassword}
+                      onChange={(e) => setEnablePassword(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-bgPrimary border border-borderColor peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-textMuted peer-checked:after:bg-cyan-400 after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500/20 peer-checked:border-cyan-500/40"></div>
+                  </label>
+                </div>
+                {enablePassword && (
+                  <div className="pt-1 animate-fade-in">
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="设置访问密码 (如 123456)..."
+                      className="w-full px-3 py-1.5 text-xs bg-bgPrimary border border-borderColor rounded-lg text-textPrimary focus:outline-none focus:border-cyan-500"
+                    />
+                    <p className="text-[10px] text-textMuted mt-1">访客打开生成好的网页时，需先输入正确密码才能解密阅读内容。</p>
+                  </div>
+                )}
               </div>
 
               {/* Template Selectors */}

@@ -1,12 +1,18 @@
 // Diary Generator Utility for CloudChat
-// Generates self-contained static HTML pages with 5 customizable design templates
+// Generates self-contained static HTML pages with 5 customizable design templates & Password Lock protection
 
-export function generateDiaryHtml({ folderName, author, templateId = 'wechat', messages = [], storageClient }) {
+export async function generateDiaryHtml({ folderName, author, templateId = 'wechat', password = '', messages = [], storageClient }) {
   const isWeChat = templateId === 'wechat';
   const sortedMsgs = [...messages].sort((a, b) => isWeChat ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
 
   const titleStr = folderName || '我的日记';
   const authorStr = author || 'CloudChat User';
+
+  // Compute password SHA-256 hash if password provided
+  let passwordHash = '';
+  if (password && password.trim()) {
+    passwordHash = await computeSha256Hex(password.trim());
+  }
 
   // Helper to resolve media URL
   const resolveMediaUrl = (msg) => {
@@ -250,7 +256,27 @@ export function generateDiaryHtml({ folderName, author, templateId = 'wechat', m
     ${cssStyles}
   </style>
 </head>
-<body class="theme-${templateId}">
+<body class="theme-${templateId} ${passwordHash ? 'is-locked' : ''}">
+  ${passwordHash ? `
+    <!-- Password Lock Overlay Screen -->
+    <div id="lockScreenOverlay" class="lock-screen-overlay">
+      <div class="lock-card">
+        <div class="lock-icon">🔒</div>
+        <h2>私密日记本</h2>
+        <p class="lock-sub">此归档页面已启用访问加密保护，请输入密码解密查看</p>
+        <div class="lock-form">
+          <input type="password" id="diaryPassInput" class="lock-input" placeholder="输入访问密码..." onkeydown="if(event.key==='Enter') verifyPassword()"/>
+          <button onclick="verifyPassword()" class="lock-btn-submit">🔓 解锁查看</button>
+        </div>
+        <div class="lock-remember-row">
+          <input type="checkbox" id="rememberPassCheck" checked />
+          <label for="rememberPassCheck">记住密码 (免重复输入)</label>
+        </div>
+        <div id="lockErrorMsg" class="lock-error-msg"></div>
+      </div>
+    </div>
+  ` : ''}
+
   ${templateId === 'wechat' ? `
     <!-- WeChat Moments Layout -->
     <div class="wechat-container">
@@ -291,6 +317,62 @@ export function generateDiaryHtml({ folderName, author, templateId = 'wechat', m
   </div>
 
   <script>
+    const EXPECTED_HASH = "${passwordHash}";
+    const STORAGE_KEY = "diary_pass_${encodeURIComponent(titleStr)}";
+
+    async function sha256(str) {
+      const buffer = new TextEncoder().encode(str);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function verifyPassword() {
+      const input = document.getElementById('diaryPassInput').value;
+      const errorDiv = document.getElementById('lockErrorMsg');
+      if (!input) {
+        errorDiv.innerText = "请输入访问密码";
+        return;
+      }
+      const hash = await sha256(input.trim());
+      if (hash === EXPECTED_HASH) {
+        if (document.getElementById('rememberPassCheck').checked) {
+          localStorage.setItem(STORAGE_KEY, input.trim());
+        }
+        unlockPage();
+      } else {
+        errorDiv.innerText = "❌ 密码错误，无法解密查看日记";
+        const card = document.querySelector('.lock-card');
+        if (card) {
+          card.classList.add('shake');
+          setTimeout(() => card.classList.remove('shake'), 500);
+        }
+      }
+    }
+
+    function unlockPage() {
+      const overlay = document.getElementById('lockScreenOverlay');
+      if (!overlay) return;
+      overlay.style.opacity = '0';
+      overlay.style.transition = 'opacity 0.4s ease';
+      setTimeout(() => {
+        overlay.style.display = 'none';
+        document.body.classList.remove('is-locked');
+      }, 400);
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      if (EXPECTED_HASH) {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const hash = await sha256(saved);
+          if (hash === EXPECTED_HASH) {
+            unlockPage();
+          }
+        }
+      }
+    });
+
     function openLightbox(src) {
       const modal = document.getElementById('lightboxModal');
       const img = document.getElementById('lightboxImg');
@@ -316,6 +398,16 @@ export function generateDiaryHtml({ folderName, author, templateId = 'wechat', m
 </html>`;
 }
 
+async function computeSha256Hex(str) {
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const buffer = new TextEncoder().encode(str);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  return str;
+}
+
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -339,7 +431,24 @@ function getTemplateCss(templateId) {
     /* Common Reset & Variables */
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #f2f2f6; color: #1c1c1e; line-height: 1.6; }
+    body.is-locked { overflow: hidden; }
     img, video { max-width: 100%; border-radius: 8px; }
+
+    /* Password Lock Screen Overlay */
+    .lock-screen-overlay { position: fixed; inset: 0; z-index: 10000; background: rgba(15, 23, 42, 0.88); backdrop-filter: blur(20px); display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .lock-card { background: rgba(30, 41, 59, 0.95); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 20px; width: 100%; max-width: 380px; padding: 32px 24px; text-align: center; color: #fff; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+    .lock-card.shake { animation: shake 0.4s ease-in-out; }
+    @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+    .lock-icon { font-size: 40px; margin-bottom: 12px; }
+    .lock-card h2 { font-size: 20px; font-weight: 700; color: #38bdf8; margin-bottom: 6px; }
+    .lock-sub { font-size: 12px; color: #94a3b8; margin-bottom: 24px; line-height: 1.5; }
+    .lock-form { display: flex; flex-direction: column; gap: 12px; }
+    .lock-input { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 12px 16px; color: #fff; font-size: 14px; outline: none; transition: border-color 0.2s; }
+    .lock-input:focus { border-color: #38bdf8; }
+    .lock-btn-submit { width: 100%; background: linear-gradient(135deg, #38bdf8, #34d399); border: none; border-radius: 12px; padding: 12px; color: #000; font-weight: 700; font-size: 14px; cursor: pointer; transition: opacity 0.2s; }
+    .lock-btn-submit:hover { opacity: 0.9; }
+    .lock-remember-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; font-size: 12px; color: #94a3b8; }
+    .lock-error-msg { font-size: 12px; color: #f87171; margin-top: 12px; min-height: 18px; font-weight: 600; }
 
     /* Lightbox */
     .lightbox-modal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.9); align-items: center; justify-content: center; }
