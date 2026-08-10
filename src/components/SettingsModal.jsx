@@ -117,6 +117,24 @@ export default function SettingsModal({
     img.src = objectUrl;
   };
 
+  const getSafeAvatarFileName = async (username) => {
+    const clean = (username || 'user').trim();
+    const isPureAscii = /^[\x20-\x7E]+$/.test(clean);
+    if (isPureAscii) {
+      const key = clean.replace(/[^a-zA-Z0-9_\-]/g, '_');
+      return `avatar_${key}.jpg`;
+    }
+    try {
+      const msgUint8 = new TextEncoder().encode(clean);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 12);
+      return `avatar_u_${hex}.jpg`;
+    } catch (e) {
+      return `avatar_user.jpg`;
+    }
+  };
+
   const handleSave = async () => {
     if (!editingProfile.name.trim()) return;
 
@@ -127,9 +145,7 @@ export default function SettingsModal({
     if (editingProfile._avatarPendingUpload && editingProfile.avatar?.startsWith('data:') && storageClient) {
       try {
         setIsUploadingAvatar(true);
-        const userKey = (editingProfile.username || editingProfile.saveDir || editingProfile.id || 'user')
-          .replace(/[^a-zA-Z0-9_\-]/g, '_');
-        const avatarFileName = `avatar_${userKey}.jpg`;
+        const avatarFileName = await getSafeAvatarFileName(editingProfile.username);
         const res = await fetch(editingProfile.avatar);
         const blob = await res.blob();
         
