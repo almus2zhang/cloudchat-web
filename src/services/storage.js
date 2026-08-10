@@ -181,7 +181,8 @@ class WebDavStorageClient {
                 // Check if directory exists to avoid 405 MKCOL warning
                 const propRes = await fetch(folderUrl, {
                     method: 'PROPFIND',
-                    headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
+                    headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' },
+                    credentials: 'omit'
                 });
                 if (propRes.ok) continue;
             } catch(e) {}
@@ -189,7 +190,8 @@ class WebDavStorageClient {
             try {
                 const res = await fetch(folderUrl, {
                     method: 'MKCOL',
-                    headers: { 'Authorization': this.getAuthHeader() }
+                    headers: { 'Authorization': this.getAuthHeader() },
+                    credentials: 'omit'
                 });
                 if (!res.ok && res.status !== 405 && res.status !== 302) {
                     console.warn(`Failed to create directory level: ${folderUrl}, status: ${res.status}`);
@@ -221,7 +223,8 @@ class WebDavStorageClient {
             try {
                 const propRes = await fetch(folderUrl, {
                     method: 'PROPFIND',
-                    headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
+                    headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' },
+                    credentials: 'omit'
                 });
                 if (propRes.ok) continue;
             } catch(e) {}
@@ -229,7 +232,8 @@ class WebDavStorageClient {
             try {
                 await fetch(folderUrl, {
                     method: 'MKCOL',
-                    headers: { 'Authorization': this.getAuthHeader() }
+                    headers: { 'Authorization': this.getAuthHeader() },
+                    credentials: 'omit'
                 });
             } catch (e) {}
         }
@@ -311,7 +315,8 @@ class WebDavStorageClient {
                 'Authorization': this.getAuthHeader(),
                 'Content-Type': 'application/json'
             },
-            body: content
+            body: content,
+            credentials: 'omit'
         });
         if (!response.ok) throw new Error(`Upload text failed: ${response.status}`);
         return url;
@@ -320,7 +325,8 @@ class WebDavStorageClient {
     async downloadFile(fileName) {
         const url = this.getUrl(fileName);
         const response = await fetch(url, {
-            headers: { 'Authorization': this.getAuthHeader() }
+            headers: { 'Authorization': this.getAuthHeader() },
+            credentials: 'omit'
         });
         if (!response.ok) throw new Error(`Download failed: ${response.status}`);
         return await response.blob();
@@ -330,7 +336,8 @@ class WebDavStorageClient {
         const url = this.getUrl(fileName);
         const response = await fetch(url, {
             headers: { 'Authorization': this.getAuthHeader() },
-            signal: dlState?.controller?.signal
+            signal: dlState?.controller?.signal,
+            credentials: 'omit'
         });
         if (!response.ok) throw new Error(`Download failed: ${response.status}`);
         return await readResponseWithProgress(response, onProgress, dlState);
@@ -340,7 +347,8 @@ class WebDavStorageClient {
         const url = this.getUrl(fileName);
         const response = await fetch(url, {
             method: 'DELETE',
-            headers: { 'Authorization': this.getAuthHeader() }
+            headers: { 'Authorization': this.getAuthHeader() },
+            credentials: 'omit'
         });
         if (!response.ok && response.status !== 404) {
             throw new Error(`Delete failed: ${response.status}`);
@@ -363,12 +371,14 @@ class WebDavStorageClient {
         try {
             const propRes = await fetch(recycleBinUrl, {
                 method: 'PROPFIND',
-                headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
+                headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' },
+                credentials: 'omit'
             });
             if (!propRes.ok) {
                 await fetch(recycleBinUrl, {
                     method: 'MKCOL',
-                    headers: { 'Authorization': this.getAuthHeader() }
+                    headers: { 'Authorization': this.getAuthHeader() },
+                    credentials: 'omit'
                 });
             }
         } catch (e) {
@@ -387,7 +397,8 @@ class WebDavStorageClient {
                 headers: {
                     'Authorization': this.getAuthHeader(),
                     'Destination': destUrl
-                }
+                },
+                credentials: 'omit'
             });
             if (!response.ok && response.status !== 404) {
                 await this.deleteFile(fileName);
@@ -402,7 +413,8 @@ class WebDavStorageClient {
         try {
             const response = await fetch(url, {
                 method: 'HEAD',
-                headers: { 'Authorization': this.getAuthHeader() }
+                headers: { 'Authorization': this.getAuthHeader() },
+                credentials: 'omit'
             });
             if (response.ok) {
                 return parseInt(response.headers.get('Content-Length') || '-1');
@@ -416,7 +428,8 @@ class WebDavStorageClient {
         try {
             const response = await fetch(url, {
                 method: 'PROPFIND',
-                headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
+                headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' },
+                credentials: 'omit'
             });
             if (response.ok) {
                 const text = await response.text();

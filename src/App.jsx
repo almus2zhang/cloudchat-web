@@ -62,6 +62,9 @@ export default function App() {
   const currentProfile = profiles.find(p => p.id === activeProfileId) || null;
   currentProfileRef.current = currentProfile;
 
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
   // 1. Initial Load
   useEffect(() => {
     const initApp = async () => {
@@ -371,7 +374,13 @@ export default function App() {
         }
         
         if (!needsMigration) {
-          setStatusText('Connected (No history file)');
+          // If local messages exist in memory/cache, push them to cloud so cloud history file is created
+          if (messagesRef.current && messagesRef.current.length > 0) {
+            pushHistoryToCloud(messagesRef.current);
+            setStatusText('Connected (Synced)');
+          } else {
+            setStatusText('Connected (No history file)');
+          }
           setStatusDotClass('bg-green-500');
           setIsSyncing(false);
           return;
@@ -1140,6 +1149,19 @@ export default function App() {
     localStorage.setItem('cloudchat_web_profiles', JSON.stringify(updated));
     setActiveProfileId(profile.id);
     localStorage.setItem('cloudchat_web_active_profile_id', profile.id);
+
+    // Update avatar only for messages belonging to this profile's username (or outgoing)
+    if (profile.avatar && messages.length > 0) {
+      const updatedMsgs = messages.map(m => {
+        if (m.isOutgoing || m.sender === profile.username || m.senderName === profile.username) {
+          return { ...m, senderAvatar: profile.avatar };
+        }
+        return m;
+      });
+      setMessages(updatedMsgs);
+      pushHistoryToCloud(updatedMsgs);
+    }
+
     setSettingsOpen(false);
   };
 
