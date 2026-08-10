@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { cacheFile } from '../services/db';
 
 const PRESET_AVATARS = [
   'https://api.dicebear.com/7.x/bottts/png?seed=Felix',
@@ -134,6 +135,8 @@ export default function SettingsModal({
         
         // Upload to WebDAV server inside user's directory
         await storageClient.uploadFile(blob, avatarFileName, 'image/jpeg');
+        // Cache blob in IndexedDB immediately for instant offline & F5 refresh availability
+        cacheFile(`avatar_${avatarFileName}`, blob);
         // Store ONLY the filename (e.g. "avatar_Ken.jpg"), resolved safely via downloadFile later
         profileToSave.avatar = avatarFileName;
       } catch (err) {

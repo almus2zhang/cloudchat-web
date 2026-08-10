@@ -20,8 +20,25 @@ export default function Sidebar({
   isSyncing,
   messages,
   statusText,
-  statusDotClass
+  statusDotClass,
+  resolveAvatarUrl
 }) {
+  const [avatarUrl, setAvatarUrl] = React.useState(null);
+
+  React.useEffect(() => {
+    const raw = currentProfile?.avatar;
+    if (!raw) {
+      setAvatarUrl(null);
+      return;
+    }
+    if (raw.startsWith('data:') || raw.startsWith('https://') || raw.startsWith('http://')) {
+      setAvatarUrl(raw);
+    } else if (resolveAvatarUrl) {
+      resolveAvatarUrl(raw).then(url => {
+        if (url) setAvatarUrl(url);
+      });
+    }
+  }, [currentProfile?.avatar, resolveAvatarUrl]);
   // Scan categories to build message counts
   const categoriesMap = {
     'diary': 0,
@@ -151,7 +168,7 @@ export default function Sidebar({
         <div className="p-3 border-t border-borderColor flex items-center justify-between gap-3 bg-bgPrimary/10">
           <div className="flex items-center gap-2 min-w-0">
             <img 
-              src={currentProfile?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(currentProfile?.username || 'User')}`} 
+              src={avatarUrl || `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(currentProfile?.username || 'User')}`} 
               alt="Avatar"
               className="w-9 h-9 rounded-xl object-cover border border-borderColor bg-bgPrimary shrink-0 shadow-sm"
             />

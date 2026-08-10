@@ -248,14 +248,28 @@ export default function App() {
     if (avatarFilename.startsWith('data:') || avatarFilename.startsWith('https://') || avatarFilename.startsWith('http://')) {
       return avatarFilename;
     }
-    // Return cached blob URL if available
+    // Return cached blob URL if available in memory
     if (cachedAvatarUrls[avatarFilename]) return cachedAvatarUrls[avatarFilename];
-    // Download via storage client (handles auth headers internally)
+
+    // Check IndexedDB persistent cache first (instant load on refresh before storage client connects)
+    try {
+      const cachedBlob = await getCachedFile(`avatar_${avatarFilename}`);
+      if (cachedBlob) {
+        const url = URL.createObjectURL(cachedBlob);
+        cachedAvatarUrls[avatarFilename] = url;
+        return url;
+      }
+    } catch (e) {
+      console.warn('IndexedDB avatar lookup warning:', e);
+    }
+
+    // Download via storage client if available (handles auth headers internally)
     const client = activeClientRef.current;
     if (!client) return null;
     try {
       const blob = await client.downloadFile(avatarFilename);
       if (blob) {
+        cacheFile(`avatar_${avatarFilename}`, blob); // Cache in IndexedDB for future refreshes
         const url = URL.createObjectURL(blob);
         cachedAvatarUrls[avatarFilename] = url;
         return url;
@@ -1218,6 +1232,7 @@ export default function App() {
         messages={messages.filter(m => !m.isDeleted)}
         statusText={statusText}
         statusDotClass={statusDotClass}
+        resolveAvatarUrl={resolveAvatarUrl}
       />
 
       {/* Main Chat Area */}
