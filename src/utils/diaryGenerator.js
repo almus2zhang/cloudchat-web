@@ -83,7 +83,7 @@ export function generateDiaryHtml({ folderName, author, templateId = 'wechat', m
 
         // Extract captions & EXIF location notes from all grouped items
         const captions = subMsgs
-          .map(sub => sub.caption || (sub.locationAddress ? `📍 ${sub.locationAddress}` : ''))
+          .map(sub => sub.caption || (sub.locationAddress ? sub.locationAddress : ''))
           .filter(Boolean);
 
         contentBlock = `
@@ -92,7 +92,7 @@ export function generateDiaryHtml({ folderName, author, templateId = 'wechat', m
           </div>
           ${captions.length > 0 ? `
             <div class="wechat-caption-sub">
-              ${captions.map(c => `<div class="caption-item">📌 ${escapeHtml(c)}</div>`).join('')}
+              ${captions.map(c => `<div class="caption-item">${escapeHtml(c)}</div>`).join('')}
             </div>
           ` : ''}
         `;
@@ -120,13 +120,13 @@ export function generateDiaryHtml({ folderName, author, templateId = 'wechat', m
           contentBlock = `
             <div class="wechat-media-box">
               <img src="${mediaUrl}" class="wechat-single-img" alt="${escapeHtml(msg.caption || '')}" loading="lazy" onclick="openLightbox(this.src)"/>
-              ${msg.caption ? `<div class="wechat-caption-sub">📌 ${escapeHtml(msg.caption)}</div>` : ''}
+              ${msg.caption ? `<div class="wechat-caption-sub"><div class="caption-item">${escapeHtml(msg.caption)}</div></div>` : ''}
             </div>`;
         } else if (isVideo) {
           contentBlock = `
             <div class="wechat-media-box">
               <video src="${mediaUrl}" controls class="wechat-video-player"></video>
-              ${msg.caption ? `<div class="wechat-caption-sub">📌 ${escapeHtml(msg.caption)}</div>` : ''}
+              ${msg.caption ? `<div class="wechat-caption-sub"><div class="caption-item">${escapeHtml(msg.caption)}</div></div>` : ''}
             </div>`;
         } else if (isAudio) {
           contentBlock = `
@@ -178,7 +178,7 @@ export function generateDiaryHtml({ folderName, author, templateId = 'wechat', m
         }).join('');
 
         const captions = subMsgs
-          .map(sub => sub.caption || (sub.locationAddress ? `📍 ${sub.locationAddress}` : ''))
+          .map(sub => sub.caption || (sub.locationAddress ? sub.locationAddress : ''))
           .filter(Boolean);
 
         return `
@@ -194,7 +194,7 @@ export function generateDiaryHtml({ folderName, author, templateId = 'wechat', m
               </div>
               ${captions.length > 0 ? `
                 <div class="card-captions">
-                  ${captions.map(c => `<div>📌 ${escapeHtml(c)}</div>`).join('')}
+                  ${captions.map(c => `<div class="caption-item">${escapeHtml(c)}</div>`).join('')}
                 </div>
               ` : ''}
             </div>
@@ -385,8 +385,10 @@ function getTemplateCss(templateId) {
 
     .wechat-single-img { max-width: 220px; max-height: 280px; object-fit: cover; border-radius: 4px; cursor: pointer; transition: opacity 0.2s; }
     .wechat-single-img:hover { opacity: 0.9; }
-    .wechat-caption-sub { font-size: 13px; color: #666; margin-top: 6px; background: #f7f7f8; padding: 6px 10px; border-radius: 6px; border-left: 3px solid #07c160; }
-    .wechat-caption-sub .caption-item { margin-bottom: 3px; word-break: break-word; }
+    
+    /* Caption Style: Clean, identical font to text content, multi-line, no background fill */
+    .wechat-caption-sub { font-size: 15px; color: #111; margin-top: 6px; margin-bottom: 6px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+    .wechat-caption-sub .caption-item { margin-bottom: 4px; }
     .wechat-caption-sub .caption-item:last-child { margin-bottom: 0; }
 
     .wechat-video-player { max-width: 280px; border-radius: 4px; }
@@ -425,7 +427,9 @@ function getTemplateCss(templateId) {
     .card-grid-wrap.grid-count-6, .card-grid-wrap.grid-count-7, .card-grid-wrap.grid-count-8,
     .card-grid-wrap.grid-count-9 { grid-template-columns: repeat(3, 1fr); }
     .card-grid-img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 6px; cursor: pointer; }
-    .card-captions { font-size: 13px; color: #64748b; margin-top: 8px; padding: 8px 12px; background: #f1f5f9; border-radius: 6px; }
+    .card-captions { font-size: 15px; color: #334155; margin-top: 8px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+    .card-captions .caption-item { margin-bottom: 4px; }
+    .card-captions .caption-item:last-child { margin-bottom: 0; }
 
     /* --- Template 3: Polaroid Gallery (拍立得相册) --- */
     .theme-polaroid { background: #f5eedc; font-family: "Caveat", cursive, sans-serif; }
