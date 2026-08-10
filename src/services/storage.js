@@ -206,8 +206,8 @@ class WebDavStorageClient {
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
 
         const parts = [];
-        if (root) parts.push(root);
-        if (userDirClean) parts.push(userDirClean);
+        if (root) root.split('/').filter(Boolean).forEach(p => parts.push(p));
+        if (userDirClean) userDirClean.split('/').filter(Boolean).forEach(p => parts.push(p));
         if (subPath) {
             subPath.split('/').filter(Boolean).forEach(p => parts.push(p));
         }
@@ -216,7 +216,8 @@ class WebDavStorageClient {
 
         let currentPath = '';
         for (const part of parts) {
-            currentPath = currentPath ? `${currentPath}/${part}` : part;
+            const encodedPart = encodeURIComponent(part);
+            currentPath = currentPath ? `${currentPath}/${encodedPart}` : encodedPart;
             const folderUrl = `${baseUrl}/${currentPath}`;
             try {
                 const propRes = await fetch(folderUrl, {
@@ -241,9 +242,11 @@ class WebDavStorageClient {
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
 
         const parts = [];
-        if (root) parts.push(root);
-        if (userDirClean) parts.push(userDirClean);
-        parts.push(fileName);
+        if (root) root.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
+        if (userDirClean) userDirClean.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
+        if (fileName) {
+            fileName.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
+        }
 
         return `${baseUrl}/${parts.join('/')}`;
     }
