@@ -24,6 +24,10 @@ export default function ChatArea({
   onQuickAddCategory,
   onGroupSelected,
   onUngroupMessage,
+  onPackFolder,
+  onRemoveMessagesFromFolder,
+  onUnpackFolder,
+  onRenameFolder,
   isPrivacyMode = false,
   onEnterPrivacyMode,
   onExitPrivacyMode,
@@ -271,7 +275,7 @@ export default function ChatArea({
 
   const handleSend = () => {
     if (!inputText.trim() && !selectedFile) return;
-    onSendMessage(inputText, selectedFile);
+    onSendMessage(inputText, selectedFile, null, currentFolderId);
     setInputText('');
     setSelectedFile(null);
     setFilePreview(null);
@@ -314,7 +318,7 @@ export default function ChatArea({
     const batchGroupId = isMultiple ? 'group_' + Date.now() : null;
 
     files.forEach(file => {
-      onSendMessage('', file, batchGroupId);
+      onSendMessage('', file, batchGroupId, currentFolderId);
     });
     e.target.value = '';
   };
@@ -323,7 +327,7 @@ export default function ChatArea({
     // Simulate share location
     const lat = (22.5 + Math.random() * 0.1).toFixed(6);
     const lng = (113.9 + Math.random() * 0.1).toFixed(6);
-    onSendMessage(`[位置] 纬度: ${lat}, 经度: ${lng}`, null);
+    onSendMessage(`[位置] 纬度: ${lat}, 经度: ${lng}`, null, null, currentFolderId);
   };
 
   // --- Download Handler ---
@@ -744,12 +748,36 @@ export default function ChatArea({
         }}
         className="flex-1 overflow-y-auto px-2 py-4 space-y-4 min-w-0 cursor-default"
       >
-        {currentFolderId && (
-          <div className="flex items-center gap-2 p-2 mb-2 bg-bgSecondary/80 backdrop-blur border border-borderColor rounded-lg sticky top-0 z-10 cursor-pointer hover:bg-black/5 shadow-sm transition-all w-fit" onClick={() => setCurrentFolderId(null)}>
-            <i className="fa-solid fa-arrow-left text-textMuted"></i>
-            <span className="font-semibold text-textPrimary text-sm">返回主界面 (Back)</span>
-          </div>
-        )}
+        {currentFolderId && (() => {
+          const folderMsg = messages.find(m => m.id === currentFolderId);
+          const folderName = folderMsg ? (folderMsg.content || '文件夹') : '文件夹';
+          return (
+            <div className="flex items-center justify-between p-2 mb-2 bg-bgSecondary/90 backdrop-blur border border-borderColor rounded-lg sticky top-0 z-10 shadow-sm w-full">
+              <div className="flex items-center gap-2 cursor-pointer hover:opacity-80" onClick={() => setCurrentFolderId(null)}>
+                <i className="fa-solid fa-arrow-left text-cyan-400"></i>
+                <i className="fa-solid fa-folder text-cyan-500 text-base"></i>
+                <span className="font-semibold text-textPrimary text-sm truncate max-w-[200px]">{folderName}</span>
+                <span className="text-[10px] text-textMuted">(点击返回主界面)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => folderMsg && onRenameFolder && onRenameFolder(folderMsg)}
+                  className="px-2.5 py-1 text-xs text-textSecondary hover:text-textPrimary bg-bgPrimary border border-borderColor rounded-full transition-all flex items-center gap-1"
+                  title="重命名文件夹"
+                >
+                  <i className="fa-solid fa-pen text-[10px] text-accentColor"></i> 重命名
+                </button>
+                <button 
+                  onClick={() => folderMsg && onUnpackFolder && onUnpackFolder(folderMsg)}
+                  className="px-2.5 py-1 text-xs text-red-400 hover:bg-red-500/10 border border-red-500/20 rounded-full transition-all flex items-center gap-1 font-semibold"
+                  title="解散文件夹"
+                >
+                  <i className="fa-solid fa-folder-minus text-[10px]"></i> 解散文件夹
+                </button>
+              </div>
+            </div>
+          );
+        })()}
         {grouped.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8">
             <i className="fa-solid fa-comments-question text-3xl text-textMuted mb-2"></i>
@@ -1269,19 +1297,45 @@ export default function ChatArea({
             )}
           </div>
 
+          {/* Pack to Folder Option */}
+          <button 
+            onClick={(e) => { e.stopPropagation(); onPackFolder(); }}
+            className="px-2.5 py-1.5 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/10 rounded transition-all flex items-center gap-1.5 shrink-0"
+            title="将选中的消息打包合并到文件夹中"
+          >
+            <i className="fa-solid fa-folder-plus"></i> 打包文件夹
+          </button>
+
+          {/* Remove from Folder Option (only when inside a folder) */}
+          {currentFolderId && (
+            <button 
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                if (onRemoveMessagesFromFolder) {
+                  onRemoveMessagesFromFolder(messages.filter(m => selectedMessageIds.has(m.id))); 
+                }
+              }}
+              className="px-2.5 py-1.5 text-xs font-semibold text-amber-400 hover:bg-amber-500/10 rounded transition-all flex items-center gap-1.5 shrink-0"
+              title="将选中的消息移出当前文件夹"
+            >
+              <i className="fa-solid fa-folder-minus"></i> 移出文件夹
+            </button>
+          )}
+
           {/* Merge Selected Messages Option */}
           {(() => {
+            const nonFolderSelected = messages.filter(m => selectedMessageIds.has(m.id) && m.type !== 'FOLDER');
             const existingGroupIds = new Set(
-              messages.filter(m => selectedMessageIds.has(m.id) && m.groupId).map(m => m.groupId)
+              nonFolderSelected.filter(m => m.groupId).map(m => m.groupId)
             );
             const totalTargetCount = messages.filter(
-              m => selectedMessageIds.has(m.id) || (m.groupId && existingGroupIds.has(m.groupId))
+              m => m.type !== 'FOLDER' && (selectedMessageIds.has(m.id) || (m.groupId && existingGroupIds.has(m.groupId)))
             ).length;
             return totalTargetCount >= 2 ? (
               <button 
                 onClick={(e) => { e.stopPropagation(); onGroupSelected(); }}
                 className="px-2.5 py-1.5 text-xs font-semibold text-purple-400 hover:bg-purple-500/10 rounded transition-all flex items-center gap-1.5 shrink-0"
-                title="将选中的消息（及所在组合的所有条目）合并为一个组合"
+                title="将选中的非文件夹消息合并为一个组合"
               >
                 <i className="fa-solid fa-object-group"></i> 合并消息
               </button>
@@ -1399,8 +1453,45 @@ export default function ChatArea({
             </>
           )}
 
-          {/* Add/Edit Caption — for non-text messages */}
-          {contextMenu.msg.type !== 'TEXT' && (
+          {/* Folder Specific Actions */}
+          {contextMenu.msg.type === 'FOLDER' && (
+            <>
+              <button
+                onClick={() => {
+                  if (onRenameFolder) onRenameFolder(contextMenu.msg);
+                  setContextMenu(null);
+                }}
+                className="w-full px-4 py-2 text-xs text-cyan-400 hover:bg-cyan-500/10 transition-colors flex items-center gap-2.5"
+              >
+                <i className="fa-solid fa-pen text-cyan-400 w-4 text-center"></i> 重命名文件夹
+              </button>
+              <button
+                onClick={() => {
+                  if (onUnpackFolder) onUnpackFolder(contextMenu.msg);
+                  setContextMenu(null);
+                }}
+                className="w-full px-4 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
+              >
+                <i className="fa-solid fa-folder-minus text-red-400 w-4 text-center"></i> 解散文件夹
+              </button>
+            </>
+          )}
+
+          {/* Remove from Folder Action (when inside a folder) */}
+          {currentFolderId && contextMenu.msg.type !== 'FOLDER' && (
+            <button
+              onClick={() => {
+                if (onRemoveMessagesFromFolder) onRemoveMessagesFromFolder(contextMenu.msgs);
+                setContextMenu(null);
+              }}
+              className="w-full px-4 py-2 text-xs text-amber-400 hover:bg-amber-500/10 transition-colors flex items-center gap-2.5"
+            >
+              <i className="fa-solid fa-folder-minus text-amber-400 w-4 text-center"></i> 移出当前文件夹
+            </button>
+          )}
+
+          {/* Add/Edit Caption — for non-text & non-folder messages */}
+          {contextMenu.msg.type !== 'TEXT' && contextMenu.msg.type !== 'FOLDER' && (
             <button
               onClick={() => {
                 const newCap = prompt('为该非文本条目添加/修改注释（方便搜索）：', contextMenu.msg.caption || '');

@@ -512,7 +512,7 @@ export default function App() {
   };
 
   // --- Message Sending ---
-  const handleSendMessage = async (text, file, groupId = null) => {
+  const handleSendMessage = async (text, file, groupId = null, folderId = null) => {
     if (!currentProfile || !activeClientRef.current) return;
     const client = activeClientRef.current;
 
@@ -543,9 +543,11 @@ export default function App() {
         chunkSize: chunkSize,
         totalChunks: totalChunks,
         groupId: groupId || undefined,
+        folderId: folderId || undefined,
         remoteUrl: fileName,
         thumbnailUrl: isImage ? `thumb_${fileName}` : undefined,
-        categories: activeCategory !== 'all' ? [activeCategory] : []
+        categories: activeCategory !== 'all' ? [activeCategory] : [],
+        lastModified: Date.now()
       };
 
       // Cache file locally
@@ -665,7 +667,9 @@ export default function App() {
         type: (text.startsWith('[位置] ')) ? 'LOCATION' : 'TEXT',
         isOutgoing: true,
         status: 'SUCCESS',
-        categories: activeCategory !== 'all' ? [activeCategory] : []
+        folderId: folderId || undefined,
+        categories: activeCategory !== 'all' ? [activeCategory] : [],
+        lastModified: Date.now()
       };
 
       let updatedList = [];
@@ -844,15 +848,20 @@ export default function App() {
   // --- Manual Message Grouping & Ungrouping Actions ---
   const handleGroupSelected = () => {
     if (selectedMessageIds.size < 1) return;
+    
+    // Ignore FOLDER type items from being placed inside a contiguous image/file group
+    const nonFolderMsgs = messages.filter(m => selectedMessageIds.has(m.id) && m.type !== 'FOLDER');
+    if (nonFolderMsgs.length < 2) return;
+
     const existingGroupIds = new Set(
-      messages
-        .filter(m => selectedMessageIds.has(m.id) && m.groupId)
+      nonFolderMsgs
+        .filter(m => m.groupId)
         .map(m => m.groupId)
     );
 
     const allTargetIds = new Set();
     messages.forEach(m => {
-      if (selectedMessageIds.has(m.id) || (m.groupId && existingGroupIds.has(m.groupId))) {
+      if (m.type !== 'FOLDER' && (selectedMessageIds.has(m.id) || (m.groupId && existingGroupIds.has(m.groupId)))) {
         allTargetIds.add(m.id);
       }
     });
@@ -862,12 +871,126 @@ export default function App() {
     const newGroupId = 'group_' + Date.now();
     const updated = messages.map(m => {
       if (allTargetIds.has(m.id)) {
-        return { ...m, groupId: newGroupId };
+        return { ...m, groupId: newGroupId, lastModified: Date.now() };
       }
       return m;
     });
     setMessages(updated);
     setSelectedMessageIds(new Set());
+    pushHistoryToCloud(updated);
+  };
+
+  // --- Folder Action Handlers ---
+  const handlePackFolder = (folderName = '') => {
+    if (selectedMessageIds.size === 0) return;
+
+    const selectedMsgs = messages.filter(m => selectedMessageIds.has(m.id));
+    const targetFolder = selectedMsgs.find(m => m.type === 'FOLDER');
+
+    if (targetFolder) {
+      // Pack other selected items directly into the selected existing folder
+      const itemsToPack = selectedMsgs.filter(m => m.type !== 'FOLDER' && m.id !== targetFolder.id);
+      if (itemsToPack.length === 0) return;
+
+      const packIds = new Set(itemsToPack.map(m => m.id));
+      const updated = messages.map(m => {
+        if (packIds.has(m.id)) {
+          return { ...m, folderId: targetFolder.id, lastModified: Date.now() };
+        }
+        return m;
+      });
+      setMessages(updated);
+      setSelectedMessageIds(new Set());
+      pushHistoryToCloud(updated);
+    } else {
+      // Create new folder and pack selected items into it
+      const name = folderName || prompt('请输入文件夹名称/注释：');
+      if (name === null) return;
+
+      const newFolderId = 'folder_' + Date.now();
+      const newFolderMsg = {
+        id: newFolderId,
+        sender: currentProfile.username,
+        senderName: currentProfile.username,
+        content: (name && name.trim()) ? name.trim() : '文件夹',
+        timestamp: Date.now(),
+        type: 'FOLDER',
+        isOutgoing: true,
+        status: 'SUCCESS',
+        categories: activeCategory !== 'all' ? [activeCategory] : [],
+        lastModified: Date.now()
+      };
+
+      const selectedIds = new Set(selectedMessageIds);
+      const updated = messages.map(m => {
+        if (selectedIds.has(m.id)) {
+          return { ...m, folderId: newFolderId, lastModified: Date.now() };
+        }
+        return m;
+      });
+      const finalList = [...updated, newFolderMsg];
+      setMessages(finalList);
+      setSelectedMessageIds(new Set());
+      pushHistoryToCloud(finalList);
+    }
+  };
+
+  const handleRemoveMessagesFromFolder = (msgOrMsgs) => {
+    const msgsToRemove = Array.isArray(msgOrMsgs) ? msgOrMsgs : [msgOrMsgs];
+    const targetIds = new Set(msgsToRemove.map(m => m.id));
+
+    const updated = messages.map(m => {
+      if (targetIds.has(m.id)) {
+        const copy = { ...m, lastModified: Date.now() };
+        delete copy.folderId;
+        return copy;
+      }
+      return m;
+    });
+    setMessages(updated);
+    setSelectedMessageIds(new Set());
+    pushHistoryToCloud(updated);
+  };
+
+  const handleUnpackFolder = (folderMsg) => {
+    if (!folderMsg || folderMsg.type !== 'FOLDER') return;
+    setConfirmConfig({
+      title: '解散文件夹',
+      message: `确定要解散文件夹 "${folderMsg.content || '文件夹'}" 吗？文件夹内的消息将重新放回到聊天列表中。`,
+      onOk: () => {
+        setConfirmOpen(false);
+        const folderId = folderMsg.id;
+        const updated = messages.map(m => {
+          if (m.folderId === folderId) {
+            const copy = { ...m, lastModified: Date.now() };
+            delete copy.folderId;
+            return copy;
+          }
+          if (m.id === folderId) {
+            return { ...m, isDeleted: true, lastModified: Date.now() };
+          }
+          return m;
+        });
+        setMessages(updated);
+        setSelectedMessageIds(new Set());
+        pushHistoryToCloud(updated);
+      }
+    });
+    setConfirmOpen(true);
+  };
+
+  const handleRenameFolder = (folderMsg, newName) => {
+    if (!folderMsg || folderMsg.type !== 'FOLDER') return;
+    const name = newName !== undefined ? newName : prompt('修改文件夹名称/注释：', folderMsg.content || '');
+    if (name === null || !name.trim()) return;
+
+    const updated = messages.map(m => {
+      if (m.id === folderMsg.id) {
+        return { ...m, content: name.trim(), lastModified: Date.now() };
+      }
+      return m;
+    });
+    setMessages(updated);
     pushHistoryToCloud(updated);
   };
 
@@ -1064,6 +1187,10 @@ export default function App() {
         onQuickAddCategory={handleQuickAddCategory}
         onGroupSelected={handleGroupSelected}
         onUngroupMessage={handleUngroupMessage}
+        onPackFolder={handlePackFolder}
+        onRemoveMessagesFromFolder={handleRemoveMessagesFromFolder}
+        onUnpackFolder={handleUnpackFolder}
+        onRenameFolder={handleRenameFolder}
         isPrivacyMode={isPrivacyMode}
         onEnterPrivacyMode={handleEnterPrivacyMode}
         onExitPrivacyMode={handleExitPrivacyMode}
