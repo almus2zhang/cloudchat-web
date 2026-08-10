@@ -28,10 +28,6 @@ export default function ChatArea({
   onRemoveMessagesFromFolder,
   onUnpackFolder,
   onRenameFolder,
-  onMoveMessageTop,
-  onMoveMessageBottom,
-  onMoveMessageUp,
-  onMoveMessageDown,
   isPrivacyMode = false,
   onEnterPrivacyMode,
   onExitPrivacyMode,
@@ -1301,38 +1297,6 @@ export default function ChatArea({
             )}
           </div>
 
-          {/* Position Movement Options */}
-          <div className="flex items-center gap-0.5 bg-black/20 p-0.5 rounded border border-white/5 shrink-0">
-            <button 
-              onClick={(e) => { e.stopPropagation(); onMoveMessageTop && onMoveMessageTop(selectedMessageIds, filteredMessages); }}
-              className="px-2 py-1 text-xs text-textSecondary hover:text-textPrimary hover:bg-white/10 rounded transition-all flex items-center gap-1"
-              title="置顶选中的条目"
-            >
-              <i className="fa-solid fa-angles-up text-cyan-400"></i> 置顶
-            </button>
-            <button 
-              onClick={(e) => { e.stopPropagation(); onMoveMessageUp && onMoveMessageUp(selectedMessageIds, filteredMessages); }}
-              className="px-2 py-1 text-xs text-textSecondary hover:text-textPrimary hover:bg-white/10 rounded transition-all flex items-center gap-1"
-              title="向上移动选中的条目"
-            >
-              <i className="fa-solid fa-angle-up text-cyan-400"></i> 上移
-            </button>
-            <button 
-              onClick={(e) => { e.stopPropagation(); onMoveMessageDown && onMoveMessageDown(selectedMessageIds, filteredMessages); }}
-              className="px-2 py-1 text-xs text-textSecondary hover:text-textPrimary hover:bg-white/10 rounded transition-all flex items-center gap-1"
-              title="向下移动选中的条目"
-            >
-              <i className="fa-solid fa-angle-down text-cyan-400"></i> 下移
-            </button>
-            <button 
-              onClick={(e) => { e.stopPropagation(); onMoveMessageBottom && onMoveMessageBottom(selectedMessageIds, filteredMessages); }}
-              className="px-2 py-1 text-xs text-textSecondary hover:text-textPrimary hover:bg-white/10 rounded transition-all flex items-center gap-1"
-              title="置底选中的条目"
-            >
-              <i className="fa-solid fa-angles-down text-cyan-400"></i> 置底
-            </button>
-          </div>
-
           {/* Pack to Folder Option */}
           <button 
             onClick={(e) => { e.stopPropagation(); onPackFolder(); }}
@@ -1525,45 +1489,6 @@ export default function ChatArea({
               <i className="fa-solid fa-folder-minus text-amber-400 w-4 text-center"></i> 移出当前文件夹
             </button>
           )}
-
-          {/* Position Movement Actions */}
-          <div className="border-t border-borderColor/40 my-1"></div>
-          <button
-            onClick={() => {
-              if (onMoveMessageTop) onMoveMessageTop(contextMenu.msgs.map(m => m.id), filteredMessages);
-              setContextMenu(null);
-            }}
-            className="w-full px-4 py-1.5 text-xs text-textPrimary hover:bg-white/5 transition-colors flex items-center gap-2.5"
-          >
-            <i className="fa-solid fa-angles-up text-cyan-400 w-4 text-center"></i> 置顶消息
-          </button>
-          <button
-            onClick={() => {
-              if (onMoveMessageUp) onMoveMessageUp(contextMenu.msgs.map(m => m.id), filteredMessages);
-              setContextMenu(null);
-            }}
-            className="w-full px-4 py-1.5 text-xs text-textPrimary hover:bg-white/5 transition-colors flex items-center gap-2.5"
-          >
-            <i className="fa-solid fa-angle-up text-cyan-400 w-4 text-center"></i> 上移消息
-          </button>
-          <button
-            onClick={() => {
-              if (onMoveMessageDown) onMoveMessageDown(contextMenu.msgs.map(m => m.id), filteredMessages);
-              setContextMenu(null);
-            }}
-            className="w-full px-4 py-1.5 text-xs text-textPrimary hover:bg-white/5 transition-colors flex items-center gap-2.5"
-          >
-            <i className="fa-solid fa-angle-down text-cyan-400 w-4 text-center"></i> 下移消息
-          </button>
-          <button
-            onClick={() => {
-              if (onMoveMessageBottom) onMoveMessageBottom(contextMenu.msgs.map(m => m.id), filteredMessages);
-              setContextMenu(null);
-            }}
-            className="w-full px-4 py-1.5 text-xs text-textPrimary hover:bg-white/5 transition-colors flex items-center gap-2.5"
-          >
-            <i className="fa-solid fa-angles-down text-cyan-400 w-4 text-center"></i> 置底消息
-          </button>
 
           {/* Add/Edit Caption — for non-text & non-folder messages */}
           {contextMenu.msg.type !== 'TEXT' && contextMenu.msg.type !== 'FOLDER' && (

@@ -994,115 +994,6 @@ export default function App() {
     pushHistoryToCloud(updated);
   };
 
-  // --- Position Movement Handlers (Top, Bottom, Up, Down) ---
-  const handleMoveMessageTop = (targetIds, currentDisplayedList) => {
-    const ids = Array.isArray(targetIds) ? new Set(targetIds) : (targetIds instanceof Set ? targetIds : new Set([targetIds]));
-    if (ids.size === 0 || !currentDisplayedList || currentDisplayedList.length === 0) return;
-
-    const minTs = Math.min(...currentDisplayedList.map(m => m.timestamp));
-    const now = Date.now();
-    let step = 1000 * ids.size;
-
-    const updated = messages.map(m => {
-      if (ids.has(m.id)) {
-        const newTs = minTs - step;
-        step -= 1000;
-        return { ...m, timestamp: newTs, lastModified: now };
-      }
-      return m;
-    });
-
-    setMessages(updated);
-    setSelectedMessageIds(new Set());
-    pushHistoryToCloud(updated);
-  };
-
-  const handleMoveMessageBottom = (targetIds, currentDisplayedList) => {
-    const ids = Array.isArray(targetIds) ? new Set(targetIds) : (targetIds instanceof Set ? targetIds : new Set([targetIds]));
-    if (ids.size === 0 || !currentDisplayedList || currentDisplayedList.length === 0) return;
-
-    const maxTs = Math.max(...currentDisplayedList.map(m => m.timestamp));
-    const now = Date.now();
-    let step = 1000;
-
-    const updated = messages.map(m => {
-      if (ids.has(m.id)) {
-        const newTs = maxTs + step;
-        step += 1000;
-        return { ...m, timestamp: newTs, lastModified: now };
-      }
-      return m;
-    });
-
-    setMessages(updated);
-    setSelectedMessageIds(new Set());
-    pushHistoryToCloud(updated);
-  };
-
-  const handleMoveMessageUp = (targetIds, currentDisplayedList) => {
-    const ids = Array.isArray(targetIds) ? new Set(targetIds) : (targetIds instanceof Set ? targetIds : new Set([targetIds]));
-    if (ids.size === 0 || !currentDisplayedList || currentDisplayedList.length < 2) return;
-
-    const index = currentDisplayedList.findIndex(m => ids.has(m.id));
-    if (index <= 0) return;
-
-    const prevMsg = currentDisplayedList[index - 1];
-    const targetMsg = currentDisplayedList[index];
-    const now = Date.now();
-
-    const targetTs = targetMsg.timestamp;
-    const prevTs = prevMsg.timestamp;
-
-    const updated = messages.map(m => {
-      if (m.id === targetMsg.id) {
-        return { ...m, timestamp: (prevTs < targetTs ? prevTs - 1 : prevTs), lastModified: now };
-      }
-      if (m.id === prevMsg.id) {
-        return { ...m, timestamp: targetTs, lastModified: now };
-      }
-      return m;
-    });
-
-    setMessages(updated);
-    setSelectedMessageIds(new Set());
-    pushHistoryToCloud(updated);
-  };
-
-  const handleMoveMessageDown = (targetIds, currentDisplayedList) => {
-    const ids = Array.isArray(targetIds) ? new Set(targetIds) : (targetIds instanceof Set ? targetIds : new Set([targetIds]));
-    if (ids.size === 0 || !currentDisplayedList || currentDisplayedList.length < 2) return;
-
-    let index = -1;
-    for (let i = currentDisplayedList.length - 1; i >= 0; i--) {
-      if (ids.has(currentDisplayedList[i].id)) {
-        index = i;
-        break;
-      }
-    }
-    if (index < 0 || index >= currentDisplayedList.length - 1) return;
-
-    const nextMsg = currentDisplayedList[index + 1];
-    const targetMsg = currentDisplayedList[index];
-    const now = Date.now();
-
-    const targetTs = targetMsg.timestamp;
-    const nextTs = nextMsg.timestamp;
-
-    const updated = messages.map(m => {
-      if (m.id === targetMsg.id) {
-        return { ...m, timestamp: (nextTs > targetTs ? nextTs + 1 : nextTs), lastModified: now };
-      }
-      if (m.id === nextMsg.id) {
-        return { ...m, timestamp: targetTs, lastModified: now };
-      }
-      return m;
-    });
-
-    setMessages(updated);
-    setSelectedMessageIds(new Set());
-    pushHistoryToCloud(updated);
-  };
-
   const handleUngroupMessage = (msgOrMsgs) => {
     const msgsToUngroup = Array.isArray(msgOrMsgs) ? msgOrMsgs : [msgOrMsgs];
     const targetIds = new Set(msgsToUngroup.map(m => m.id));
@@ -1300,10 +1191,6 @@ export default function App() {
         onRemoveMessagesFromFolder={handleRemoveMessagesFromFolder}
         onUnpackFolder={handleUnpackFolder}
         onRenameFolder={handleRenameFolder}
-        onMoveMessageTop={handleMoveMessageTop}
-        onMoveMessageBottom={handleMoveMessageBottom}
-        onMoveMessageUp={handleMoveMessageUp}
-        onMoveMessageDown={handleMoveMessageDown}
         isPrivacyMode={isPrivacyMode}
         onEnterPrivacyMode={handleEnterPrivacyMode}
         onExitPrivacyMode={handleExitPrivacyMode}
