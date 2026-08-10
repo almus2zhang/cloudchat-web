@@ -28,16 +28,16 @@ export default function DiaryExportModal({
   const templates = [
     {
       id: 'wechat',
-      name: '💬 微信朋友圈风格',
+      name: '💬 微信朋友圈九宫格',
       badge: '推荐',
-      desc: '经典朋友圈垂直流，包含头像、点赞交互与九宫格/单图适配。',
+      desc: '支持 2~9 图经典九宫格排版，自动萃取各图片注释与微信点赞赞赏流。',
       bgClass: 'from-emerald-500/20 to-green-600/10 border-emerald-500/40'
     },
     {
       id: 'journal',
       name: '📖 简约现代日记',
       badge: '经典',
-      desc: '优雅深浅排版，时间轴穿插，适合日常随笔与故事记录。',
+      desc: '优雅深浅排版，时间轴穿插与图片组网格，适合日常随笔与故事记录。',
       bgClass: 'from-blue-500/20 to-slate-600/10 border-blue-500/40'
     },
     {
@@ -72,17 +72,17 @@ export default function DiaryExportModal({
     setIsExporting(true);
     setErrorMsg('');
     setExportProgress(20);
-    setExportStatusText('正在编译日记 HTML 页面...');
+    setExportStatusText('正在编译聚合日记 HTML 页面...');
 
     try {
       // 1. Ensure subdirectories exist for WebDAV if applicable
       if (typeof storageClient.ensureFolderPathExist === 'function') {
-        setExportStatusText(`在服务器创建目录: diary/${cleanFolderName}/...`);
+        setExportStatusText(`在服务器创建保存目录: diary/${cleanFolderName}/...`);
         await storageClient.ensureFolderPathExist(`diary/${cleanFolderName}`);
       }
 
       setExportProgress(50);
-      setExportStatusText('正在生成自包含交互页面样式与资源...');
+      setExportStatusText('正在解析宫格条目与提取图片注释...');
 
       // 2. Generate HTML code string
       const htmlContent = generateDiaryHtml({
@@ -94,7 +94,7 @@ export default function DiaryExportModal({
       });
 
       setExportProgress(75);
-      setExportStatusText('正在将 index.html 推送至服务器存储...');
+      setExportStatusText('正在将 index.html 覆盖推送至服务器存储...');
 
       // 3. Create HTML Blob file and upload to storage client
       const blob = new Blob([htmlContent], { type: 'text/html; charset=utf-8' });
@@ -106,7 +106,7 @@ export default function DiaryExportModal({
       );
 
       setExportProgress(100);
-      setExportStatusText('🎉 日记网页部署完成！');
+      setExportStatusText('🎉 日记网页生成部署成功！');
       setResultUrl(uploadedUrl || storageClient.getUrl(targetSubPath));
       setResultPath(targetSubPath);
     } catch (err) {
@@ -148,7 +148,7 @@ export default function DiaryExportModal({
                 <i className="fa-solid fa-circle-check"></i>
               </div>
               <div>
-                <h4 className="text-lg font-bold text-textPrimary">日记网页已在服务器就绪！</h4>
+                <h4 className="text-lg font-bold text-textPrimary">日记网页已在服务器部署完毕！</h4>
                 <p className="text-xs text-textMuted mt-1">云端存储路径：<span className="font-mono text-cyan-400">{resultPath}</span></p>
               </div>
 
@@ -173,6 +173,13 @@ export default function DiaryExportModal({
                   className="px-4 py-2.5 bg-bgPrimary border border-borderColor hover:bg-white/5 text-textPrimary text-xs rounded-xl transition-all flex items-center gap-2"
                 >
                   <i className="fa-solid fa-copy"></i> 复制链接
+                </button>
+                <button
+                  onClick={() => setResultUrl(null)}
+                  className="px-4 py-2.5 bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 text-cyan-300 font-semibold text-xs rounded-xl transition-all flex items-center gap-1.5"
+                  title="重新选择模板或修改参数再次生成"
+                >
+                  <i className="fa-solid fa-rotate"></i> 再次生成
                 </button>
               </div>
             </div>

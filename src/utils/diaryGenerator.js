@@ -2,7 +2,6 @@
 // Generates self-contained static HTML pages with 5 customizable design templates
 
 export function generateDiaryHtml({ folderName, author, templateId = 'wechat', messages = [], storageClient }) {
-  // Sort messages chronologically (oldest first for stories, or newest first for moments)
   const isWeChat = templateId === 'wechat';
   const sortedMsgs = [...messages].sort((a, b) => isWeChat ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
 
@@ -32,62 +31,125 @@ export function generateDiaryHtml({ folderName, author, templateId = 'wechat', m
     return { full: `${y}-${m}-${day} ${h}:${min}`, date: `${y}-${m}-${day}`, time: `${h}:${min}`, year: y, monthDay: `${m}月${day}日` };
   };
 
-  // Group messages by date if needed
+  // Group contiguous messages sharing the same groupId
+  const groupMessagesForDiary = (msgs) => {
+    const result = [];
+    const groupMap = {};
+
+    msgs.forEach(msg => {
+      if (msg.groupId && msg.type !== 'TEXT' && msg.type !== 'FOLDER') {
+        if (!groupMap[msg.groupId]) {
+          groupMap[msg.groupId] = {
+            id: msg.groupId,
+            sender: msg.sender,
+            senderName: msg.senderName,
+            timestamp: msg.timestamp,
+            isGroup: true,
+            groupId: msg.groupId,
+            messages: []
+          };
+          result.push(groupMap[msg.groupId]);
+        }
+        groupMap[msg.groupId].messages.push(msg);
+      } else {
+        result.push({ ...msg, isGroup: false });
+      }
+    });
+
+    return result;
+  };
+
+  const groupedItems = groupMessagesForDiary(sortedMsgs);
+
+  // Render WeChat Moments Feed Item
   const renderWeChatMoments = () => {
-    return sortedMsgs.map((msg, idx) => {
-      const dateInfo = formatDate(msg.timestamp);
-      const isText = msg.type === 'TEXT';
-      const isImage = msg.type === 'IMAGE';
-      const isVideo = msg.type === 'VIDEO';
-      const isAudio = msg.type === 'AUDIO';
-      const isLocation = msg.type === 'LOCATION' || (msg.content && msg.content.startsWith('[位置]'));
-      const isFile = msg.type === 'FILE';
-
-      const mediaUrl = resolveMediaUrl(msg);
-
+    return groupedItems.map((item) => {
+      const dateInfo = formatDate(item.timestamp);
       let contentBlock = '';
-      if (isLocation) {
-        const addr = msg.locationAddress || msg.content.replace(/^\[位置\]\s*/, '');
+
+      if (item.isGroup) {
+        // Grouped Grid (2-9 items)
+        const subMsgs = item.messages;
+        const count = subMsgs.length;
+        const gridClass = `grid-count-${Math.min(count, 9)}`;
+
+        const imgsHtml = subMsgs.map(subMsg => {
+          const mUrl = resolveMediaUrl(subMsg);
+          if (subMsg.type === 'VIDEO') {
+            return `<video src="${mUrl}" controls class="wechat-grid-img"></video>`;
+          }
+          return `<img src="${mUrl}" class="wechat-grid-img" alt="${escapeHtml(subMsg.caption || '')}" loading="lazy" onclick="openLightbox(this.src)"/>`;
+        }).join('');
+
+        // Extract captions & EXIF location notes from all grouped items
+        const captions = subMsgs
+          .map(sub => sub.caption || (sub.locationAddress ? `📍 ${sub.locationAddress}` : ''))
+          .filter(Boolean);
+
         contentBlock = `
-          <div class="wechat-location-badge">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-            <span>${escapeHtml(addr)}</span>
-          </div>`;
-      } else if (isText) {
-        contentBlock = `<div class="wechat-text-content">${escapeHtml(msg.content)}</div>`;
-      } else if (isImage) {
-        contentBlock = `
-          <div class="wechat-media-box">
-            <img src="${mediaUrl}" class="wechat-single-img" alt="${escapeHtml(msg.caption || '')}" loading="lazy" onclick="openLightbox(this.src)"/>
-            ${msg.caption ? `<div class="wechat-caption-sub">${escapeHtml(msg.caption)}</div>` : ''}
-          </div>`;
-      } else if (isVideo) {
-        contentBlock = `
-          <div class="wechat-media-box">
-            <video src="${mediaUrl}" controls class="wechat-video-player" poster="${msg.thumbnailUrl ? resolveMediaUrl({ content: msg.thumbnailUrl }) : ''}"></video>
-            ${msg.caption ? `<div class="wechat-caption-sub">${escapeHtml(msg.caption)}</div>` : ''}
-          </div>`;
-      } else if (isAudio) {
-        contentBlock = `
-          <div class="wechat-audio-box">
-            <audio src="${mediaUrl}" controls class="wechat-audio-player"></audio>
-          </div>`;
-      } else if (isFile) {
-        contentBlock = `
-          <div class="wechat-file-box">
-            <svg class="file-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-            <div class="file-info">
-              <a href="${mediaUrl}" target="_blank" download="${escapeHtml(msg.content)}" class="file-name">${escapeHtml(msg.content)}</a>
-              <span class="file-size">${formatBytes(msg.fileSize || 0)}</span>
+          <div class="wechat-grid-container ${gridClass}">
+            ${imgsHtml}
+          </div>
+          ${captions.length > 0 ? `
+            <div class="wechat-caption-sub">
+              ${captions.map(c => `<div class="caption-item">📌 ${escapeHtml(c)}</div>`).join('')}
             </div>
-          </div>`;
+          ` : ''}
+        `;
+      } else {
+        // Single Item
+        const msg = item;
+        const isText = msg.type === 'TEXT';
+        const isImage = msg.type === 'IMAGE';
+        const isVideo = msg.type === 'VIDEO';
+        const isAudio = msg.type === 'AUDIO';
+        const isLocation = msg.type === 'LOCATION' || (msg.content && msg.content.startsWith('[位置]'));
+        const isFile = msg.type === 'FILE';
+        const mediaUrl = resolveMediaUrl(msg);
+
+        if (isLocation) {
+          const addr = msg.locationAddress || msg.content.replace(/^\[位置\]\s*/, '');
+          contentBlock = `
+            <div class="wechat-location-badge">
+              <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+              <span>${escapeHtml(addr)}</span>
+            </div>`;
+        } else if (isText) {
+          contentBlock = `<div class="wechat-text-content">${escapeHtml(msg.content)}</div>`;
+        } else if (isImage) {
+          contentBlock = `
+            <div class="wechat-media-box">
+              <img src="${mediaUrl}" class="wechat-single-img" alt="${escapeHtml(msg.caption || '')}" loading="lazy" onclick="openLightbox(this.src)"/>
+              ${msg.caption ? `<div class="wechat-caption-sub">📌 ${escapeHtml(msg.caption)}</div>` : ''}
+            </div>`;
+        } else if (isVideo) {
+          contentBlock = `
+            <div class="wechat-media-box">
+              <video src="${mediaUrl}" controls class="wechat-video-player"></video>
+              ${msg.caption ? `<div class="wechat-caption-sub">📌 ${escapeHtml(msg.caption)}</div>` : ''}
+            </div>`;
+        } else if (isAudio) {
+          contentBlock = `
+            <div class="wechat-audio-box">
+              <audio src="${mediaUrl}" controls class="wechat-audio-player"></audio>
+            </div>`;
+        } else if (isFile) {
+          contentBlock = `
+            <div class="wechat-file-box">
+              <svg class="file-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+              <div class="file-info">
+                <a href="${mediaUrl}" target="_blank" download="${escapeHtml(msg.content)}" class="file-name">${escapeHtml(msg.content)}</a>
+                <span class="file-size">${formatBytes(msg.fileSize || 0)}</span>
+              </div>
+            </div>`;
+        }
       }
 
       return `
         <div class="wechat-item">
-          <img src="https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(msg.sender || authorStr)}" class="wechat-avatar" alt="Avatar"/>
+          <img src="https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(item.sender || authorStr)}" class="wechat-avatar" alt="Avatar"/>
           <div class="wechat-body">
-            <div class="wechat-nickname">${escapeHtml(msg.senderName || msg.sender || authorStr)}</div>
+            <div class="wechat-nickname">${escapeHtml(item.senderName || item.sender || authorStr)}</div>
             ${contentBlock}
             <div class="wechat-footer">
               <span class="wechat-time">${dateInfo.full}</span>
@@ -105,8 +167,42 @@ export function generateDiaryHtml({ folderName, author, templateId = 'wechat', m
   };
 
   const renderStandardTimeline = () => {
-    return sortedMsgs.map(msg => {
-      const dateInfo = formatDate(msg.timestamp);
+    return groupedItems.map(item => {
+      const dateInfo = formatDate(item.timestamp);
+      
+      if (item.isGroup) {
+        const subMsgs = item.messages;
+        const imgsHtml = subMsgs.map(subMsg => {
+          const mUrl = resolveMediaUrl(subMsg);
+          return `<img src="${mUrl}" class="card-grid-img" alt="${escapeHtml(subMsg.caption || '')}" loading="lazy" onclick="openLightbox(this.src)"/>`;
+        }).join('');
+
+        const captions = subMsgs
+          .map(sub => sub.caption || (sub.locationAddress ? `📍 ${sub.locationAddress}` : ''))
+          .filter(Boolean);
+
+        return `
+          <div class="timeline-node">
+            <div class="timeline-dot"></div>
+            <div class="timeline-content-card">
+              <div class="card-header">
+                <span class="card-date">${dateInfo.full}</span>
+                <span class="location-badge">📷 图片组 (${subMsgs.length}张)</span>
+              </div>
+              <div class="card-grid-wrap grid-count-${Math.min(subMsgs.length, 9)}">
+                ${imgsHtml}
+              </div>
+              ${captions.length > 0 ? `
+                <div class="card-captions">
+                  ${captions.map(c => `<div>📌 ${escapeHtml(c)}</div>`).join('')}
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }
+
+      const msg = item;
       const mediaUrl = resolveMediaUrl(msg);
       const isText = msg.type === 'TEXT';
       const isImage = msg.type === 'IMAGE';
@@ -167,7 +263,7 @@ export function generateDiaryHtml({ folderName, author, templateId = 'wechat', m
       </div>
       <div class="diary-title-banner">
         <h2>📂 ${escapeHtml(titleStr)}</h2>
-        <p>共收录 ${sortedMsgs.length} 篇精选日记记录</p>
+        <p>共收录 ${sortedMsgs.length} 条记录 (${groupedItems.length} 组动态)</p>
       </div>
       <div class="wechat-feed">
         ${renderWeChatMoments()}
@@ -179,7 +275,7 @@ export function generateDiaryHtml({ folderName, author, templateId = 'wechat', m
       <header class="main-header">
         <div class="header-inner">
           <h1>📖 ${escapeHtml(titleStr)}</h1>
-          <p class="subtitle">记录人：${escapeHtml(authorStr)} · 归档于 ${new Date().toLocaleDateString()}</p>
+          <p class="subtitle">记录人：${escapeHtml(authorStr)} · 归档于 ${new Date().toLocaleDateString()} · 共 ${groupedItems.length} 条动态</p>
         </div>
       </header>
       <main class="timeline-container">
@@ -250,7 +346,7 @@ function getTemplateCss(templateId) {
     .lightbox-content { max-width: 90%; max-height: 90%; border-radius: 4px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
     .lightbox-close { position: absolute; top: 20px; right: 35px; color: #fff; font-size: 40px; font-weight: bold; cursor: pointer; }
 
-    /* --- Template 1: WeChat Moments (朋友圈风格) --- */
+    /* --- Template 1: WeChat Moments (朋友圈风格 & 9宫格) --- */
     .theme-wechat { background: #ededed; }
     .wechat-container { max-width: 600px; margin: 0 auto; background: #fff; min-height: 100vh; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
     .wechat-header-cover { position: relative; height: 240px; background: linear-gradient(135deg, #1aad19, #07c160); }
@@ -272,9 +368,27 @@ function getTemplateCss(templateId) {
     .wechat-location-badge { display: inline-flex; align-items: center; gap: 4px; color: #576b95; font-size: 13px; background: #f3f4f7; padding: 4px 8px; border-radius: 4px; margin-bottom: 8px; }
     .wechat-location-badge .icon { width: 14px; height: 14px; }
 
+    /* 9-Grid WeChat Layout */
+    .wechat-grid-container { display: grid; gap: 4px; margin-bottom: 8px; }
+    .wechat-grid-container.grid-count-1 { grid-template-columns: 1fr; max-width: 220px; }
+    .wechat-grid-container.grid-count-2 { grid-template-columns: repeat(2, 1fr); width: 220px; }
+    .wechat-grid-container.grid-count-3 { grid-template-columns: repeat(3, 1fr); width: 290px; }
+    .wechat-grid-container.grid-count-4 { grid-template-columns: repeat(2, 1fr); width: 220px; }
+    .wechat-grid-container.grid-count-5,
+    .wechat-grid-container.grid-count-6,
+    .wechat-grid-container.grid-count-7,
+    .wechat-grid-container.grid-count-8,
+    .wechat-grid-container.grid-count-9 { grid-template-columns: repeat(3, 1fr); width: 290px; }
+
+    .wechat-grid-img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 4px; cursor: pointer; transition: opacity 0.2s; }
+    .wechat-grid-img:hover { opacity: 0.9; }
+
     .wechat-single-img { max-width: 220px; max-height: 280px; object-fit: cover; border-radius: 4px; cursor: pointer; transition: opacity 0.2s; }
     .wechat-single-img:hover { opacity: 0.9; }
-    .wechat-caption-sub { font-size: 13px; color: #666; margin-top: 4px; }
+    .wechat-caption-sub { font-size: 13px; color: #666; margin-top: 6px; background: #f7f7f8; padding: 6px 10px; border-radius: 6px; border-left: 3px solid #07c160; }
+    .wechat-caption-sub .caption-item { margin-bottom: 3px; word-break: break-word; }
+    .wechat-caption-sub .caption-item:last-child { margin-bottom: 0; }
+
     .wechat-video-player { max-width: 280px; border-radius: 4px; }
     .wechat-audio-box { background: #f7f7f7; border-radius: 6px; padding: 6px; width: 100%; }
     .wechat-audio-player { width: 100%; height: 36px; }
@@ -303,6 +417,15 @@ function getTemplateCss(templateId) {
     .theme-journal .card-header { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; color: #64748b; }
     .theme-journal .card-img { max-height: 400px; width: 100%; object-fit: cover; border-radius: 8px; cursor: pointer; }
     .theme-journal .card-text { font-size: 15px; color: #334155; line-height: 1.7; white-space: pre-wrap; margin-top: 10px; }
+
+    .card-grid-wrap { display: grid; gap: 6px; margin-bottom: 10px; }
+    .card-grid-wrap.grid-count-1 { grid-template-columns: 1fr; }
+    .card-grid-wrap.grid-count-2 { grid-template-columns: repeat(2, 1fr); }
+    .card-grid-wrap.grid-count-3, .card-grid-wrap.grid-count-4, .card-grid-wrap.grid-count-5,
+    .card-grid-wrap.grid-count-6, .card-grid-wrap.grid-count-7, .card-grid-wrap.grid-count-8,
+    .card-grid-wrap.grid-count-9 { grid-template-columns: repeat(3, 1fr); }
+    .card-grid-img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 6px; cursor: pointer; }
+    .card-captions { font-size: 13px; color: #64748b; margin-top: 8px; padding: 8px 12px; background: #f1f5f9; border-radius: 6px; }
 
     /* --- Template 3: Polaroid Gallery (拍立得相册) --- */
     .theme-polaroid { background: #f5eedc; font-family: "Caveat", cursive, sans-serif; }
