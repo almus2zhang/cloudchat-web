@@ -200,6 +200,41 @@ class WebDavStorageClient {
         }
     }
 
+    async ensureFolderPathExist(subPath) {
+        const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
+        const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
+        const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
+
+        const parts = [];
+        if (root) parts.push(root);
+        if (userDirClean) parts.push(userDirClean);
+        if (subPath) {
+            subPath.split('/').filter(Boolean).forEach(p => parts.push(p));
+        }
+
+        if (parts.length === 0) return;
+
+        let currentPath = '';
+        for (const part of parts) {
+            currentPath = currentPath ? `${currentPath}/${part}` : part;
+            const folderUrl = `${baseUrl}/${currentPath}`;
+            try {
+                const propRes = await fetch(folderUrl, {
+                    method: 'PROPFIND',
+                    headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
+                });
+                if (propRes.ok) continue;
+            } catch(e) {}
+
+            try {
+                await fetch(folderUrl, {
+                    method: 'MKCOL',
+                    headers: { 'Authorization': this.getAuthHeader() }
+                });
+            } catch (e) {}
+        }
+    }
+
     getUrl(fileName) {
         const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');

@@ -28,6 +28,7 @@ export default function ChatArea({
   onRemoveMessagesFromFolder,
   onUnpackFolder,
   onRenameFolder,
+  onOpenDiaryExport,
   isPrivacyMode = false,
   onEnterPrivacyMode,
   onExitPrivacyMode,
@@ -761,6 +762,13 @@ export default function ChatArea({
               </div>
               <div className="flex items-center gap-2">
                 <button 
+                  onClick={() => folderMsg && onOpenDiaryExport && onOpenDiaryExport(folderMsg)}
+                  className="px-2.5 py-1 text-xs text-cyan-300 hover:text-white bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 border border-cyan-500/40 rounded-full transition-all flex items-center gap-1 font-semibold"
+                  title="生成精美静态日记网页并存入服务器"
+                >
+                  <i className="fa-solid fa-book-bookmark text-[10px] text-cyan-400"></i> 生成静态日记
+                </button>
+                <button 
                   onClick={() => folderMsg && onRenameFolder && onRenameFolder(folderMsg)}
                   className="px-2.5 py-1 text-xs text-textSecondary hover:text-textPrimary bg-bgPrimary border border-borderColor rounded-full transition-all flex items-center gap-1"
                   title="重命名文件夹"
@@ -1456,6 +1464,15 @@ export default function ChatArea({
           {/* Folder Specific Actions */}
           {contextMenu.msg.type === 'FOLDER' && (
             <>
+              <button
+                onClick={() => {
+                  if (onOpenDiaryExport) onOpenDiaryExport(contextMenu.msg);
+                  setContextMenu(null);
+                }}
+                className="w-full px-4 py-2 text-xs text-emerald-400 hover:bg-emerald-500/10 transition-colors flex items-center gap-2.5 font-semibold"
+              >
+                <i className="fa-solid fa-book-bookmark text-emerald-400 w-4 text-center"></i> 生成静态日记网页
+              </button>
               <button
                 onClick={() => {
                   if (onRenameFolder) onRenameFolder(contextMenu.msg);

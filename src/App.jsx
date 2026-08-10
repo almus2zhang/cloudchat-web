@@ -5,6 +5,7 @@ import SettingsModal from './components/SettingsModal';
 import CategoryModal from './components/CategoryModal';
 import ConfirmModal from './components/ConfirmModal';
 import MediaViewer from './components/MediaViewer';
+import DiaryExportModal from './components/DiaryExportModal';
 import { StorageClient } from './services/storage';
 import { initDB, cacheFile, getCachedFile } from './services/db';
 
@@ -26,6 +27,14 @@ export default function App() {
   const [categoryTarget, setCategoryTarget] = useState(null); // msg object or null (bulk mode)
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({ title: '', message: '', onOk: () => {} });
+  const [diaryExportOpen, setDiaryExportOpen] = useState(false);
+  const [diaryExportFolder, setDiaryExportFolder] = useState(null);
+
+  const handleOpenDiaryExport = (folderMsg) => {
+    if (!folderMsg) return;
+    setDiaryExportFolder(folderMsg);
+    setDiaryExportOpen(true);
+  };
   
   // Media Viewer States
   const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
@@ -1191,6 +1200,7 @@ export default function App() {
         onRemoveMessagesFromFolder={handleRemoveMessagesFromFolder}
         onUnpackFolder={handleUnpackFolder}
         onRenameFolder={handleRenameFolder}
+        onOpenDiaryExport={handleOpenDiaryExport}
         isPrivacyMode={isPrivacyMode}
         onEnterPrivacyMode={handleEnterPrivacyMode}
         onExitPrivacyMode={handleExitPrivacyMode}
@@ -1241,6 +1251,16 @@ export default function App() {
         onPrev={() => setMediaIndex(prev => Math.max(prev - 1, 0))}
         onNext={() => setMediaIndex(prev => Math.min(prev + 1, mediaList.length - 1))}
         onDownload={handleMediaDownload}
+      />
+
+      {/* Diary Export Modal */}
+      <DiaryExportModal 
+        isOpen={diaryExportOpen}
+        onClose={() => setDiaryExportOpen(false)}
+        folderMsg={diaryExportFolder}
+        folderMessages={diaryExportFolder ? messages.filter(m => !m.isDeleted && m.folderId === diaryExportFolder.id) : []}
+        currentProfile={currentProfile}
+        storageClient={activeClientRef.current}
       />
 
     </div>

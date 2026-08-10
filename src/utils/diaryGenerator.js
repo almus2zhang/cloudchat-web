@@ -1,0 +1,333 @@
+// Diary Generator Utility for CloudChat
+// Generates self-contained static HTML pages with 5 customizable design templates
+
+export function generateDiaryHtml({ folderName, author, templateId = 'wechat', messages = [], storageClient }) {
+  // Sort messages chronologically (oldest first for stories, or newest first for moments)
+  const isWeChat = templateId === 'wechat';
+  const sortedMsgs = [...messages].sort((a, b) => isWeChat ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
+
+  const titleStr = folderName || '我的日记';
+  const authorStr = author || 'CloudChat User';
+
+  // Helper to resolve media URL
+  const resolveMediaUrl = (msg) => {
+    if (!msg) return '';
+    if (msg.url && (msg.url.startsWith('blob:') || msg.url.startsWith('data:'))) {
+      return msg.url;
+    }
+    if (storageClient && msg.content) {
+      return storageClient.getUrl(msg.content);
+    }
+    return msg.remoteUrl || msg.content || '';
+  };
+
+  // Format date helper
+  const formatDate = (ts) => {
+    const d = new Date(ts);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return { full: `${y}-${m}-${day} ${h}:${min}`, date: `${y}-${m}-${day}`, time: `${h}:${min}`, year: y, monthDay: `${m}月${day}日` };
+  };
+
+  // Group messages by date if needed
+  const renderWeChatMoments = () => {
+    return sortedMsgs.map((msg, idx) => {
+      const dateInfo = formatDate(msg.timestamp);
+      const isText = msg.type === 'TEXT';
+      const isImage = msg.type === 'IMAGE';
+      const isVideo = msg.type === 'VIDEO';
+      const isAudio = msg.type === 'AUDIO';
+      const isLocation = msg.type === 'LOCATION' || (msg.content && msg.content.startsWith('[位置]'));
+      const isFile = msg.type === 'FILE';
+
+      const mediaUrl = resolveMediaUrl(msg);
+
+      let contentBlock = '';
+      if (isLocation) {
+        const addr = msg.locationAddress || msg.content.replace(/^\[位置\]\s*/, '');
+        contentBlock = `
+          <div class="wechat-location-badge">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+            <span>${escapeHtml(addr)}</span>
+          </div>`;
+      } else if (isText) {
+        contentBlock = `<div class="wechat-text-content">${escapeHtml(msg.content)}</div>`;
+      } else if (isImage) {
+        contentBlock = `
+          <div class="wechat-media-box">
+            <img src="${mediaUrl}" class="wechat-single-img" alt="${escapeHtml(msg.caption || '')}" loading="lazy" onclick="openLightbox(this.src)"/>
+            ${msg.caption ? `<div class="wechat-caption-sub">${escapeHtml(msg.caption)}</div>` : ''}
+          </div>`;
+      } else if (isVideo) {
+        contentBlock = `
+          <div class="wechat-media-box">
+            <video src="${mediaUrl}" controls class="wechat-video-player" poster="${msg.thumbnailUrl ? resolveMediaUrl({ content: msg.thumbnailUrl }) : ''}"></video>
+            ${msg.caption ? `<div class="wechat-caption-sub">${escapeHtml(msg.caption)}</div>` : ''}
+          </div>`;
+      } else if (isAudio) {
+        contentBlock = `
+          <div class="wechat-audio-box">
+            <audio src="${mediaUrl}" controls class="wechat-audio-player"></audio>
+          </div>`;
+      } else if (isFile) {
+        contentBlock = `
+          <div class="wechat-file-box">
+            <svg class="file-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+            <div class="file-info">
+              <a href="${mediaUrl}" target="_blank" download="${escapeHtml(msg.content)}" class="file-name">${escapeHtml(msg.content)}</a>
+              <span class="file-size">${formatBytes(msg.fileSize || 0)}</span>
+            </div>
+          </div>`;
+      }
+
+      return `
+        <div class="wechat-item">
+          <img src="https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(msg.sender || authorStr)}" class="wechat-avatar" alt="Avatar"/>
+          <div class="wechat-body">
+            <div class="wechat-nickname">${escapeHtml(msg.senderName || msg.sender || authorStr)}</div>
+            ${contentBlock}
+            <div class="wechat-footer">
+              <span class="wechat-time">${dateInfo.full}</span>
+              <div class="wechat-actions">
+                <button class="like-btn" onclick="toggleLike(this)">❤️ 赞</button>
+              </div>
+            </div>
+            <div class="wechat-like-box" style="display:none;">
+              <span>❤️ ${escapeHtml(authorStr)}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('\n');
+  };
+
+  const renderStandardTimeline = () => {
+    return sortedMsgs.map(msg => {
+      const dateInfo = formatDate(msg.timestamp);
+      const mediaUrl = resolveMediaUrl(msg);
+      const isText = msg.type === 'TEXT';
+      const isImage = msg.type === 'IMAGE';
+      const isVideo = msg.type === 'VIDEO';
+      const isAudio = msg.type === 'AUDIO';
+      const isLocation = msg.type === 'LOCATION' || (msg.content && msg.content.startsWith('[位置]'));
+
+      let cardMedia = '';
+      if (isImage) {
+        cardMedia = `<div class="card-image-wrap"><img src="${mediaUrl}" class="card-img" alt="${escapeHtml(msg.caption || '')}" loading="lazy" onclick="openLightbox(this.src)"/></div>`;
+      } else if (isVideo) {
+        cardMedia = `<div class="card-video-wrap"><video src="${mediaUrl}" controls class="card-video"></video></div>`;
+      } else if (isAudio) {
+        cardMedia = `<div class="card-audio-wrap"><audio src="${mediaUrl}" controls></audio></div>`;
+      }
+
+      let textStr = isLocation ? msg.locationAddress || msg.content : (isText ? msg.content : msg.caption || '');
+
+      return `
+        <div class="timeline-node">
+          <div class="timeline-dot"></div>
+          <div class="timeline-content-card">
+            <div class="card-header">
+              <span class="card-date">${dateInfo.full}</span>
+              ${isLocation ? `<span class="location-badge">📍 ${escapeHtml(textStr)}</span>` : ''}
+            </div>
+            ${cardMedia}
+            ${!isLocation && textStr ? `<div class="card-text">${escapeHtml(textStr)}</div>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('\n');
+  };
+
+  const cssStyles = getTemplateCss(templateId);
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(titleStr)} - 个人日记专栏</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    ${cssStyles}
+  </style>
+</head>
+<body class="theme-${templateId}">
+  ${templateId === 'wechat' ? `
+    <!-- WeChat Moments Layout -->
+    <div class="wechat-container">
+      <div class="wechat-header-cover">
+        <div class="cover-bg"></div>
+        <div class="user-profile">
+          <span class="user-name">${escapeHtml(authorStr)}</span>
+          <img src="https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(authorStr)}" class="header-avatar" alt="Avatar"/>
+        </div>
+      </div>
+      <div class="diary-title-banner">
+        <h2>📂 ${escapeHtml(titleStr)}</h2>
+        <p>共收录 ${sortedMsgs.length} 篇精选日记记录</p>
+      </div>
+      <div class="wechat-feed">
+        ${renderWeChatMoments()}
+      </div>
+    </div>
+  ` : `
+    <!-- Standard Layout -->
+    <div class="diary-container">
+      <header class="main-header">
+        <div class="header-inner">
+          <h1>📖 ${escapeHtml(titleStr)}</h1>
+          <p class="subtitle">记录人：${escapeHtml(authorStr)} · 归档于 ${new Date().toLocaleDateString()}</p>
+        </div>
+      </header>
+      <main class="timeline-container">
+        ${renderStandardTimeline()}
+      </main>
+    </div>
+  `}
+
+  <!-- Lightbox Modal for Images -->
+  <div id="lightboxModal" class="lightbox-modal" onclick="closeLightbox()">
+    <span class="lightbox-close">&times;</span>
+    <img class="lightbox-content" id="lightboxImg">
+  </div>
+
+  <script>
+    function openLightbox(src) {
+      const modal = document.getElementById('lightboxModal');
+      const img = document.getElementById('lightboxImg');
+      modal.style.display = "flex";
+      img.src = src;
+    }
+    function closeLightbox() {
+      document.getElementById('lightboxModal').style.display = "none";
+    }
+    function toggleLike(btn) {
+      const item = btn.closest('.wechat-body');
+      const likeBox = item.querySelector('.wechat-like-box');
+      if (likeBox.style.display === 'none') {
+        likeBox.style.display = 'block';
+        btn.classList.add('active');
+      } else {
+        likeBox.style.display = 'none';
+        btn.classList.remove('active');
+      }
+    }
+  </script>
+</body>
+</html>`;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function getTemplateCss(templateId) {
+  return `
+    /* Common Reset & Variables */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #f2f2f6; color: #1c1c1e; line-height: 1.6; }
+    img, video { max-width: 100%; border-radius: 8px; }
+
+    /* Lightbox */
+    .lightbox-modal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.9); align-items: center; justify-content: center; }
+    .lightbox-content { max-width: 90%; max-height: 90%; border-radius: 4px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+    .lightbox-close { position: absolute; top: 20px; right: 35px; color: #fff; font-size: 40px; font-weight: bold; cursor: pointer; }
+
+    /* --- Template 1: WeChat Moments (朋友圈风格) --- */
+    .theme-wechat { background: #ededed; }
+    .wechat-container { max-width: 600px; margin: 0 auto; background: #fff; min-height: 100vh; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
+    .wechat-header-cover { position: relative; height: 240px; background: linear-gradient(135deg, #1aad19, #07c160); }
+    .cover-bg { width: 100%; height: 100%; background-size: cover; background-position: center; opacity: 0.8; }
+    .user-profile { position: absolute; right: 20px; bottom: -30px; display: flex; align-items: center; gap: 12px; }
+    .user-name { color: #fff; font-weight: 700; font-size: 18px; text-shadow: 0 1px 3px rgba(0,0,0,0.6); }
+    .header-avatar { width: 70px; height: 70px; border-radius: 12px; border: 2px solid #fff; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+    
+    .diary-title-banner { padding: 45px 20px 15px 20px; border-bottom: 1px solid #f0f0f0; }
+    .diary-title-banner h2 { font-size: 20px; color: #111; }
+    .diary-title-banner p { font-size: 12px; color: #888; margin-top: 4px; }
+
+    .wechat-feed { padding: 20px 16px; }
+    .wechat-item { display: flex; gap: 12px; padding-bottom: 24px; border-bottom: 1px solid #f0f0f0; margin-bottom: 20px; }
+    .wechat-avatar { width: 42px; height: 42px; border-radius: 6px; flex-shrink: 0; background: #f0f0f0; }
+    .wechat-body { flex: 1; min-width: 0; }
+    .wechat-nickname { font-weight: 600; color: #576b95; font-size: 15px; margin-bottom: 6px; }
+    .wechat-text-content { font-size: 15px; color: #111; word-break: break-word; white-space: pre-wrap; margin-bottom: 8px; line-height: 1.5; }
+    .wechat-location-badge { display: inline-flex; align-items: center; gap: 4px; color: #576b95; font-size: 13px; background: #f3f4f7; padding: 4px 8px; border-radius: 4px; margin-bottom: 8px; }
+    .wechat-location-badge .icon { width: 14px; height: 14px; }
+
+    .wechat-single-img { max-width: 220px; max-height: 280px; object-fit: cover; border-radius: 4px; cursor: pointer; transition: opacity 0.2s; }
+    .wechat-single-img:hover { opacity: 0.9; }
+    .wechat-caption-sub { font-size: 13px; color: #666; margin-top: 4px; }
+    .wechat-video-player { max-width: 280px; border-radius: 4px; }
+    .wechat-audio-box { background: #f7f7f7; border-radius: 6px; padding: 6px; width: 100%; }
+    .wechat-audio-player { width: 100%; height: 36px; }
+    .wechat-file-box { display: flex; align-items: center; gap: 10px; background: #f7f7f7; padding: 10px; border-radius: 6px; max-width: 320px; }
+    .wechat-file-box .file-icon { width: 32px; height: 32px; fill: #576b95; }
+    .wechat-file-box .file-name { font-size: 13px; font-weight: 500; color: #111; text-decoration: none; word-break: break-all; }
+    .wechat-file-box .file-size { font-size: 11px; color: #888; display: block; }
+
+    .wechat-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12px; color: #b2b2b2; }
+    .like-btn { background: #f7f7f7; border: none; padding: 4px 10px; border-radius: 4px; color: #576b95; cursor: pointer; font-size: 12px; transition: background 0.2s; }
+    .like-btn:hover, .like-btn.active { background: #e6e6e6; color: #07c160; }
+    .wechat-like-box { margin-top: 8px; background: #f3f3f5; padding: 6px 10px; border-radius: 4px; font-size: 12px; color: #576b95; position: relative; }
+    .wechat-like-box::before { content: ''; position: absolute; top: -6px; left: 14px; border-width: 0 6px 6px 6px; border-style: solid; border-color: transparent transparent #f3f3f5 transparent; }
+
+    /* --- Template 2: Modern Journal (简约现代) --- */
+    .theme-journal { background: #f8fafc; }
+    .theme-journal .diary-container { max-width: 760px; margin: 0 auto; padding: 40px 20px; }
+    .theme-journal .main-header { text-align: center; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 2px solid #e2e8f0; }
+    .theme-journal .main-header h1 { font-size: 28px; color: #0f172a; font-weight: 800; }
+    .theme-journal .main-header .subtitle { font-size: 14px; color: #64748b; margin-top: 6px; }
+
+    .theme-journal .timeline-container { position: relative; padding-left: 20px; border-left: 2px solid #cbd5e1; }
+    .theme-journal .timeline-node { position: relative; margin-bottom: 32px; }
+    .theme-journal .timeline-dot { position: absolute; left: -27px; top: 16px; width: 12px; height: 12px; border-radius: 50%; background: #3b82f6; border: 2px solid #fff; }
+    .theme-journal .timeline-content-card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; }
+    .theme-journal .card-header { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; color: #64748b; }
+    .theme-journal .card-img { max-height: 400px; width: 100%; object-fit: cover; border-radius: 8px; cursor: pointer; }
+    .theme-journal .card-text { font-size: 15px; color: #334155; line-height: 1.7; white-space: pre-wrap; margin-top: 10px; }
+
+    /* --- Template 3: Polaroid Gallery (拍立得相册) --- */
+    .theme-polaroid { background: #f5eedc; font-family: "Caveat", cursive, sans-serif; }
+    .theme-polaroid .diary-container { max-width: 800px; margin: 0 auto; padding: 30px 20px; }
+    .theme-polaroid .main-header h1 { font-size: 32px; color: #4a3e3d; text-align: center; margin-bottom: 30px; }
+    .theme-polaroid .timeline-content-card { background: #fff; padding: 16px 16px 24px 16px; border-radius: 2px; box-shadow: 0 8px 20px rgba(0,0,0,0.12); margin-bottom: 36px; transform: rotate(-1deg); transition: transform 0.3s; }
+    .theme-polaroid .timeline-node:nth-child(even) .timeline-content-card { transform: rotate(1.5deg); }
+    .theme-polaroid .timeline-content-card:hover { transform: scale(1.02) rotate(0deg); z-index: 10; }
+    .theme-polaroid .card-img { width: 100%; height: 360px; object-fit: cover; border-radius: 0; border: 1px solid #eee; }
+    .theme-polaroid .card-text { font-size: 18px; color: #222; text-align: center; margin-top: 14px; }
+
+    /* --- Template 4: Dark Retro Film (极简胶片) --- */
+    .theme-film { background: #121214; color: #e4e4e7; }
+    .theme-film .diary-container { max-width: 720px; margin: 0 auto; padding: 40px 20px; }
+    .theme-film .main-header h1 { font-size: 26px; color: #f4f4f5; letter-spacing: 1px; text-align: center; margin-bottom: 40px; }
+    .theme-film .timeline-content-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(10px); border-radius: 16px; padding: 24px; margin-bottom: 32px; }
+    .theme-film .card-img { border-radius: 12px; max-height: 450px; object-fit: cover; }
+    .theme-film .card-text { color: #d4d4d8; font-size: 15px; line-height: 1.7; margin-top: 12px; }
+    .theme-film .card-header { color: #a1a1aa; }
+
+    /* --- Template 5: Travel Notes (风物志) --- */
+    .theme-travel { background: #faf7f2; color: #2c3e50; }
+    .theme-travel .diary-container { max-width: 780px; margin: 0 auto; padding: 40px 20px; }
+    .theme-travel .main-header { background: #eef2f5; padding: 24px; border-radius: 16px; margin-bottom: 30px; border: 1px solid #dcdfe6; }
+    .theme-travel .timeline-content-card { background: #fff; border-radius: 14px; padding: 20px; border: 1px solid #e4e7ed; box-shadow: 0 4px 16px rgba(0,0,0,0.03); margin-bottom: 24px; }
+    .theme-travel .location-badge { background: #e1f5fe; color: #0288d1; padding: 4px 10px; border-radius: 20px; font-size: 12px; }
+  `;
+}
