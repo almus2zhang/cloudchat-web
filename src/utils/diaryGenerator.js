@@ -50,7 +50,7 @@ async function compressImageBlob(blob, maxSide = 1200, quality = 0.82) {
 }
 
 // Helper to copy or upload compressed asset file into target diary directory assets folder on server
-async function syncAssetToDiaryFolder(sourceFileName, assetName, targetAssetsDir, storageClient) {
+async function syncAssetToDiaryFolder(sourceFileName, assetName, targetAssetsDir, storageClient, isImage = true) {
   if (!sourceFileName || !storageClient) return null;
   if (sourceFileName.startsWith('content://') || sourceFileName.startsWith('file://')) {
     return null;
@@ -58,8 +58,8 @@ async function syncAssetToDiaryFolder(sourceFileName, assetName, targetAssetsDir
   const destSubPath = `${targetAssetsDir}/${assetName}`;
   const relativeHtmlUrl = `assets/${assetName}`;
 
-  // 1. Try server-side fast COPY first (0ms overhead on WebDAV/S3!)
-  if (typeof storageClient.copyFile === 'function') {
+  // For non-image binaries (videos/audio/files), try fast server-side COPY first
+  if (!isImage && typeof storageClient.copyFile === 'function') {
     try {
       const ok = await storageClient.copyFile(sourceFileName, destSubPath);
       if (ok) return relativeHtmlUrl;
@@ -68,7 +68,7 @@ async function syncAssetToDiaryFolder(sourceFileName, assetName, targetAssetsDir
     }
   }
 
-  // 2. Fallback: retrieve blob from IndexedDB cache or download, compress and upload to destSubPath
+  // For images, retrieve blob (from IndexedDB cache or download), compress via Canvas (max 1200px, 80% quality), and upload!
   let blob = await getCachedFile(sourceFileName);
   if (!blob && typeof storageClient.downloadFile === 'function') {
     try {
@@ -79,10 +79,20 @@ async function syncAssetToDiaryFolder(sourceFileName, assetName, targetAssetsDir
 
   if (blob && typeof storageClient.uploadFile === 'function') {
     try {
-      const compressed = await compressImageBlob(blob);
+      const compressed = isImage ? await compressImageBlob(blob, 1200, 0.8) : blob;
       const contentType = compressed.type || (assetName.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
       await storageClient.uploadFile(compressed, destSubPath, contentType);
       return relativeHtmlUrl;
+    } catch (e) {
+      console.warn('Upload compressed asset error:', e);
+    }
+  }
+
+  // Backup fallback for any failed upload: try server-side copyFile
+  if (typeof storageClient.copyFile === 'function') {
+    try {
+      const ok = await storageClient.copyFile(sourceFileName, destSubPath);
+      if (ok) return relativeHtmlUrl;
     } catch (e) {}
   }
 
@@ -209,7 +219,8 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
       } else {
         const sourceName = msg.content || `${msg.id}.jpg`;
         const cleanFileName = sourceName.split('/').pop().replace(/[\\/:*?"<>|]/g, '_');
-        const relativeUrl = await syncAssetToDiaryFolder(sourceName, cleanFileName, targetAssetsDir, storageClient);
+        const isImg = msg.type === 'IMAGE';
+        const relativeUrl = await syncAssetToDiaryFolder(sourceName, cleanFileName, targetAssetsDir, storageClient, isImg);
         if (relativeUrl) {
           mediaUrlMap[msg.id] = relativeUrl;
         } else if (msg.url && msg.url.startsWith('data:')) {
