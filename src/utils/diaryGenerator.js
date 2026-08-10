@@ -1,12 +1,13 @@
 // Diary Generator Utility for CloudChat
 // Generates self-contained static HTML pages with 5 customizable design templates & Password Lock protection
 
-export async function generateDiaryHtml({ folderName, author, templateId = 'wechat', password = '', messages = [], storageClient }) {
+export async function generateDiaryHtml({ folderName, author, avatar, templateId = 'wechat', password = '', messages = [], storageClient }) {
   const isWeChat = templateId === 'wechat';
   const sortedMsgs = [...messages].sort((a, b) => isWeChat ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
 
   const titleStr = folderName || '我的日记';
   const authorStr = author || 'CloudChat User';
+  const authorAvatarStr = avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(authorStr)}`;
 
   // Compute password SHA-256 hash if password provided
   let passwordHash = '';
@@ -153,7 +154,7 @@ export async function generateDiaryHtml({ folderName, author, templateId = 'wech
 
       return `
         <div class="wechat-item">
-          <img src="https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(item.sender || authorStr)}" class="wechat-avatar" alt="Avatar"/>
+          <img src="${authorAvatarStr}" class="wechat-avatar" alt="Avatar"/>
           <div class="wechat-body">
             <div class="wechat-nickname">${escapeHtml(item.senderName || item.sender || authorStr)}</div>
             ${contentBlock}
@@ -284,7 +285,7 @@ export async function generateDiaryHtml({ folderName, author, templateId = 'wech
         <div class="cover-bg"></div>
         <div class="user-profile">
           <span class="user-name">${escapeHtml(authorStr)}</span>
-          <img src="https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(authorStr)}" class="header-avatar" alt="Avatar"/>
+          <img src="${authorAvatarStr}" class="header-avatar" alt="Avatar"/>
         </div>
       </div>
       <div class="diary-title-banner">

@@ -150,9 +150,11 @@ export default function Sidebar({
         {/* Profile Card & Sync Button */}
         <div className="p-3 border-t border-borderColor flex items-center justify-between gap-3 bg-bgPrimary/10">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded bg-accentColor text-white font-bold flex items-center justify-center text-sm shrink-0">
-              {currentProfile ? (currentProfile.username || 'U').substring(0,1).toUpperCase() : 'G'}
-            </div>
+            <img 
+              src={currentProfile?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(currentProfile?.username || 'User')}`} 
+              alt="Avatar"
+              className="w-9 h-9 rounded-xl object-cover border border-borderColor bg-bgPrimary shrink-0 shadow-sm"
+            />
             <div className="min-w-0">
               <p className="text-xs font-semibold text-textPrimary truncate">
                 {currentProfile ? currentProfile.username : 'Guest User'}

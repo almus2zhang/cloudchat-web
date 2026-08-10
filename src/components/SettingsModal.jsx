@@ -1,5 +1,18 @@
 import React, { useState, useEffect } from 'react';
 
+const PRESET_AVATARS = [
+  'https://api.dicebear.com/7.x/bottts/svg?seed=Felix',
+  'https://api.dicebear.com/7.x/bottts/svg?seed=Aria',
+  'https://api.dicebear.com/7.x/bottts/svg?seed=Zack',
+  'https://api.dicebear.com/7.x/bottts/svg?seed=Luna',
+  'https://api.dicebear.com/7.x/bottts/svg?seed=Leo',
+  'https://api.dicebear.com/7.x/bottts/svg?seed=Maya',
+  'https://api.dicebear.com/7.x/bottts/svg?seed=Milo',
+  'https://api.dicebear.com/7.x/bottts/svg?seed=Nova',
+  'https://api.dicebear.com/7.x/bottts/svg?seed=Kira',
+  'https://api.dicebear.com/7.x/bottts/svg?seed=Orion'
+];
+
 export default function SettingsModal({ 
   isOpen, 
   profiles, 
@@ -30,6 +43,7 @@ export default function SettingsModal({
       type: 'WEBDAV',
       preset: 'jianguoyun',
       username: 'WebUser',
+      avatar: PRESET_AVATARS[0],
       syncInterval: 5,
       serverPath: 'CloudChat',
       saveDir: 'user_default',
@@ -57,6 +71,16 @@ export default function SettingsModal({
       ...prev,
       [field]: val
     }));
+  };
+
+  const handleCustomAvatarSelect = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      handleFieldChange('avatar', evt.target.result);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSave = () => {
@@ -365,6 +389,55 @@ export default function SettingsModal({
                     min="2"
                     className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor transition-colors w-full"
                   />
+                </div>
+              </div>
+
+              {/* Avatar Setting Section */}
+              <div className="flex flex-col gap-2.5 border-t border-borderColor/40 pt-3">
+                <label className="text-xs font-semibold text-textSecondary uppercase tracking-wider flex items-center gap-1.5">
+                  <i className="fa-solid fa-user-gear text-accentColor"></i> 个人头像设置 (User Avatar)
+                </label>
+
+                <div className="flex items-center gap-4 py-1">
+                  <div className="relative group shrink-0">
+                    <img 
+                      src={editingProfile.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(editingProfile.username || 'User')}`} 
+                      alt="Avatar Preview"
+                      className="w-14 h-14 rounded-2xl object-cover border-2 border-accentColor/40 bg-bgPrimary shadow-md"
+                    />
+                    <label className="absolute inset-0 bg-black/50 rounded-2xl opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity text-white text-xs font-semibold">
+                      <i className="fa-solid fa-camera"></i>
+                      <input type="file" accept="image/*" className="hidden" onChange={handleCustomAvatarSelect} />
+                    </label>
+                  </div>
+
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <label className="px-3 py-1.5 bg-bgPrimary border border-borderColor hover:border-accentColor text-textPrimary text-xs rounded-lg cursor-pointer transition-all flex items-center gap-1.5 font-medium">
+                        <i className="fa-solid fa-image text-accentColor"></i> 选择本地图片做头像
+                        <input type="file" accept="image/*" className="hidden" onChange={handleCustomAvatarSelect} />
+                      </label>
+                    </div>
+                    <p className="text-[10px] text-textMuted">支持上传自定义 PNG/JPG/SVG 本地图片</p>
+                  </div>
+                </div>
+
+                {/* Preset Avatars Grid */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[11px] font-medium text-textMuted">系统内置精美头像：</span>
+                  <div className="grid grid-cols-5 gap-2">
+                    {PRESET_AVATARS.map((url, idx) => (
+                      <img 
+                        key={idx}
+                        src={url} 
+                        alt={`Preset ${idx + 1}`}
+                        onClick={() => handleFieldChange('avatar', url)}
+                        className={`w-10 h-10 rounded-xl object-cover cursor-pointer border-2 transition-all hover:scale-105 ${
+                          editingProfile.avatar === url ? 'border-accentColor ring-2 ring-accentColor/30 shadow-lg scale-105' : 'border-borderColor/60 hover:border-textMuted'
+                        }`}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

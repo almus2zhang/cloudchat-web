@@ -90,6 +90,7 @@ export default function DiaryExportModal({
       const htmlContent = await generateDiaryHtml({
         folderName: title.trim() || cleanFolderName,
         author: author.trim() || 'CloudChat User',
+        avatar: currentProfile?.avatar || '',
         templateId,
         password: enablePassword ? password : '',
         messages: folderMessages,
