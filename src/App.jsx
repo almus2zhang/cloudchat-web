@@ -252,6 +252,10 @@ export default function App() {
   // 2b. Resolve avatar filename -> blob URL via downloadFile (avoids WebDAV auth popups)
   const resolveAvatarUrl = async (avatarFilename) => {
     if (!avatarFilename) return null;
+    // Local Android URIs cannot be fetched over WebDAV
+    if (avatarFilename.startsWith('content://') || avatarFilename.startsWith('file://')) {
+      return null;
+    }
     // If it's already a safe displayable URL (data: or https:), return as-is
     if (avatarFilename.startsWith('data:') || avatarFilename.startsWith('https://') || avatarFilename.startsWith('http://')) {
       return avatarFilename;

@@ -3,6 +3,9 @@ import { getCachedFile, cacheFile } from '../services/db';
 // Helper to copy or upload asset file into target diary directory assets folder on server
 async function syncAssetToDiaryFolder(sourceFileName, assetName, targetAssetsDir, storageClient) {
   if (!sourceFileName || !storageClient) return null;
+  if (sourceFileName.startsWith('content://') || sourceFileName.startsWith('file://')) {
+    return null;
+  }
   const destSubPath = `${targetAssetsDir}/${assetName}`;
   const relativeHtmlUrl = `assets/${assetName}`;
 
