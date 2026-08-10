@@ -815,7 +815,7 @@ export default function ChatArea({
               <div 
                 key={item.id} 
                 onContextMenu={handleRowContextMenu}
-                className={`flex gap-3 min-w-0 group relative my-1 items-start ${item.isOutgoing ? 'justify-end' : 'justify-start'}`}
+                className="flex gap-3 min-w-0 group relative my-1 items-start justify-start"
               >
                 {/* Selection Checkbox */}
                 {selectedMessageIds.size > 0 && (
@@ -858,10 +858,10 @@ export default function ChatArea({
                   onTouchEnd={(e) => handleTouchEnd(e, gestureMsgId)}
                   onTouchMove={(e) => handleTouchMove(e, gestureMsgId)}
                   onContextMenu={handleRowContextMenu}
-                  className={`flex flex-col max-w-[80%] md:max-w-[68%] min-w-0 relative message-bubble ${item.isOutgoing ? 'items-end' : 'items-start'}`}
+                  className="flex flex-col max-w-[80%] md:max-w-[68%] min-w-0 relative message-bubble items-start"
                 >
                   {/* Sender Name & Hidden Badge */}
-                  <div className={`text-[11px] font-semibold text-textMuted mb-1 select-none flex items-center gap-1.5 ${item.isOutgoing ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`text-[11px] font-semibold text-textMuted mb-1 select-none flex items-center gap-1.5 ${item.isOutgoing ? 'justify-end w-full' : 'justify-start'}`}>
                     <span>{item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User')}</span>
                     {isPrivacyMode && item.isHidden && (
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-mono flex items-center gap-1 leading-none">
