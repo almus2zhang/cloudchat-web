@@ -39,12 +39,31 @@ export default function ChatArea({
   onSendMessage,
   onToggleSidebar,
   storageClient,
+  resolveAvatarUrl,
   isSyncing,
   activeUploads
 }) {
   const [inputText, setInputText] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
+  // Cache of resolved avatar blob URLs keyed by raw avatar value (filename or data: URL)
+  const [avatarBlobUrls, setAvatarBlobUrls] = useState({});
+
+  // Resolve all unique avatar values in current messages to displayable URLs
+  useEffect(() => {
+    if (!resolveAvatarUrl) return;
+    const avatarValues = new Set();
+    messages.forEach(item => {
+      if (item.senderAvatar) avatarValues.add(item.senderAvatar);
+    });
+    avatarValues.forEach(async (av) => {
+      if (avatarBlobUrls[av]) return; // already resolved
+      const resolved = await resolveAvatarUrl(av);
+      if (resolved) {
+        setAvatarBlobUrls(prev => ({ ...prev, [av]: resolved }));
+      }
+    });
+  }, [messages, resolveAvatarUrl]);
 
   // Search query state for persistent header search
   const [searchQuery, setSearchQuery] = useState('');
@@ -1182,14 +1201,14 @@ export default function ChatArea({
                     {item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User')}
                   </span>
                   {(() => {
-                    // Only use avatar URLs that are safe to load in an <img> without auth headers.
-                    // data: URLs (base64) and https://api.dicebear.com presets are safe.
-                    // WebDAV / S3 server paths require auth and cause browser login popups.
-                    const isSafe = (url) => url && (url.startsWith('data:') || url.startsWith('https://api.dicebear.com'));
                     const senderName = item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User');
                     const fallback = `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(senderName)}`;
+                    // Raw value may be a filename ("avatar_user.jpg"), a data: URL, or a preset https: URL
                     const rawAvatar = item.senderAvatar || (item.isOutgoing ? currentProfile?.avatar : null);
-                    const avatarSrc = isSafe(rawAvatar) ? rawAvatar : fallback;
+                    // Look up the resolved blob URL; for data:/https: URLs use directly
+                    const isSafe = (u) => u && (u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('https://'));
+                    const resolvedBlob = rawAvatar && avatarBlobUrls[rawAvatar];
+                    const avatarSrc = resolvedBlob || (isSafe(rawAvatar) ? rawAvatar : fallback);
                     return (
                       <img 
                         src={avatarSrc}

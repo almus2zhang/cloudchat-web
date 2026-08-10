@@ -11,6 +11,8 @@ import { initDB, cacheFile, getCachedFile } from './services/db';
 
 // Global media URL lookup cache
 const cachedMediaUrls = {};
+// Global avatar URL lookup cache (filename -> blob URL)
+const cachedAvatarUrls = {};
 
 export default function App() {
   const [profiles, setProfiles] = useState([]);
@@ -235,6 +237,31 @@ export default function App() {
       }
     } catch (e) {
       console.error('Failed to download media item:', msg.content, e);
+    }
+    return null;
+  };
+
+  // 2b. Resolve avatar filename -> blob URL via downloadFile (avoids WebDAV auth popups)
+  const resolveAvatarUrl = async (avatarFilename) => {
+    if (!avatarFilename) return null;
+    // If it's already a safe displayable URL (data: or https:), return as-is
+    if (avatarFilename.startsWith('data:') || avatarFilename.startsWith('https://') || avatarFilename.startsWith('http://')) {
+      return avatarFilename;
+    }
+    // Return cached blob URL if available
+    if (cachedAvatarUrls[avatarFilename]) return cachedAvatarUrls[avatarFilename];
+    // Download via storage client (handles auth headers internally)
+    const client = activeClientRef.current;
+    if (!client) return null;
+    try {
+      const blob = await client.downloadFile(avatarFilename);
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        cachedAvatarUrls[avatarFilename] = url;
+        return url;
+      }
+    } catch (e) {
+      console.warn('Failed to load avatar:', avatarFilename, e);
     }
     return null;
   };
@@ -1213,6 +1240,7 @@ export default function App() {
         onSendMessage={handleSendMessage}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         storageClient={activeClientRef.current}
+        resolveAvatarUrl={resolveAvatarUrl}
         isSyncing={isSyncing}
       />
 

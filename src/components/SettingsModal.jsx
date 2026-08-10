@@ -77,34 +77,61 @@ export default function SettingsModal({
   const handleCustomAvatarSelect = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    // Compress to a small square JPEG so the data URL is tiny enough to embed
-    // in every message's senderAvatar field without bloating the history JSON.
+    // Compress to 128x128 square JPEG for a good quality avatar
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
     img.onload = () => {
-      const MAX = 80; // 80x80 px is plenty for a chat avatar thumbnail
+      const MAX = 128;
       const canvas = document.createElement('canvas');
       canvas.width = MAX;
       canvas.height = MAX;
       const ctx = canvas.getContext('2d');
-      // Crop to square from centre
       const side = Math.min(img.width, img.height);
       const sx = (img.width - side) / 2;
       const sy = (img.height - side) / 2;
       ctx.drawImage(img, sx, sy, side, side, 0, 0, MAX, MAX);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.75); // ~3-8 KB
+      // Store as data URL temporarily; on save it will be uploaded to WebDAV
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
       handleFieldChange('avatar', dataUrl);
+      handleFieldChange('_avatarPendingUpload', true);
       URL.revokeObjectURL(objectUrl);
     };
     img.src = objectUrl;
   };
 
-  const handleSave = () => {
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  const handleSave = async () => {
     if (!editingProfile.name.trim()) return;
-    // Avatar is stored as data URL or preset https:// URL directly in profile (localStorage).
-    // Do NOT upload to WebDAV/S3 — image tags cannot pass auth headers and would
-    // trigger browser login popups for protected storage URLs.
-    onSaveProfile(editingProfile);
+
+    let profileToSave = { ...editingProfile };
+    delete profileToSave._avatarPendingUpload;
+
+    // If avatar is a data URL and a WebDAV client is available, upload it
+    if (editingProfile._avatarPendingUpload && editingProfile.avatar?.startsWith('data:') && storageClient) {
+      try {
+        setIsUploadingAvatar(true);
+        // Use display username as the unique key — multiple people sharing one WebDAV
+        // account are distinguished by their username field, not webDavUser (which is shared).
+        // Sanitize to strip characters invalid in filenames.
+        const userKey = (editingProfile.username || editingProfile.webDavUser || editingProfile.saveDir || editingProfile.id || 'user')
+          .replace(/[^a-zA-Z0-9_\-]/g, '_');
+        const avatarFileName = `avatar_${userKey}.jpg`;
+        const res = await fetch(editingProfile.avatar);
+        const blob = await res.blob();
+        await storageClient.uploadFile(blob, avatarFileName, 'image/jpeg');
+        // Store ONLY the filename, not a WebDAV URL.
+        // resolveAvatarUrl() will download it via the storage client (with auth) when needed.
+        profileToSave.avatar = avatarFileName;
+      } catch (err) {
+        console.warn('Avatar upload failed, keeping data URL:', err);
+        // Keep the data: URL as fallback — safe to display, just not shared
+      } finally {
+        setIsUploadingAvatar(false);
+      }
+    }
+
+    onSaveProfile(profileToSave);
   };
 
   const handleDelete = () => {
