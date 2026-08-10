@@ -93,8 +93,11 @@ export default function SettingsModal({
         setIsUploadingAvatar(true);
         const res = await fetch(editingProfile.avatar);
         const blob = await res.blob();
-        const serverAvatarUrl = await storageClient.uploadFile(blob, 'avatar.png', 'image/png');
-        editingProfile.avatar = serverAvatarUrl || storageClient.getUrl('avatar.png');
+        // Use user-specific filename to avoid conflicts between accounts
+        const userId = editingProfile.saveDir || editingProfile.id || 'user';
+        const avatarFileName = `avatar_${userId}.png`;
+        const serverAvatarUrl = await storageClient.uploadFile(blob, avatarFileName, 'image/png');
+        editingProfile.avatar = serverAvatarUrl || storageClient.getUrl(avatarFileName);
       } catch (err) {
         console.warn('Avatar upload to server warning:', err);
       } finally {
