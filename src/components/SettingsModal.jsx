@@ -21,10 +21,12 @@ export default function SettingsModal({
   onSaveProfile, 
   onDeleteProfile,
   onSwitchProfile,
-  storageClient
+  storageClient,
+  resolveAvatarUrl
 }) {
   const [editingProfile, setEditingProfile] = useState(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -35,6 +37,21 @@ export default function SettingsModal({
       handleInitNewProfile();
     }
   }, [isOpen, profiles, activeProfileId]);
+
+  useEffect(() => {
+    if (!editingProfile?.avatar) {
+      setPreviewUrl(null);
+      return;
+    }
+    const av = editingProfile.avatar;
+    if (av.startsWith('data:') || av.startsWith('https://')) {
+      setPreviewUrl(av);
+    } else if (resolveAvatarUrl) {
+      resolveAvatarUrl(av).then(url => {
+        if (url) setPreviewUrl(url);
+      });
+    }
+  }, [editingProfile?.avatar, resolveAvatarUrl]);
 
   if (!isOpen) return null;
 
@@ -78,9 +95,7 @@ export default function SettingsModal({
   const handleCustomAvatarSelect = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    // Compress custom avatar to 128x128 square JPEG (~4KB base64 string).
-    // This allows instant local rendering & seamless cloud sync inside chat_history.json
-    // without triggering any WebDAV HTTP basic auth login popups.
+    // Compress custom avatar to 128x128 square JPEG for upload
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
     img.onload = () => {
@@ -93,17 +108,41 @@ export default function SettingsModal({
       const sx = (img.width - side) / 2;
       const sy = (img.height - side) / 2;
       ctx.drawImage(img, sx, sy, side, side, 0, 0, MAX, MAX);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.8); // ~3-5 KB
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
       handleFieldChange('avatar', dataUrl);
+      handleFieldChange('_avatarPendingUpload', true);
       URL.revokeObjectURL(objectUrl);
     };
     img.src = objectUrl;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingProfile.name.trim()) return;
+
     let profileToSave = { ...editingProfile };
     delete profileToSave._avatarPendingUpload;
+
+    // If a new custom avatar was picked and storage client is connected, upload to WebDAV
+    if (editingProfile._avatarPendingUpload && editingProfile.avatar?.startsWith('data:') && storageClient) {
+      try {
+        setIsUploadingAvatar(true);
+        const userKey = (editingProfile.username || editingProfile.saveDir || editingProfile.id || 'user')
+          .replace(/[^a-zA-Z0-9_\-]/g, '_');
+        const avatarFileName = `avatar_${userKey}.jpg`;
+        const res = await fetch(editingProfile.avatar);
+        const blob = await res.blob();
+        
+        // Upload to WebDAV server inside user's directory
+        await storageClient.uploadFile(blob, avatarFileName, 'image/jpeg');
+        // Store ONLY the filename (e.g. "avatar_Ken.jpg"), resolved safely via downloadFile later
+        profileToSave.avatar = avatarFileName;
+      } catch (err) {
+        console.warn('Avatar upload to WebDAV warning:', err);
+      } finally {
+        setIsUploadingAvatar(false);
+      }
+    }
+
     onSaveProfile(profileToSave);
   };
 
@@ -421,9 +460,8 @@ export default function SettingsModal({
                   <div className="relative group shrink-0">
                     <img 
                       src={
-                        (editingProfile.avatar && (editingProfile.avatar.startsWith('data:') || editingProfile.avatar.startsWith('https://api.dicebear.com')))
-                          ? editingProfile.avatar 
-                          : `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(editingProfile.username || 'User')}`
+                        previewUrl || 
+                        `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(editingProfile.username || 'User')}`
                       } 
                       alt="Avatar Preview"
                       className="w-14 h-14 rounded-2xl object-cover border-2 border-accentColor/40 bg-bgPrimary shadow-md"

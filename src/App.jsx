@@ -1266,6 +1266,7 @@ export default function App() {
         onDeleteProfile={handleDeleteProfile}
         onSwitchProfile={(pId) => { setActiveProfileId(pId); localStorage.setItem('cloudchat_web_active_profile_id', pId); }}
         storageClient={activeClientRef.current}
+        resolveAvatarUrl={resolveAvatarUrl}
       />
 
       {/* Category Selection Modal */}
