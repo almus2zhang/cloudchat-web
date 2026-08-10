@@ -24,6 +24,7 @@ export default function SettingsModal({
   storageClient
 }) {
   const [editingProfile, setEditingProfile] = useState(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -77,7 +78,9 @@ export default function SettingsModal({
   const handleCustomAvatarSelect = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    // Compress to 128x128 square JPEG for a good quality avatar
+    // Compress custom avatar to 128x128 square JPEG (~4KB base64 string).
+    // This allows instant local rendering & seamless cloud sync inside chat_history.json
+    // without triggering any WebDAV HTTP basic auth login popups.
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
     img.onload = () => {
@@ -90,47 +93,17 @@ export default function SettingsModal({
       const sx = (img.width - side) / 2;
       const sy = (img.height - side) / 2;
       ctx.drawImage(img, sx, sy, side, side, 0, 0, MAX, MAX);
-      // Store as data URL temporarily; on save it will be uploaded to WebDAV
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8); // ~3-5 KB
       handleFieldChange('avatar', dataUrl);
-      handleFieldChange('_avatarPendingUpload', true);
       URL.revokeObjectURL(objectUrl);
     };
     img.src = objectUrl;
   };
 
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!editingProfile.name.trim()) return;
-
     let profileToSave = { ...editingProfile };
     delete profileToSave._avatarPendingUpload;
-
-    // If avatar is a data URL and a WebDAV client is available, upload it
-    if (editingProfile._avatarPendingUpload && editingProfile.avatar?.startsWith('data:') && storageClient) {
-      try {
-        setIsUploadingAvatar(true);
-        // Use display username as the unique key — multiple people sharing one WebDAV
-        // account are distinguished by their username field, not webDavUser (which is shared).
-        // Sanitize to strip characters invalid in filenames.
-        const userKey = (editingProfile.username || editingProfile.webDavUser || editingProfile.saveDir || editingProfile.id || 'user')
-          .replace(/[^a-zA-Z0-9_\-]/g, '_');
-        const avatarFileName = `avatar_${userKey}.jpg`;
-        const res = await fetch(editingProfile.avatar);
-        const blob = await res.blob();
-        await storageClient.uploadFile(blob, avatarFileName, 'image/jpeg');
-        // Store ONLY the filename, not a WebDAV URL.
-        // resolveAvatarUrl() will download it via the storage client (with auth) when needed.
-        profileToSave.avatar = avatarFileName;
-      } catch (err) {
-        console.warn('Avatar upload failed, keeping data URL:', err);
-        // Keep the data: URL as fallback — safe to display, just not shared
-      } finally {
-        setIsUploadingAvatar(false);
-      }
-    }
-
     onSaveProfile(profileToSave);
   };
 
@@ -447,7 +420,11 @@ export default function SettingsModal({
                 <div className="flex items-center gap-4 py-1">
                   <div className="relative group shrink-0">
                     <img 
-                      src={editingProfile.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(editingProfile.username || 'User')}`} 
+                      src={
+                        (editingProfile.avatar && (editingProfile.avatar.startsWith('data:') || editingProfile.avatar.startsWith('https://api.dicebear.com')))
+                          ? editingProfile.avatar 
+                          : `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(editingProfile.username || 'User')}`
+                      } 
                       alt="Avatar Preview"
                       className="w-14 h-14 rounded-2xl object-cover border-2 border-accentColor/40 bg-bgPrimary shadow-md"
                     />

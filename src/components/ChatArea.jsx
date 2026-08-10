@@ -1205,8 +1205,8 @@ export default function ChatArea({
                     const fallback = `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(senderName)}`;
                     // Raw value may be a filename ("avatar_user.jpg"), a data: URL, or a preset https: URL
                     const rawAvatar = item.senderAvatar || (item.isOutgoing ? currentProfile?.avatar : null);
-                    // Look up the resolved blob URL; for data:/https: URLs use directly
-                    const isSafe = (u) => u && (u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('https://'));
+                    // Look up the resolved blob URL; for data:/blob: URLs or Dicebear presets use directly
+                    const isSafe = (u) => u && (u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('https://api.dicebear.com'));
                     const resolvedBlob = rawAvatar && avatarBlobUrls[rawAvatar];
                     const avatarSrc = resolvedBlob || (isSafe(rawAvatar) ? rawAvatar : fallback);
                     return (
