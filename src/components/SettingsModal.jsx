@@ -77,11 +77,26 @@ export default function SettingsModal({
   const handleCustomAvatarSelect = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      handleFieldChange('avatar', evt.target.result);
+    // Compress to a small square JPEG so the data URL is tiny enough to embed
+    // in every message's senderAvatar field without bloating the history JSON.
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 80; // 80x80 px is plenty for a chat avatar thumbnail
+      const canvas = document.createElement('canvas');
+      canvas.width = MAX;
+      canvas.height = MAX;
+      const ctx = canvas.getContext('2d');
+      // Crop to square from centre
+      const side = Math.min(img.width, img.height);
+      const sx = (img.width - side) / 2;
+      const sy = (img.height - side) / 2;
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, MAX, MAX);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.75); // ~3-8 KB
+      handleFieldChange('avatar', dataUrl);
+      URL.revokeObjectURL(objectUrl);
     };
-    reader.readAsDataURL(file);
+    img.src = objectUrl;
   };
 
   const handleSave = () => {
