@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { generateDiaryHtml } from '../utils/diaryGenerator';
 
 export default function DiaryExportModal({
@@ -10,8 +10,9 @@ export default function DiaryExportModal({
   storageClient
 }) {
   const [templateId, setTemplateId] = useState('wechat');
-  const [title, setTitle] = useState(folderMsg ? (folderMsg.content || '文件夹日记') : '精选日记');
-  const [author, setAuthor] = useState(currentProfile ? currentProfile.username : 'CloudChat User');
+  const [title, setTitle] = useState('');
+  const [author, setAuthor] = useState('');
+  const [customSubDir, setCustomSubDir] = useState('');
   const [enablePassword, setEnablePassword] = useState(false);
   const [password, setPassword] = useState('');
   const [isExporting, setIsExporting] = useState(false);
@@ -20,12 +21,59 @@ export default function DiaryExportModal({
   const [resultUrl, setResultUrl] = useState(null);
   const [resultPath, setResultPath] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [existingDiaryInfo, setExistingDiaryInfo] = useState(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const defaultName = folderMsg ? (folderMsg.content || '文件夹日记') : '精选日记';
+    setTitle(defaultName);
+    setAuthor(currentProfile ? (currentProfile.username || 'CloudChat User') : 'CloudChat User');
+    const clean = defaultName.replace(/[\\/:*?"<>|]/g, '_');
+    setCustomSubDir(`diary/${clean}`);
+    setResultUrl(null);
+    setResultPath('');
+    setErrorMsg('');
+  }, [isOpen, folderMsg]);
+
+  // Check whether index.html exists at the PREPARED TARGET PATH
+  useEffect(() => {
+    if (!isOpen || !storageClient || !customSubDir.trim()) {
+      setExistingDiaryInfo(null);
+      return;
+    }
+    let isMounted = true;
+    const cleanDir = customSubDir.trim().replace(/^\/+|\/+$/g, '');
+    const indexPath = `${cleanDir}/index.html`;
+
+    const checkIndex = async () => {
+      try {
+        const size = await storageClient.getFileSize(indexPath);
+        if (isMounted) {
+          if (size > 0) {
+            let publicUrl = storageClient.getUrl(indexPath);
+            if (currentProfile && currentProfile.diaryBaseUrl && currentProfile.diaryBaseUrl.trim()) {
+              const base = currentProfile.diaryBaseUrl.trim().replace(/\/+$/, '');
+              publicUrl = `${base}/${indexPath}`;
+            }
+            setExistingDiaryInfo({ url: publicUrl, path: indexPath });
+          } else {
+            setExistingDiaryInfo(null);
+          }
+        }
+      } catch (e) {
+        if (isMounted) setExistingDiaryInfo(null);
+      }
+    };
+
+    checkIndex();
+    return () => { isMounted = false; };
+  }, [isOpen, customSubDir, storageClient, currentProfile]);
 
   if (!isOpen) return null;
 
-  const folderName = folderMsg ? (folderMsg.content || '文件夹') : '文件夹';
-  const cleanFolderName = folderName.replace(/[\\/:*?"<>|]/g, '_');
-  const targetSubPath = `diary/${cleanFolderName}/index.html`;
+  const folderName = folderMsg ? (folderMsg.content || '文件夹') : '多选条目';
+  const targetDirClean = (customSubDir || 'diary/export').trim().replace(/^\/+|\/+$/g, '');
+  const targetSubPath = `${targetDirClean}/index.html`;
 
   const templates = [
     {
@@ -77,10 +125,10 @@ export default function DiaryExportModal({
     setExportStatusText('正在编译聚合日记 HTML 页面...');
 
     try {
-      // 1. Ensure subdirectories exist for WebDAV if applicable
+      // 1. Ensure target directory exists on server for WebDAV if applicable
       if (typeof storageClient.ensureFolderPathExist === 'function') {
-        setExportStatusText(`在服务器创建保存目录: diary/${cleanFolderName}/...`);
-        await storageClient.ensureFolderPathExist(`diary/${cleanFolderName}`);
+        setExportStatusText(`在服务器创建保存目录: ${targetDirClean}/...`);
+        await storageClient.ensureFolderPathExist(targetDirClean);
       }
 
       setExportProgress(50);
@@ -88,7 +136,7 @@ export default function DiaryExportModal({
 
       // 2. Generate HTML code string
       const htmlContent = await generateDiaryHtml({
-        folderName: title.trim() || cleanFolderName,
+        folderName: title.trim() || '精选日记',
         author: author.trim() || 'CloudChat User',
         avatar: currentProfile?.avatar || '',
         templateId,
@@ -220,6 +268,38 @@ export default function DiaryExportModal({
                   />
                 </div>
               </div>
+
+              {/* Custom Target Directory Field */}
+              <div>
+                <label className="block text-xs font-semibold text-textSecondary mb-1.5 flex items-center justify-between">
+                  <span>自定义服务器保存目录 (Custom Save Directory)</span>
+                  <span className="text-[10px] text-cyan-400 font-mono">生成目标: {targetSubPath}</span>
+                </label>
+                <input
+                  type="text"
+                  value={customSubDir}
+                  onChange={(e) => setCustomSubDir(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-bgPrimary border border-borderColor rounded-xl text-cyan-300 font-mono focus:outline-none focus:border-cyan-500"
+                  placeholder="例如: diary/2026夏日随笔 或 diary/work_log"
+                />
+              </div>
+
+              {/* Existing Index Banner (Only for the CURRENT custom directory) */}
+              {existingDiaryInfo && (
+                <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-xs flex items-center justify-between animate-fade-in">
+                  <span className="text-cyan-300 flex items-center gap-1.5 font-medium">
+                    <i className="fa-solid fa-circle-info text-cyan-400"></i> 该目录下已存在日记网页 (index.html)，再次生成将更新覆盖。
+                  </span>
+                  <a 
+                    href={existingDiaryInfo.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-cyan-400 hover:underline font-mono text-[11px] shrink-0 ml-2"
+                  >
+                    查看已有网页 <i className="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                  </a>
+                </div>
+              )}
 
               {/* Password Protection Option */}
               <div className="p-3 bg-black/20 rounded-xl border border-borderColor/60 space-y-2">

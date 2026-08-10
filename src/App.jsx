@@ -31,11 +31,19 @@ export default function App() {
   const [confirmConfig, setConfirmConfig] = useState({ title: '', message: '', onOk: () => {} });
   const [diaryExportOpen, setDiaryExportOpen] = useState(false);
   const [diaryExportFolder, setDiaryExportFolder] = useState(null);
+  const [diaryExportSelectedMsgs, setDiaryExportSelectedMsgs] = useState(null);
 
-  const handleOpenDiaryExport = (folderMsg) => {
-    if (!folderMsg) return;
-    setDiaryExportFolder(folderMsg);
-    setDiaryExportOpen(true);
+  const handleOpenDiaryExport = (folderMsgOrMsgs) => {
+    if (!folderMsgOrMsgs) return;
+    if (Array.isArray(folderMsgOrMsgs)) {
+      setDiaryExportFolder(null);
+      setDiaryExportSelectedMsgs(folderMsgOrMsgs);
+      setDiaryExportOpen(true);
+    } else {
+      setDiaryExportFolder(folderMsgOrMsgs);
+      setDiaryExportSelectedMsgs(null);
+      setDiaryExportOpen(true);
+    }
   };
   
   // Media Viewer States
@@ -1317,7 +1325,10 @@ export default function App() {
         isOpen={diaryExportOpen}
         onClose={() => setDiaryExportOpen(false)}
         folderMsg={diaryExportFolder}
-        folderMessages={diaryExportFolder ? messages.filter(m => !m.isDeleted && m.folderId === diaryExportFolder.id) : []}
+        folderMessages={
+          diaryExportSelectedMsgs ? diaryExportSelectedMsgs :
+          (diaryExportFolder ? messages.filter(m => !m.isDeleted && m.folderId === diaryExportFolder.id) : [])
+        }
         currentProfile={currentProfile}
         storageClient={activeClientRef.current}
       />

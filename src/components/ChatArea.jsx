@@ -1422,6 +1422,19 @@ export default function ChatArea({
             </button>
           )}
 
+          {/* Generate Diary from Selected Messages */}
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              const selectedMsgs = messages.filter(m => selectedMessageIds.has(m.id));
+              if (onOpenDiaryExport) onOpenDiaryExport(selectedMsgs);
+            }}
+            className="px-2.5 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/10 border border-emerald-500/30 rounded transition-all flex items-center gap-1.5 shrink-0"
+            title="将选中的消息直接生成精美 HTML 静态日记网页"
+          >
+            <i className="fa-solid fa-book-bookmark text-emerald-400"></i> 生成日记
+          </button>
+
           {activeCategory !== 'all' && (
             <button 
               onClick={(e) => { e.stopPropagation(); onRemoveCategorySelected(); }}
