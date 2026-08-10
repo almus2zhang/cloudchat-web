@@ -9,6 +9,7 @@ export default function DiaryExportModal({
   currentProfile,
   storageClient
 }) {
+  const [exportMode, setExportMode] = useState('relative'); // 'relative' or 'single'
   const [templateId, setTemplateId] = useState('wechat');
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
@@ -143,7 +144,8 @@ export default function DiaryExportModal({
         password: enablePassword ? password : '',
         messages: folderMessages,
         storageClient,
-        targetDirClean
+        targetDirClean,
+        exportMode
       });
 
       setExportProgress(75);
@@ -267,6 +269,46 @@ export default function DiaryExportModal({
                     className="w-full px-3 py-2 text-xs bg-bgPrimary border border-borderColor rounded-xl text-textPrimary focus:outline-none focus:border-cyan-500"
                     placeholder="输入作者名称"
                   />
+                </div>
+              </div>
+
+              {/* Export Mode Selection */}
+              <div>
+                <label className="block text-xs font-semibold text-textSecondary mb-1.5">导出部署模式</label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div
+                    onClick={() => setExportMode('relative')}
+                    className={`p-2.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      exportMode === 'relative'
+                        ? 'border-cyan-400 bg-cyan-500/10 text-cyan-300 ring-1 ring-cyan-400/30'
+                        : 'border-borderColor/60 bg-black/20 text-textMuted hover:border-textMuted'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-textPrimary">⚡ 云端极速部署模式</span>
+                      {exportMode === 'relative' && <i className="fa-solid fa-circle-check text-cyan-400 text-xs"></i>}
+                    </div>
+                    <p className="text-[10px] text-textMuted leading-tight">
+                      自动 WebP 图片压缩 + ServiceWorker 离线磁盘缓存。首屏秒开，再次访问 0ms 延迟。
+                    </p>
+                  </div>
+
+                  <div
+                    onClick={() => setExportMode('single')}
+                    className={`p-2.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      exportMode === 'single'
+                        ? 'border-cyan-400 bg-cyan-500/10 text-cyan-300 ring-1 ring-cyan-400/30'
+                        : 'border-borderColor/60 bg-black/20 text-textMuted hover:border-textMuted'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-textPrimary">📦 单文件 Base64 全包</span>
+                      {exportMode === 'single' && <i className="fa-solid fa-circle-check text-cyan-400 text-xs"></i>}
+                    </div>
+                    <p className="text-[10px] text-textMuted leading-tight">
+                      将所有图片与头像转为 Base64 嵌入单个 HTML。适合离线保存到本地或直接分享文件。
+                    </p>
+                  </div>
                 </div>
               </div>
 

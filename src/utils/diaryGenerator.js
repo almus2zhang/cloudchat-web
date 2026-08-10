@@ -1,6 +1,55 @@
 import { getCachedFile, cacheFile } from '../services/db';
 
-// Helper to copy or upload asset file into target diary directory assets folder on server
+async function blobToDataUrl(blob) {
+  if (!blob) return null;
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Compress image Blob for high-performance Web export (max 1200px side, JPEG 82% quality)
+async function compressImageBlob(blob, maxSide = 1200, quality = 0.82) {
+  if (!blob || !blob.type || !blob.type.startsWith('image/')) return blob;
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const { width, height } = img;
+      let w = width;
+      let h = height;
+      if (w > maxSide || h > maxSide) {
+        if (w > h) {
+          h = Math.round((h * maxSide) / w);
+          w = maxSide;
+        } else {
+          w = Math.round((w * maxSide) / h);
+          h = maxSide;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(
+        (resBlob) => resolve(resBlob || blob),
+        'image/jpeg',
+        quality
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(blob);
+    };
+    img.src = url;
+  });
+}
+
+// Helper to copy or upload compressed asset file into target diary directory assets folder on server
 async function syncAssetToDiaryFolder(sourceFileName, assetName, targetAssetsDir, storageClient) {
   if (!sourceFileName || !storageClient) return null;
   if (sourceFileName.startsWith('content://') || sourceFileName.startsWith('file://')) {
@@ -19,24 +68,20 @@ async function syncAssetToDiaryFolder(sourceFileName, assetName, targetAssetsDir
     }
   }
 
-  // 2. Fallback: retrieve blob from IndexedDB cache or download, then upload to destSubPath
-  let blob = null;
-  if (sourceFileName.startsWith('avatar_')) {
-    blob = await getCachedFile(sourceFileName);
-  } else {
-    blob = await getCachedFile(sourceFileName);
-  }
-
+  // 2. Fallback: retrieve blob from IndexedDB cache or download, compress and upload to destSubPath
+  let blob = await getCachedFile(sourceFileName);
   if (!blob && typeof storageClient.downloadFile === 'function') {
     try {
       blob = await storageClient.downloadFile(sourceFileName);
+      if (blob) cacheFile(sourceFileName, blob);
     } catch (e) {}
   }
 
   if (blob && typeof storageClient.uploadFile === 'function') {
     try {
-      const contentType = blob.type || (assetName.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
-      await storageClient.uploadFile(blob, destSubPath, contentType);
+      const compressed = await compressImageBlob(blob);
+      const contentType = compressed.type || (assetName.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
+      await storageClient.uploadFile(compressed, destSubPath, contentType);
       return relativeHtmlUrl;
     } catch (e) {}
   }
@@ -44,7 +89,78 @@ async function syncAssetToDiaryFolder(sourceFileName, assetName, targetAssetsDir
   return null;
 }
 
-export async function generateDiaryHtml({ folderName, author, avatar, templateId = 'wechat', password = '', messages = [], storageClient, targetDirClean = 'diary/export' }) {
+// Helper to get Base64 Data URL for Single-File Export Mode
+async function getBase64MediaUrl(msg, storageClient) {
+  if (!msg) return '';
+  if (msg.url && msg.url.startsWith('data:')) return msg.url;
+
+  let blob = await getCachedFile(msg.id) || await getCachedFile(msg.content);
+  if (!blob && msg.url && msg.url.startsWith('blob:')) {
+    try {
+      const res = await fetch(msg.url);
+      blob = await res.blob();
+    } catch (e) {}
+  }
+  if (!blob && storageClient && msg.content) {
+    try {
+      blob = await storageClient.downloadFile(msg.content);
+    } catch (e) {}
+  }
+  if (blob) {
+    const compressed = await compressImageBlob(blob, 1000, 0.78);
+    const dataUrl = await blobToDataUrl(compressed);
+    if (dataUrl) return dataUrl;
+  }
+  return msg.remoteUrl || msg.url || '';
+}
+
+async function getBase64AvatarUrl(avatar, authorName, storageClient) {
+  const fallback = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(authorName || 'User')}`;
+  if (!avatar || !avatar.trim()) return fallback;
+  if (avatar.startsWith('data:') || avatar.startsWith('https://') || avatar.startsWith('http://')) {
+    return avatar;
+  }
+  let blob = await getCachedFile(`avatar_${avatar}`);
+  if (!blob && storageClient) {
+    try {
+      blob = await storageClient.downloadFile(avatar);
+    } catch (e) {}
+  }
+  if (blob) {
+    const compressed = await compressImageBlob(blob, 200, 0.85);
+    const dataUrl = await blobToDataUrl(compressed);
+    if (dataUrl) return dataUrl;
+  }
+  return fallback;
+}
+
+const generateServiceWorkerJs = () => `
+const CACHE_NAME = 'cloudchat-diary-cache-v1';
+
+self.addEventListener('install', (e) => self.skipWaiting());
+self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+
+self.addEventListener('fetch', (event) => {
+  const url = event.request.url;
+  if (url.includes('/assets/') || url.endsWith('.jpg') || url.endsWith('.jpeg') || url.endsWith('.png') || url.endsWith('.webp')) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const cachedResponse = await cache.match(event.request);
+        if (cachedResponse) return cachedResponse;
+        try {
+          const response = await fetch(event.request);
+          if (response && response.ok) cache.put(event.request, response.clone());
+          return response;
+        } catch (err) {
+          return cachedResponse || Response.error();
+        }
+      })
+    );
+  }
+});
+`;
+
+export async function generateDiaryHtml({ folderName, author, avatar, templateId = 'wechat', password = '', messages = [], storageClient, targetDirClean = 'diary/export', exportMode = 'relative' }) {
   const isWeChat = templateId === 'wechat';
   const sortedMsgs = [...messages].sort((a, b) => isWeChat ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
 
@@ -52,23 +168,29 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
   const authorStr = author || 'CloudChat User';
   const targetAssetsDir = `${targetDirClean}/assets`;
 
-  // 1. Ensure target assets directory exists on WebDAV / server
-  if (storageClient && typeof storageClient.ensureFolderPathExist === 'function') {
+  const isSingleFile = exportMode === 'single';
+
+  // 1. If relative mode, upload Service Worker for permanent local disk caching
+  if (!isSingleFile && storageClient && typeof storageClient.uploadFile === 'function') {
     try {
-      await storageClient.ensureFolderPathExist(targetAssetsDir);
+      if (typeof storageClient.ensureFolderPathExist === 'function') {
+        await storageClient.ensureFolderPathExist(targetAssetsDir);
+      }
+      const swBlob = new Blob([generateServiceWorkerJs()], { type: 'application/javascript; charset=utf-8' });
+      await storageClient.uploadFile(swBlob, `${targetDirClean}/sw.js`, 'application/javascript; charset=utf-8');
     } catch (e) {}
   }
 
-  // 2. Resolve & copy Author Avatar to target assets directory
+  // 2. Resolve & copy Author Avatar
   let authorAvatarStr = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(authorStr)}`;
-  if (avatar && avatar.trim()) {
+  if (isSingleFile) {
+    authorAvatarStr = await getBase64AvatarUrl(avatar, authorStr, storageClient);
+  } else if (avatar && avatar.trim()) {
     if (avatar.startsWith('data:') || avatar.startsWith('https://') || avatar.startsWith('http://')) {
       authorAvatarStr = avatar;
     } else {
       const syncedAvatarUrl = await syncAssetToDiaryFolder(avatar, 'avatar.jpg', targetAssetsDir, storageClient);
-      if (syncedAvatarUrl) {
-        authorAvatarStr = syncedAvatarUrl;
-      }
+      if (syncedAvatarUrl) authorAvatarStr = syncedAvatarUrl;
     }
   }
 
@@ -78,21 +200,25 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
     passwordHash = await computeSha256Hex(password.trim());
   }
 
-  // 4. Copy & Sync all message media (photos/videos/audio) to target assets folder on server
+  // 4. Sync / Resolve all message media
   const mediaUrlMap = {};
   for (const msg of sortedMsgs) {
     if (msg.type === 'IMAGE' || msg.type === 'VIDEO' || msg.type === 'AUDIO') {
-      const sourceName = msg.content || `${msg.id}.jpg`;
-      const cleanFileName = sourceName.split('/').pop().replace(/[\\/:*?"<>|]/g, '_');
-      const relativeUrl = await syncAssetToDiaryFolder(sourceName, cleanFileName, targetAssetsDir, storageClient);
-      if (relativeUrl) {
-        mediaUrlMap[msg.id] = relativeUrl;
-      } else if (msg.url && msg.url.startsWith('data:')) {
-        mediaUrlMap[msg.id] = msg.url;
-      } else if (storageClient && msg.content) {
-        mediaUrlMap[msg.id] = storageClient.getUrl(msg.content);
+      if (isSingleFile) {
+        mediaUrlMap[msg.id] = await getBase64MediaUrl(msg, storageClient);
       } else {
-        mediaUrlMap[msg.id] = msg.remoteUrl || msg.content || '';
+        const sourceName = msg.content || `${msg.id}.jpg`;
+        const cleanFileName = sourceName.split('/').pop().replace(/[\\/:*?"<>|]/g, '_');
+        const relativeUrl = await syncAssetToDiaryFolder(sourceName, cleanFileName, targetAssetsDir, storageClient);
+        if (relativeUrl) {
+          mediaUrlMap[msg.id] = relativeUrl;
+        } else if (msg.url && msg.url.startsWith('data:')) {
+          mediaUrlMap[msg.id] = msg.url;
+        } else if (storageClient && msg.content) {
+          mediaUrlMap[msg.id] = storageClient.getUrl(msg.content);
+        } else {
+          mediaUrlMap[msg.id] = msg.remoteUrl || msg.content || '';
+        }
       }
     }
   }
@@ -338,6 +464,13 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(titleStr)} - 个人日记专栏</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    if ('serviceWorker' in navigator && !location.protocol.startsWith('file')) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('./sw.js').catch(function(){});
+      });
+    }
+  </script>
   <style>
     ${cssStyles}
   </style>
