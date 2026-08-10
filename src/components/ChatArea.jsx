@@ -169,10 +169,10 @@ export default function ChatArea({
     };
   }, [contextMenu]);
 
-  // Reset pagination count when category changes
+  // Reset pagination count when category, folder, search, or privacy filter changes
   useEffect(() => {
     setVisibleCount(100);
-  }, [activeCategory]);
+  }, [activeCategory, currentFolderId, searchQuery, viewHiddenOnly]);
 
   // Adjust pagination count and Auto-scroll when new messages arrive
   useEffect(() => {
@@ -213,14 +213,42 @@ export default function ChatArea({
     }
   }, [visibleCount]);
 
+  // Memoized filtered messages
+  const normalizeCategory = (cat) => cat === '工作' ? 'work' : (cat === '日记' ? 'diary' : (cat === '传输' ? 'transfer' : (cat === '隐私' ? 'privacy' : cat)));
+
+  const filteredMessages = React.useMemo(() => {
+    return messages.filter(msg => {
+      // 0. Folder filter
+      if (currentFolderId) {
+        if (msg.folderId !== currentFolderId) return false;
+      } else {
+        if (msg.folderId) return false;
+      }
+
+      // 1. Privacy filter
+      if (!isPrivacyMode && msg.isHidden) {
+        return false;
+      }
+      if (isPrivacyMode && viewHiddenOnly && !msg.isHidden) {
+        return false;
+      }
+      // 2. Search query filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const matchContent = msg.content && msg.content.toLowerCase().includes(q);
+        const matchCaption = msg.caption && msg.caption.toLowerCase().includes(q);
+        if (!matchContent && !matchCaption) return false;
+      }
+      // 3. Category filter
+      if (activeCategory === 'all') return true;
+      return Array.isArray(msg.categories) && msg.categories.map(normalizeCategory).includes(normalizeCategory(activeCategory));
+    });
+  }, [messages, currentFolderId, isPrivacyMode, viewHiddenOnly, searchQuery, activeCategory]);
+
   // Scroll event listener on chat container
   const handleScroll = (e) => {
     const el = e.currentTarget;
-    const normalize = (cat) => cat === '工作' ? 'work' : (cat === '日记' ? 'diary' : (cat === '传输' ? 'transfer' : (cat === '隐私' ? 'privacy' : cat)));
-    const totalFiltered = messages.filter(msg => {
-      return activeCategory === 'all' || 
-        (msg.categories && msg.categories.map(normalize).includes(normalize(activeCategory)));
-    }).length;
+    const totalFiltered = filteredMessages.length;
 
     // Trigger load more when scrolling near top (< 15px)
     if (el.scrollTop < 15 && visibleCount < totalFiltered) {
@@ -508,39 +536,10 @@ export default function ChatArea({
   };
 
   // --- Message grouping by explicit groupId & Privacy filtering ---
-  const getGroupedMessages = () => {
-    const normalizeCategory = (cat) => cat === '工作' ? 'work' : (cat === '日记' ? 'diary' : (cat === '传输' ? 'transfer' : (cat === '隐私' ? 'privacy' : cat)));
-    
-    const filtered = messages.filter(msg => {
-      // 0. Folder filter
-      if (currentFolderId) {
-        if (msg.folderId !== currentFolderId) return false;
-      } else {
-        if (msg.folderId) return false;
-      }
-
-      // 1. Privacy filter
-      if (!isPrivacyMode && msg.isHidden) {
-        return false; // Hide hidden messages when privacy mode is inactive
-      }
-      if (isPrivacyMode && viewHiddenOnly && !msg.isHidden) {
-        return false; // View hidden items only mode
-      }
-      // 2. Search query filter (matches content or note/caption)
-      if (searchQuery.trim()) {
-        const q = searchQuery.trim().toLowerCase();
-        const matchContent = msg.content && msg.content.toLowerCase().includes(q);
-        const matchCaption = msg.caption && msg.caption.toLowerCase().includes(q);
-        if (!matchContent && !matchCaption) return false;
-      }
-      // 3. Category filter
-      if (activeCategory === 'all') return true;
-      return Array.isArray(msg.categories) && msg.categories.map(normalizeCategory).includes(normalizeCategory(activeCategory));
-    });
-
+  const grouped = React.useMemo(() => {
     // Slice only the latest visibleCount messages to optimize DOM node performance
-    const totalCount = filtered.length;
-    const sliced = filtered.slice(Math.max(0, totalCount - visibleCount));
+    const totalCount = filteredMessages.length;
+    const sliced = filteredMessages.slice(Math.max(0, totalCount - visibleCount));
 
     const groups = [];
     const groupMap = {};
@@ -570,7 +569,7 @@ export default function ChatArea({
     });
 
     return groups;
-  };
+  }, [filteredMessages, visibleCount]);
 
   const formatSize = (bytes) => {
     if (bytes === 0) return '0 B';
@@ -583,8 +582,6 @@ export default function ChatArea({
   const formatTime = (ts) => {
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
-
-  const grouped = getGroupedMessages();
 
   const handleOpenMediaViewer = (msgId) => {
     const mediaList = [];
