@@ -1203,9 +1203,11 @@ export default function ChatArea({
                   {(() => {
                     const senderName = item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User');
                     const fallback = `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(senderName)}`;
-                    // Only use currentProfile's avatar for outgoing/own messages; never override other senders' avatars
-                    const isOwn = item.isOutgoing || item.sender === currentProfile?.username || item.senderName === currentProfile?.username;
-                    const rawAvatar = item.senderAvatar || (isOwn ? currentProfile?.avatar : null);
+                    // Only fallback to currentProfile.avatar if the message belongs to current profile user
+                    const isCurrentProfileUser = item.isOutgoing || 
+                      (currentProfile?.username && (item.sender === currentProfile.username || item.senderName === currentProfile.username));
+                    const rawAvatar = item.senderAvatar || (isCurrentProfileUser ? currentProfile?.avatar : null);
+                    // Look up the resolved blob URL; for data:/blob: URLs or Dicebear presets use directly
                     const isSafe = (u) => u && (u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('https://api.dicebear.com'));
                     const resolvedBlob = rawAvatar && avatarBlobUrls[rawAvatar];
                     const avatarSrc = resolvedBlob || (isSafe(rawAvatar) ? rawAvatar : fallback);

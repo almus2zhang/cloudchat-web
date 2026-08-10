@@ -62,9 +62,6 @@ export default function App() {
   const currentProfile = profiles.find(p => p.id === activeProfileId) || null;
   currentProfileRef.current = currentProfile;
 
-  const messagesRef = useRef(messages);
-  messagesRef.current = messages;
-
   // 1. Initial Load
   useEffect(() => {
     const initApp = async () => {
@@ -359,98 +356,113 @@ export default function App() {
         await client.ensureDirectoriesExist();
       }
 
-      let downloadedMessages = [];
-      let indexJson = null;
-      let isLegacySingleFile = false;
+      const cloudIndexTime = await client.getLastModified('chat_index.json');
+      let indexData = {};
+      let needsMigration = false;
 
-      // 1. Try downloading chat_index.json (GET)
-      try {
-        const indexBlob = await client.downloadFile('chat_index.json');
-        indexJson = await indexBlob.text();
-      } catch (e) {
-        // chat_index.json not found on cloud
+      if (cloudIndexTime === 0) {
+        if (!legacyHistoryMissingRef.current) {
+          const oldTime = await client.getLastModified('chat_history.json');
+          if (oldTime > 0) {
+            needsMigration = true;
+          } else {
+            legacyHistoryMissingRef.current = true;
+          }
+        }
+        
+        if (!needsMigration) {
+          setStatusText('Connected (No history file)');
+          setStatusDotClass('bg-green-500');
+          setIsSyncing(false);
+          return;
+        }
       }
 
-      // 2. Migration: If chat_index.json missing, check legacy chat_history.json
-      if (!indexJson) {
-        try {
-          const oldBlob = await client.downloadFile('chat_history.json');
-          const oldText = await oldBlob.text();
-          const rawCloudMessages = JSON.parse(oldText);
-          const { sanitized } = sanitizeMessages(rawCloudMessages);
-          if (sanitized.length > 0) {
+      if (force || cloudIndexTime > lastKnownCloudIndexTimeRef.current || needsMigration) {
+        let downloadedMessages = [];
+        let anyShardChanged = false;
+        let repairedTotal = 0;
+
+        if (needsMigration) {
+            const blob = await client.downloadFile('chat_history.json');
+            const text = await blob.text();
+            const rawCloudMessages = JSON.parse(text);
+            const { sanitized, repairedCount } = sanitizeMessages(rawCloudMessages);
             downloadedMessages = sanitized;
-            isLegacySingleFile = true;
-          }
-        } catch (e) {
-          // legacy file also missing
-        }
-      } else {
-        // 3. chat_index.json exists: parse monthly shard list
-        let shardList = [];
-        try {
-          const parsedData = JSON.parse(indexJson);
-          shardList = Array.isArray(parsedData) ? parsedData : Object.keys(parsedData);
-        } catch(e) {}
+            repairedTotal = repairedCount;
+            anyShardChanged = true;
+        } else {
+            const indexBlob = await client.downloadFile('chat_index.json');
+            const indexText = await indexBlob.text();
+            let parsedData = JSON.parse(indexText);
+            const isArrayFormat = Array.isArray(parsedData);
+            const shardList = isArrayFormat ? parsedData : Object.keys(parsedData);
 
-        for (const shardName of shardList) {
-          try {
-            const shardBlob = await client.downloadFile(shardName);
-            const shardText = await shardBlob.text();
-            const rawMsgs = JSON.parse(shardText);
-            const { sanitized } = sanitizeMessages(rawMsgs);
-            downloadedMessages = [...downloadedMessages, ...sanitized];
-          } catch (e) {
-            console.error("Failed to fetch shard", shardName, e);
-          }
-        }
-      }
+            for (const shardName of shardList) {
+                let timestamp = 0;
+                if (!isArrayFormat && parsedData[shardName]) {
+                    timestamp = parsedData[shardName];
+                } else {
+                    timestamp = await client.getLastModified(shardName);
+                }
 
-      // 4. Merge downloaded messages into local state & DB
-      if (downloadedMessages.length > 0 || isLegacySingleFile) {
-        setMessages(prev => {
-          let mergedMap = new Map();
-          prev.forEach(m => mergedMap.set(m.id, m));
-
-          downloadedMessages.forEach(m => {
-            const existing = mergedMap.get(m.id);
-            if (existing) {
-              if ((m.lastModified || 0) >= (existing.lastModified || 0)) {
-                mergedMap.set(m.id, m);
-              }
-            } else {
-              mergedMap.set(m.id, m);
+                if (timestamp > (shardTimestampsRef.current[shardName] || 0)) {
+                    try {
+                        const shardBlob = await client.downloadFile(shardName);
+                        const shardText = await shardBlob.text();
+                        const rawMsgs = JSON.parse(shardText);
+                        const { sanitized, repairedCount } = sanitizeMessages(rawMsgs);
+                        downloadedMessages = [...downloadedMessages, ...sanitized];
+                        shardTimestampsRef.current[shardName] = timestamp;
+                        anyShardChanged = true;
+                        repairedTotal += repairedCount;
+                    } catch (e) {
+                        console.error("Failed to fetch shard", shardName, e);
+                    }
+                }
             }
+        }
+
+        if (anyShardChanged) {
+          lastKnownCloudIndexTimeRef.current = cloudIndexTime;
+
+          setMessages(prev => {
+            let mergedMap = new Map();
+            prev.forEach(m => mergedMap.set(m.id, m));
+
+            downloadedMessages.forEach(m => {
+                const existing = mergedMap.get(m.id);
+                if (existing) {
+                    if ((m.lastModified || 0) >= (existing.lastModified || 0)) {
+                        mergedMap.set(m.id, m);
+                    }
+                } else {
+                    mergedMap.set(m.id, m);
+                }
+            });
+
+            const merged = Array.from(mergedMap.values());
+            merged.sort((a, b) => a.timestamp - b.timestamp);
+
+            cacheFile(`history_array_${currentProfileRef.current.id}`, merged);
+            resolveLocalMediaUrls(merged);
+            
+            if (needsMigration || repairedTotal > 0) {
+              pushHistoryToCloud(merged);
+            }
+
+            return merged;
           });
 
-          const merged = Array.from(mergedMap.values());
-          merged.sort((a, b) => a.timestamp - b.timestamp);
-
-          cacheFile(`history_array_${currentProfileRef.current.id}`, merged);
-          resolveLocalMediaUrls(merged);
-
-          if (isLegacySingleFile) {
-            // Push shards to cloud & clean up legacy single file
-            pushHistoryToCloud(merged);
-            try { client.recycleFile('chat_history.json'); } catch(e) {}
-          }
-
-          return merged;
-        });
-
-        setStatusText('Connected (Synced)');
-        setStatusDotClass('bg-green-500');
-        setTimeout(() => scrollToBottom(), 150);
-
-      } else {
-        // 5. No cloud messages found
-        if (messagesRef.current && messagesRef.current.length > 0) {
-          // Push local messages to cloud to create chat_index.json and shards
-          await pushHistoryToCloud(messagesRef.current);
-          setStatusText('Connected (Synced)');
+          setStatusText('Synchronized');
+          setStatusDotClass('bg-green-500');
+          setTimeout(() => scrollToBottom(), 150);
         } else {
-          setStatusText('Connected (No history file)');
+          setStatusText('Synchronized');
+          setStatusDotClass('bg-green-500');
         }
+      } else {
+        setStatusText('Synchronized');
         setStatusDotClass('bg-green-500');
       }
     } catch (e) {
@@ -1129,16 +1141,15 @@ export default function App() {
     setActiveProfileId(profile.id);
     localStorage.setItem('cloudchat_web_active_profile_id', profile.id);
 
-    // Update avatar only for messages belonging to this profile's username (or outgoing)
-    if (profile.avatar && messages.length > 0) {
-      const updatedMsgs = messages.map(m => {
-        if (m.isOutgoing || m.sender === profile.username || m.senderName === profile.username) {
+    // Update avatar ONLY for messages that belong to this profile's nickname
+    if (profile.username && profile.avatar) {
+      setMessages(prev => prev.map(m => {
+        const isMine = m.isOutgoing || m.sender === profile.username || m.senderName === profile.username;
+        if (isMine) {
           return { ...m, senderAvatar: profile.avatar };
         }
         return m;
-      });
-      setMessages(updatedMsgs);
-      pushHistoryToCloud(updatedMsgs);
+      }));
     }
 
     setSettingsOpen(false);
