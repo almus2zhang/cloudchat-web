@@ -397,6 +397,25 @@ class WebDavStorageClient {
         }
     }
 
+    async copyFile(sourceFileName, destSubPath) {
+        const sourceUrl = this.getUrl(sourceFileName);
+        const destUrl = this.getUrl(destSubPath);
+        try {
+            const response = await fetch(sourceUrl, {
+                method: 'COPY',
+                headers: {
+                    'Authorization': this.getAuthHeader(),
+                    'Destination': destUrl,
+                    'Overwrite': 'T'
+                }
+            });
+            if (response.ok) return true;
+        } catch (e) {
+            console.warn('WebDAV COPY failed:', e);
+        }
+        return false;
+    }
+
     async getFileSize(fileName) {
         const url = this.getUrl(fileName);
         try {
@@ -483,6 +502,26 @@ class S3StorageClient {
             xhr.onerror = () => reject(new Error('Network error during S3 upload'));
             xhr.send(file);
         });
+    }
+
+    async copyFile(sourceFileName, destSubPath) {
+        const sourceKey = this.getKey(sourceFileName);
+        const destKey = this.getKey(destSubPath);
+        const bucket = this.config.bucketName || '';
+        const url = this.getUrl(destSubPath);
+
+        const headers = {
+            'x-amz-copy-source': `/${bucket}/${sourceKey}`
+        };
+        signS3Request('PUT', url, this.config, headers);
+
+        try {
+            const response = await fetch(url, { method: 'PUT', headers });
+            if (response.ok) return true;
+        } catch (e) {
+            console.warn('S3 COPY failed:', e);
+        }
+        return false;
     }
 
     async uploadText(content, fileName) {

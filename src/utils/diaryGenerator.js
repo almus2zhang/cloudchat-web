@@ -1,126 +1,100 @@
 import { getCachedFile, cacheFile } from '../services/db';
 
-async function blobToDataUrl(blob) {
-  if (!blob) return null;
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(blob);
-  });
-}
+// Helper to copy or upload asset file into target diary directory assets folder on server
+async function syncAssetToDiaryFolder(sourceFileName, assetName, targetAssetsDir, storageClient) {
+  if (!sourceFileName || !storageClient) return null;
+  const destSubPath = `${targetAssetsDir}/${assetName}`;
+  const relativeHtmlUrl = `assets/${assetName}`;
 
-// Convert image Blob or URL into a clean Base64 JPEG data URL for embedding in HTML
-async function getBase64MediaUrl(msg, storageClient) {
-  if (!msg) return '';
-
-  // 1. If msg.url is already a data: URL, return it
-  if (msg.url && msg.url.startsWith('data:')) {
-    return msg.url;
-  }
-
-  let blob = null;
-
-  // 2. Check IndexedDB cache for msg.id or filename
-  if (msg.id) {
-    blob = await getCachedFile(msg.id);
-  }
-  if (!blob && msg.content) {
-    blob = await getCachedFile(msg.content);
-  }
-
-  // 3. If msg.url is a blob: URL, try fetching the blob from browser memory
-  if (!blob && msg.url && msg.url.startsWith('blob:')) {
+  // 1. Try server-side fast COPY first (0ms overhead on WebDAV/S3!)
+  if (typeof storageClient.copyFile === 'function') {
     try {
-      const res = await fetch(msg.url);
-      blob = await res.blob();
-    } catch (e) {}
-  }
-
-  // 4. Download from WebDAV / storageClient if not cached
-  if (!blob && storageClient && msg.content) {
-    try {
-      blob = await storageClient.downloadFile(msg.content);
-      if (blob && msg.id) {
-        cacheFile(msg.id, blob);
-      }
+      const ok = await storageClient.copyFile(sourceFileName, destSubPath);
+      if (ok) return relativeHtmlUrl;
     } catch (e) {
-      console.warn('Failed to download image for diary export:', msg.content, e);
+      console.warn('Server copy failed, fallback to download/upload:', e);
     }
   }
 
-  // 5. Convert blob to Base64 Data URL
-  if (blob) {
-    const dataUrl = await blobToDataUrl(blob);
-    if (dataUrl) return dataUrl;
-  }
-
-  // Fallback to storageClient URL or remoteUrl if Base64 conversion fails
-  if (storageClient && msg.content) {
-    return storageClient.getUrl(msg.content);
-  }
-  return msg.remoteUrl || msg.url || '';
-}
-
-// Resolve avatar to Base64 data URL or fallback SVG
-async function getBase64AvatarUrl(avatar, authorName, storageClient) {
-  const fallback = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(authorName || 'User')}`;
-  if (!avatar || !avatar.trim()) return fallback;
-  if (avatar.startsWith('data:') || avatar.startsWith('https://') || avatar.startsWith('http://')) {
-    return avatar;
-  }
-
-  // If avatar is blob URL, fetch blob
+  // 2. Fallback: retrieve blob from IndexedDB cache or download, then upload to destSubPath
   let blob = null;
-  if (avatar.startsWith('blob:')) {
+  if (sourceFileName.startsWith('avatar_')) {
+    blob = await getCachedFile(sourceFileName);
+  } else {
+    blob = await getCachedFile(sourceFileName);
+  }
+
+  if (!blob && typeof storageClient.downloadFile === 'function') {
     try {
-      const res = await fetch(avatar);
-      blob = await res.blob();
+      blob = await storageClient.downloadFile(sourceFileName);
     } catch (e) {}
   }
 
-  // Check IndexedDB cache or download via storageClient
-  if (!blob) {
-    blob = await getCachedFile(`avatar_${avatar}`);
-  }
-  if (!blob && storageClient) {
+  if (blob && typeof storageClient.uploadFile === 'function') {
     try {
-      blob = await storageClient.downloadFile(avatar);
-      if (blob) cacheFile(`avatar_${avatar}`, blob);
+      const contentType = blob.type || (assetName.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
+      await storageClient.uploadFile(blob, destSubPath, contentType);
+      return relativeHtmlUrl;
     } catch (e) {}
   }
 
-  if (blob) {
-    const dataUrl = await blobToDataUrl(blob);
-    if (dataUrl) return dataUrl;
-  }
-
-  return fallback;
+  return null;
 }
 
-export async function generateDiaryHtml({ folderName, author, avatar, templateId = 'wechat', password = '', messages = [], storageClient }) {
+export async function generateDiaryHtml({ folderName, author, avatar, templateId = 'wechat', password = '', messages = [], storageClient, targetDirClean = 'diary/export' }) {
   const isWeChat = templateId === 'wechat';
   const sortedMsgs = [...messages].sort((a, b) => isWeChat ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
 
   const titleStr = folderName || '我的日记';
   const authorStr = author || 'CloudChat User';
-  const authorAvatarStr = await getBase64AvatarUrl(avatar, authorStr, storageClient);
+  const targetAssetsDir = `${targetDirClean}/assets`;
 
-  // Compute password SHA-256 hash if password provided
+  // 1. Ensure target assets directory exists on WebDAV / server
+  if (storageClient && typeof storageClient.ensureFolderPathExist === 'function') {
+    try {
+      await storageClient.ensureFolderPathExist(targetAssetsDir);
+    } catch (e) {}
+  }
+
+  // 2. Resolve & copy Author Avatar to target assets directory
+  let authorAvatarStr = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(authorStr)}`;
+  if (avatar && avatar.trim()) {
+    if (avatar.startsWith('data:') || avatar.startsWith('https://') || avatar.startsWith('http://')) {
+      authorAvatarStr = avatar;
+    } else {
+      const syncedAvatarUrl = await syncAssetToDiaryFolder(avatar, 'avatar.jpg', targetAssetsDir, storageClient);
+      if (syncedAvatarUrl) {
+        authorAvatarStr = syncedAvatarUrl;
+      }
+    }
+  }
+
+  // 3. Compute password SHA-256 hash if password provided
   let passwordHash = '';
   if (password && password.trim()) {
     passwordHash = await computeSha256Hex(password.trim());
   }
 
-  // Pre-resolve media URLs to Base64 data URLs for all image/video messages
+  // 4. Copy & Sync all message media (photos/videos/audio) to target assets folder on server
   const mediaUrlMap = {};
   for (const msg of sortedMsgs) {
     if (msg.type === 'IMAGE' || msg.type === 'VIDEO' || msg.type === 'AUDIO') {
-      mediaUrlMap[msg.id] = await getBase64MediaUrl(msg, storageClient);
+      const sourceName = msg.content || `${msg.id}.jpg`;
+      const cleanFileName = sourceName.split('/').pop().replace(/[\\/:*?"<>|]/g, '_');
+      const relativeUrl = await syncAssetToDiaryFolder(sourceName, cleanFileName, targetAssetsDir, storageClient);
+      if (relativeUrl) {
+        mediaUrlMap[msg.id] = relativeUrl;
+      } else if (msg.url && msg.url.startsWith('data:')) {
+        mediaUrlMap[msg.id] = msg.url;
+      } else if (storageClient && msg.content) {
+        mediaUrlMap[msg.id] = storageClient.getUrl(msg.content);
+      } else {
+        mediaUrlMap[msg.id] = msg.remoteUrl || msg.content || '';
+      }
     }
   }
 
-  // Helper to resolve media URL
+  // Helper to resolve media URL for template renderers
   const resolveMediaUrl = (msg) => {
     if (!msg) return '';
     if (mediaUrlMap[msg.id]) {

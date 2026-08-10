@@ -142,7 +142,8 @@ export default function DiaryExportModal({
         templateId,
         password: enablePassword ? password : '',
         messages: folderMessages,
-        storageClient
+        storageClient,
+        targetDirClean
       });
 
       setExportProgress(75);
