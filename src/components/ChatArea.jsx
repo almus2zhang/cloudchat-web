@@ -649,7 +649,7 @@ export default function ChatArea({
     const groupMap = {};
 
     sliced.forEach(msg => {
-      if (msg.groupId && msg.type !== 'TEXT') {
+      if (msg.groupId) {
         if (!groupMap[msg.groupId]) {
           groupMap[msg.groupId] = {
             id: msg.groupId,
