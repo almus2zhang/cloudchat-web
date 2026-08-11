@@ -1123,45 +1123,110 @@ export default function ChatArea({
                   {/* Bubble Content Body */}
                   <div className="relative">
                     {isGroup ? (
-                      /* RENDER GRID GROUP (NINE GRID) */
-                      <div className="border border-borderColor bg-bgSecondary p-1 rounded-lg overflow-hidden shadow-md max-w-[240px]">
-                        <div 
-                          className="grid gap-1"
-                          style={{
-                            gridTemplateColumns: `repeat(${item.messages.length === 1 ? 1 : (item.messages.length <= 4 ? 2 : 3)}, 1fr)`
-                          }}
-                        >
-                          {item.messages.map(msg => {
-                            const isImgSelected = selectedMessageIds.has(msg.id);
+                      item.messages.every(m => m.type === 'IMAGE' || m.type === 'VIDEO') ? (
+                        /* RENDER GRID GROUP (NINE GRID FOR ALL MEDIA) */
+                        <div className="border border-borderColor bg-bgSecondary p-1 rounded-lg overflow-hidden shadow-md max-w-[240px]">
+                          <div 
+                            className="grid gap-1"
+                            style={{
+                              gridTemplateColumns: `repeat(${item.messages.length === 1 ? 1 : (item.messages.length <= 4 ? 2 : 3)}, 1fr)`
+                            }}
+                          >
+                            {item.messages.map(msg => {
+                              const isImgSelected = selectedMessageIds.has(msg.id);
+                              return (
+                                <div 
+                                  key={msg.id}
+                                  className={`relative aspect-square overflow-hidden cursor-pointer bg-bgPrimary hover:opacity-90 border transition-all ${
+                                    isImgSelected ? 'border-accentColor ring-1 ring-accentColor' : 'border-transparent'
+                                  }`}
+                                  onClick={(e) => {
+                                    handleItemClick(e, msg.id, () => {
+                                      if (selectedMessageIds.size > 0) {
+                                        onToggleMessageSelection(msg.id);
+                                      } else {
+                                        // Open viewer event handled by App
+                                        handleOpenMediaViewer(msg.id);
+                                      }
+                                    });
+                                  }}
+                                >
+                                  <img src={msg.url} alt="Grid attachment" className={`w-full h-full object-cover select-none transition-all duration-200 ${isImgSelected ? 'brightness-50' : ''}`} />
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {item.messages.some(m => m.caption) && (
+                            <div className="mt-1 pt-1 border-t border-borderColor/40 text-[11px] text-textSecondary flex items-center gap-1.5 px-1 break-words">
+                              <i className="fa-solid fa-note-sticky text-[9px] opacity-70 shrink-0"></i>
+                              <span>{item.messages.filter(m => m.caption).map(m => m.caption).join('，')}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* RENDER COMPOSITE GROUP (MIXED / NON-MEDIA CARD) */
+                        <div className="border border-borderColor bg-bgSecondary p-3 rounded-xl shadow-md max-w-[320px] flex flex-col gap-2 font-sans">
+                          {item.messages.map((msg, idx) => {
                             return (
-                              <div 
-                                key={msg.id}
-                                className={`relative aspect-square overflow-hidden cursor-pointer bg-bgPrimary hover:opacity-90 border transition-all ${
-                                  isImgSelected ? 'border-accentColor ring-1 ring-accentColor' : 'border-transparent'
-                                }`}
-                                onClick={(e) => {
-                                  handleItemClick(e, msg.id, () => {
-                                    if (selectedMessageIds.size > 0) {
-                                      onToggleMessageSelection(msg.id);
-                                    } else {
-                                      // Open viewer event handled by App
-                                      handleOpenMediaViewer(msg.id);
-                                    }
-                                  });
-                                }}
-                              >
-                                <img src={msg.url} alt="Grid attachment" className={`w-full h-full object-cover select-none transition-all duration-200 ${isImgSelected ? 'brightness-50' : ''}`} />
+                              <div key={msg.id} className={`flex flex-col gap-1 ${idx > 0 ? 'pt-2 border-t border-borderColor/40' : ''}`}>
+                                {msg.type === 'TEXT' && (
+                                  <span className="text-sm whitespace-pre-wrap break-words text-textPrimary leading-relaxed">{msg.content}</span>
+                                )}
+                                {msg.type === 'AUDIO' && (() => {
+                                  const loadedDur = audioProgress[msg.id]?.duration;
+                                  const fallbackDur = getDurationFromMsg(msg);
+                                  const totalDuration = (loadedDur && !isNaN(loadedDur) && isFinite(loadedDur) && loadedDur > 0) ? loadedDur : fallbackDur;
+                                  return (
+                                    <div className="flex items-center gap-2 text-xs">
+                                      <audio 
+                                        ref={el => audioRefs.current[msg.id] = el}
+                                        src={msg.url}
+                                        onLoadedMetadata={(e) => handleLoadedAudioMetadata(msg.id, e)}
+                                        onTimeUpdate={() => handleAudioTimeUpdate(msg.id)}
+                                        onEnded={() => setAudioPlayingId(null)}
+                                        preload="metadata"
+                                      />
+                                      <button 
+                                        onClick={(e) => { e.stopPropagation(); handleToggleAudio(msg.id); }}
+                                        className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm hover:opacity-90 cursor-pointer"
+                                      >
+                                        <i className={`fa-solid ${audioPlayingId === msg.id ? 'fa-pause text-xs' : 'fa-play text-xs'}`}></i>
+                                      </button>
+                                      <span className="font-mono text-emerald-400 font-semibold">{totalDuration ? `${Math.round(totalDuration)}s` : '语音'}</span>
+                                      {msg.caption && <span className="text-[11px] text-textMuted ml-1 truncate">{msg.caption}</span>}
+                                    </div>
+                                  );
+                                })()}
+                                {msg.type === 'FILE' && (
+                                  <div className="flex items-center gap-2 p-1.5 rounded-lg bg-bgPrimary/50 border border-borderColor/40 text-xs">
+                                    <i className="fa-solid fa-file-arrow-down text-cyan-400 text-sm shrink-0"></i>
+                                    <div className="min-w-0 flex-1">
+                                      <span className="font-semibold block truncate">{msg.content.replace(/^\d+_/, '')}</span>
+                                      <span className="text-[10px] text-textMuted block">{msg.fileSize ? formatSize(msg.fileSize) : ''}</span>
+                                    </div>
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); handleStartDownload(msg, false); }}
+                                      className="w-7 h-7 rounded-full bg-black/10 hover:bg-black/20 flex items-center justify-center text-xs text-textPrimary shrink-0 cursor-pointer"
+                                      title="下载文件"
+                                    >
+                                      <i className="fa-solid fa-download"></i>
+                                    </button>
+                                  </div>
+                                )}
+                                {(msg.type === 'IMAGE' || msg.type === 'VIDEO') && (
+                                  <div className="rounded-lg overflow-hidden max-h-40 bg-black/10 border border-borderColor/40 cursor-pointer" onClick={() => handleOpenMediaViewer(msg.id)}>
+                                    {msg.type === 'IMAGE' ? (
+                                      <img src={msg.url} alt="Group media" className="w-full h-full object-cover max-h-40" />
+                                    ) : (
+                                      <video src={msg.url} className="w-full h-full object-cover max-h-40" />
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
                         </div>
-                        {item.messages.some(m => m.caption) && (
-                          <div className="mt-1 pt-1 border-t border-borderColor/40 text-[11px] text-textSecondary flex items-center gap-1.5 px-1 break-words">
-                            <i className="fa-solid fa-note-sticky text-[9px] opacity-70 shrink-0"></i>
-                            <span>{item.messages.filter(m => m.caption).map(m => m.caption).join('，')}</span>
-                          </div>
-                        )}
-                      </div>
+                      )
                     ) : (
                       /* RENDER SINGLE MESSAGE CARD */
                       <div 
