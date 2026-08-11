@@ -370,6 +370,17 @@ export default function App() {
     return { sanitized, repairedCount };
   };
 
+  const scrollToBottom = () => {
+    try {
+      const containers = document.querySelectorAll('.chat-messages-container, [data-chat-messages], .overflow-y-auto');
+      containers.forEach(el => {
+        if (el && el.scrollHeight) {
+          el.scrollTop = el.scrollHeight;
+        }
+      });
+    } catch (e) {}
+  };
+
   // --- Core Sync Logic ---
   const syncHistory = async (force = false) => {
     if (isSyncing || !currentProfileRef.current || !activeClientRef.current) return;
