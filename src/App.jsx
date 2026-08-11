@@ -337,19 +337,22 @@ export default function App() {
         repairedCount++;
       }
 
-      let safeType = msg.type ? String(msg.type).toUpperCase() : 'TEXT';
-      if (!msg.type || safeType === 'TEXT') {
+      let safeType = msg.type ? String(msg.type).toUpperCase() : null;
+      if (!safeType) {
         const textContent = msg.content || '';
         if (textContent.startsWith('[位置] ')) {
           safeType = 'LOCATION';
-        } else {
+        } else if (msg.remoteUrl || msg.url) {
           const ext = textContent.substring(textContent.lastIndexOf('.')).toLowerCase();
           if (['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext)) safeType = 'IMAGE';
           else if (['.mp4', '.webm', '.mkv', '.mov'].includes(ext)) safeType = 'VIDEO';
           else if (['.mp3', '.wav', '.ogg', '.m4a'].includes(ext)) safeType = 'AUDIO';
           else safeType = 'TEXT';
+        } else {
+          safeType = 'TEXT';
         }
       }
+      msg.type = safeType;
 
       let safeCategories = [];
       if (Array.isArray(msg.categories)) {

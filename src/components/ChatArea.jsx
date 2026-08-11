@@ -1154,7 +1154,13 @@ export default function ChatArea({
                                     });
                                   }}
                                 >
-                                  <img src={msg.url} alt="Grid attachment" className={`w-full h-full object-cover select-none transition-all duration-200 ${isImgSelected ? 'brightness-50' : ''}`} />
+                                  {msg.url ? (
+                                    <img src={msg.url} alt="Grid attachment" className={`w-full h-full object-cover select-none transition-all duration-200 ${isImgSelected ? 'brightness-50' : ''}`} />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center bg-black/10 text-[10px] text-textMuted p-1">
+                                      <i className="fa-solid fa-spinner fa-spin"></i>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -1223,10 +1229,17 @@ export default function ChatArea({
                                 )}
                                 {(msgType === 'IMAGE' || msgType === 'VIDEO') && (
                                   <div className="rounded-xl overflow-hidden max-h-48 bg-black/10 border border-borderColor/40 cursor-pointer" onClick={() => handleOpenMediaViewer(msg.id)}>
-                                    {msgType === 'IMAGE' ? (
-                                      <img src={msg.url} alt="Group media" className="w-full h-full object-cover max-h-48" />
+                                    {msg.url ? (
+                                      msgType === 'IMAGE' ? (
+                                        <img src={msg.url} alt="Group media" className="w-full h-full object-cover max-h-48" />
+                                      ) : (
+                                        <video src={msg.url} className="w-full h-full object-cover max-h-48" />
+                                      )
                                     ) : (
-                                      <video src={msg.url} className="w-full h-full object-cover max-h-48" />
+                                      <div className="w-full h-32 flex items-center justify-center text-xs text-textMuted gap-2">
+                                        <i className="fa-solid fa-spinner fa-spin"></i>
+                                        <span>加载媒体...</span>
+                                      </div>
                                     )}
                                   </div>
                                 )}
