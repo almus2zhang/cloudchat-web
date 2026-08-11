@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createDownloadState } from '../services/storage';
 import { getCachedFile, cacheFile } from '../services/db';
+import CalendarModal from './CalendarModal';
 
 const CATEGORY_MAP = {
   'diary': '日记',
@@ -67,6 +68,34 @@ export default function ChatArea({
 
   // Search query state for persistent header search
   const [searchQuery, setSearchQuery] = useState('');
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+
+  const handleSelectCalendarDate = (dateStr) => {
+    const targetIdx = filteredMessages.findIndex(m => {
+      if (!m.timestamp) return false;
+      const d = new Date(m.timestamp);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}` === dateStr;
+    });
+
+    if (targetIdx !== -1) {
+      const targetMsg = filteredMessages[targetIdx];
+      const offsetFromEnd = filteredMessages.length - targetIdx;
+      if (offsetFromEnd > visibleCount) {
+        setVisibleCount(offsetFromEnd + 50);
+      }
+      setTimeout(() => {
+        const el = document.getElementById(`msg-item-${targetMsg.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-accentColor', 'bg-accentColor/10');
+          setTimeout(() => el.classList.remove('ring-2', 'ring-accentColor', 'bg-accentColor/10'), 2500);
+        }
+      }, 150);
+    }
+  };
 
   // Submenu open states for category selection
   const [showCategorySubmenu, setShowCategorySubmenu] = useState(false);
@@ -668,6 +697,17 @@ export default function ChatArea({
           </div>
         )}
 
+        {/* Calendar Jump Button */}
+        {selectedMessageIds.size === 0 && (
+          <button
+            onClick={() => setShowCalendarModal(true)}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-bgPrimary/60 border border-borderColor hover:border-accentColor hover:bg-bgPrimary text-textMuted hover:text-accentColor transition-all shrink-0 ml-1"
+            title="按日历查看条目"
+          >
+            <i className="fa-regular fa-calendar-days text-sm"></i>
+          </button>
+        )}
+
         {/* Scroll Lock & Privacy Controls */}
         {selectedMessageIds.size === 0 && (
           <div className="flex items-center shrink-0 ml-2 gap-2">
@@ -833,8 +873,9 @@ export default function ChatArea({
             return (
               <div 
                 key={item.id} 
+                id={`msg-item-${item.id}`}
                 onContextMenu={handleRowContextMenu}
-                className="flex gap-3 min-w-0 group relative my-1 items-start justify-start"
+                className="flex gap-3 min-w-0 group relative my-1 items-start justify-start transition-all duration-300 rounded-xl"
               >
                 {/* Selection Checkbox */}
                 {selectedMessageIds.size > 0 && (
@@ -1714,6 +1755,14 @@ export default function ChatArea({
           </button>
         </div>
       )}
+
+      {/* Calendar Jump Modal */}
+      <CalendarModal
+        isOpen={showCalendarModal}
+        onClose={() => setShowCalendarModal(false)}
+        messages={filteredMessages}
+        onSelectDate={handleSelectCalendarDate}
+      />
     </main>
   );
 }
