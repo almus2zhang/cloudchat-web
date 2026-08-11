@@ -1191,10 +1191,25 @@ export default function ChatArea({
                         <div className="p-3.5 rounded-2xl border border-black/10 bg-white text-textPrimary shadow-sm max-w-[300px] flex flex-col gap-2 font-sans">
                           {item.messages.map((msg, idx) => {
                             const msgType = String(msg.type || '').toUpperCase();
+                            const isTextOrUnknown = msgType === 'TEXT' || msgType === '' || !['AUDIO', 'FILE', 'IMAGE', 'VIDEO', 'LOCATION', 'FOLDER'].includes(msgType);
                             return (
-                              <div key={msg.id} className={`flex flex-col gap-1 ${idx > 0 ? 'pt-2.5 border-t border-black/10' : ''}`}>
-                                {(msgType === 'TEXT' || !msgType) && (
-                                  <span className="text-[14.5px] whitespace-pre-wrap break-words text-[#222222] leading-relaxed select-text font-normal">{msg.content}</span>
+                              <div key={msg.id || idx} className={`flex flex-col gap-1 ${idx > 0 ? 'pt-2.5 border-t border-black/10' : ''}`}>
+                                {isTextOrUnknown && (
+                                  <span className="text-[14.5px] whitespace-pre-wrap break-words text-[#222222] leading-relaxed select-text font-normal">
+                                    {msg.content || (typeof msg === 'string' ? msg : '')}
+                                  </span>
+                                )}
+                                {msgType === 'LOCATION' && (
+                                  <div className="flex items-center gap-1.5 text-xs text-textSecondary py-0.5">
+                                    <i className="fa-solid fa-location-dot text-red-500 text-sm shrink-0"></i>
+                                    <span className="break-words font-medium">{msg.content}</span>
+                                  </div>
+                                )}
+                                {msgType === 'FOLDER' && (
+                                  <div className="flex items-center gap-2 p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-xs">
+                                    <i className="fa-solid fa-folder text-cyan-500 text-base shrink-0"></i>
+                                    <span className="font-semibold block truncate text-textPrimary">{msg.content || '文件夹'}</span>
+                                  </div>
                                 )}
                                 {msgType === 'AUDIO' && (() => {
                                   const loadedDur = audioProgress[msg.id]?.duration;
@@ -1252,6 +1267,9 @@ export default function ChatArea({
                                       </div>
                                     )}
                                   </div>
+                                )}
+                                {msg.caption && msgType !== 'AUDIO' && (
+                                  <span className="text-[11px] text-textMuted mt-0.5 block">{msg.caption}</span>
                                 )}
                               </div>
                             );

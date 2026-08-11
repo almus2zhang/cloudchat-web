@@ -299,13 +299,12 @@ export default function App() {
   const resolveLocalMediaUrls = async (msgs) => {
     let changed = false;
     const updated = await Promise.all(msgs.map(async (msg) => {
-      if (msg.type === 'IMAGE' || msg.type === 'VIDEO' || msg.type === 'AUDIO') {
-        if (!msg.url) {
-          const url = await resolveMediaMessageUrl(msg);
-          if (url) {
-            msg.url = url;
-            changed = true;
-          }
+      const msgType = String(msg.type || '').toUpperCase();
+      if (['IMAGE', 'VIDEO', 'AUDIO'].includes(msgType) && !msg.url) {
+        const url = await resolveMediaMessageUrl(msg);
+        if (url) {
+          msg.url = url;
+          changed = true;
         }
       }
       return msg;
