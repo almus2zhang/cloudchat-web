@@ -354,6 +354,13 @@ export default function App() {
       }
       msg.type = safeType;
 
+      let safeCategories = [];
+      if (Array.isArray(msg.categories)) {
+        safeCategories = msg.categories;
+      } else if (msg.categories && typeof msg.categories === 'string') {
+        safeCategories = [msg.categories];
+      }
+
       let safeGroupId = (msg.groupId !== undefined && msg.groupId !== null && String(msg.groupId).trim() !== '') ? String(msg.groupId).trim() : null;
 
       return {
