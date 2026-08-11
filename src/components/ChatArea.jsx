@@ -223,8 +223,8 @@ export default function ChatArea({
   useEffect(() => {
     if (activeCategory === 'diary') {
       fetchDiaryFiles();
-      if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTop = 0;
+      if (listRef.current) {
+        listRef.current.scrollTop = 0;
       }
     }
   }, [activeCategory, fetchDiaryFiles]);
