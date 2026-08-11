@@ -599,28 +599,25 @@ class WebDavStorageClient {
 
     async testConnection() {
         if (this.type === 'WEBDAV') {
-            const baseUrl = (this.config.webDavUrl || '').replace(/\/+$/, '');
-            if (!baseUrl) throw new Error('WebDAV 服务器 URL 不能为空');
-            
-            const xmlBody = '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>';
-            let response = await fetch(baseUrl, {
-                method: 'PROPFIND',
-                headers: {
-                    'Authorization': this.getAuthHeader(),
-                    'Depth': '1',
-                    'Content-Type': 'application/xml; charset=utf-8'
-                },
-                body: xmlBody
-            });
+            const buildUrl = (webDavBaseUrl) => {
+                const baseUrl = (webDavBaseUrl || '').trim().replace(/\/+$/, '');
+                if (!baseUrl) return '';
+                const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
+                const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
 
-            if (response.status === 404) {
-                // Try MKCOL if directory 404
+                const parts = [];
+                if (root) root.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
+                if (userDirClean) userDirClean.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
+
+                return parts.length > 0 ? `${baseUrl}/${parts.join('/')}` : baseUrl;
+            };
+
+            const testSingleUrl = async (targetUrl) => {
+                if (!targetUrl) return { ok: false, message: 'URL 不能为空' };
+                const xmlBody = '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>';
+                
                 try {
-                    await fetch(baseUrl, {
-                        method: 'MKCOL',
-                        headers: { 'Authorization': this.getAuthHeader() }
-                    });
-                    response = await fetch(baseUrl, {
+                    let response = await fetch(targetUrl, {
                         method: 'PROPFIND',
                         headers: {
                             'Authorization': this.getAuthHeader(),
@@ -629,17 +626,66 @@ class WebDavStorageClient {
                         },
                         body: xmlBody
                     });
-                } catch (e) {}
+
+                    let createdDir = false;
+                    if (response.status === 404) {
+                        try {
+                            await this.ensureFolderPathExist();
+                            createdDir = true;
+                            response = await fetch(targetUrl, {
+                                method: 'PROPFIND',
+                                headers: {
+                                    'Authorization': this.getAuthHeader(),
+                                    'Depth': '1',
+                                    'Content-Type': 'application/xml; charset=utf-8'
+                                },
+                                body: xmlBody
+                            });
+                        } catch (e) {}
+                    }
+
+                    if (response.status === 207 || (response.status >= 200 && response.status < 300)) {
+                        const text = await response.text();
+                        const count = (text.match(/<(?:\w+:)?response\b/gi) || []).length;
+                        const tip = createdDir ? `(目录已自动创建，已列出 ${count} 项)` : `(已成功列出 ${count} 项)`;
+                        return { ok: true, message: `HTTP ${response.status} ${tip}` };
+                    } else if (response.status === 401 || response.status === 403) {
+                        return { ok: false, message: `HTTP ${response.status} (认证失败，账号或密码错误)` };
+                    } else {
+                        return { ok: false, message: `HTTP ${response.status} (${response.statusText || '连接异常'})` };
+                    }
+                } catch (e) {
+                    return { ok: false, message: `网络连接失败 (${e.message || '无法访问'})` };
+                }
+            };
+
+            const primaryTargetUrl = buildUrl(this.config.webDavUrl);
+            if (!primaryTargetUrl) throw new Error('主 WebDAV 地址不能为空');
+
+            const primaryResult = await testSingleUrl(primaryTargetUrl);
+            const report = [];
+            
+            if (primaryResult.ok) {
+                report.push(`主地址: ${primaryResult.message}`);
+            } else {
+                report.push(`主地址: 连接失败 - ${primaryResult.message}`);
             }
 
-            const text = await response.text();
-            if (response.status === 207 || (response.status >= 200 && response.status < 300)) {
-                const count = (text.match(/<(?:\w+:)?response\b/gi) || []).length;
-                return { ok: true, status: response.status, message: `HTTP ${response.status} (已成功列出 ${count} 项)` };
-            } else if (response.status === 401 || response.status === 403) {
-                throw new Error(`HTTP ${response.status} (服务器可达，但认证失败，请检查用户名/密码或权限)`);
+            if (this.config.webDavFallbackUrl && this.config.webDavFallbackUrl.trim()) {
+                const fallbackTargetUrl = buildUrl(this.config.webDavFallbackUrl);
+                const fallbackResult = await testSingleUrl(fallbackTargetUrl);
+                if (fallbackResult.ok) {
+                    report.push(`备用地址: ${fallbackResult.message}`);
+                } else {
+                    report.push(`备用地址: 连接失败 - ${fallbackResult.message}`);
+                }
+            }
+
+            const fullReport = report.join('\n');
+            if (primaryResult.ok) {
+                return { ok: true, status: 200, message: fullReport };
             } else {
-                throw new Error(`HTTP 状态码 ${response.status} (${response.statusText || '连接异常'})`);
+                throw new Error(fullReport);
             }
         } else if (this.type === 'S3') {
             const endpoint = (this.config.endpoint || '').replace(/\/+$/, '');
