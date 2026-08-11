@@ -37,7 +37,7 @@ export default function SettingsModal({
     setTestResult(null);
     try {
       const StorageModule = await import('../services/storage');
-      const testService = new StorageModule.StorageService(editingProfile);
+      const testService = StorageModule.StorageClient.create(editingProfile);
       const res = await testService.testConnection();
       setTestResult({ success: true, message: res.message });
     } catch (err) {

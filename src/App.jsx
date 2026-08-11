@@ -647,6 +647,26 @@ export default function App() {
       // Perform upload asynchronously
       (async () => {
         try {
+          // Check if file already exists on server with exact size
+          let remoteSize = -1;
+          try {
+            if (client.getFileSize) {
+              remoteSize = await client.getFileSize(fileName);
+            }
+          } catch (e) {}
+
+          if (fileSize > 0 && remoteSize === fileSize) {
+            console.log(`[Upload] File ${fileName} already exists on server (${remoteSize} bytes), marking SUCCESS`);
+            newMsg.status = 'SUCCESS';
+            newMsg.lastModified = Date.now();
+            setMessages(prev => {
+              const list = prev.map(m => m.id === newMsg.id ? { ...m, status: 'SUCCESS', lastModified: Date.now() } : m);
+              setTimeout(() => pushHistoryToCloud(list), 0);
+              return list;
+            });
+            return;
+          }
+
           if (isImage) {
             try {
               const thumbBlob = await generateThumbnail(file);
@@ -1291,6 +1311,7 @@ export default function App() {
         onEditTextMessage={handleEditTextMessage}
         onUpdateCaption={handleUpdateCaption}
         onSendMessage={handleSendMessage}
+        onRetryMessage={handleRetryMessage}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         storageClient={activeClientRef.current}
         resolveAvatarUrl={resolveAvatarUrl}

@@ -38,6 +38,7 @@ export default function ChatArea({
   onEditTextMessage,
   onUpdateCaption,
   onSendMessage,
+  onRetryMessage,
   onToggleSidebar,
   storageClient,
   resolveAvatarUrl,
@@ -1625,7 +1626,17 @@ export default function ChatArea({
                               {item.status === 'SENDING' ? (
                                 <i className="fa-solid fa-spinner fa-spin text-[8px]"></i>
                               ) : item.status === 'FAILED' ? (
-                                <i className="fa-solid fa-circle-exclamation text-red-500 text-[8px]"></i>
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    if (onRetryMessage) onRetryMessage(item); 
+                                  }}
+                                  className="text-red-400 hover:text-red-300 cursor-pointer flex items-center gap-0.5 text-[10px] font-semibold bg-red-500/10 hover:bg-red-500/20 px-1 py-0.5 rounded border border-red-500/30 transition-all"
+                                  title="发送失败，点击检查服务器并重发"
+                                >
+                                  <i className="fa-solid fa-rotate-right text-[9px] animate-pulse"></i>
+                                  <span>重发</span>
+                                </button>
                               ) : null}
                             </span>
                           )}
