@@ -451,6 +451,89 @@ class WebDavStorageClient {
         } catch (e) {}
         return 0;
     }
+
+    async listDiaryFiles() {
+        const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
+        const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
+        const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
+
+        const parts = [];
+        if (root) root.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
+        if (userDirClean) userDirClean.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
+        parts.push('diary');
+
+        const diaryDirUrl = `${baseUrl}/${parts.join('/')}`;
+        const fallbackDiaryDirUrl = `${baseUrl}/${root ? encodeURIComponent(root) + '/' : ''}diary`;
+
+        const diaryDirUrls = [diaryDirUrl, fallbackDiaryDirUrl];
+        const items = [];
+        const seenNames = new Set();
+
+        for (const targetUrl of diaryDirUrls) {
+            try {
+                const response = await fetch(targetUrl, {
+                    method: 'PROPFIND',
+                    headers: { 
+                        'Authorization': this.getAuthHeader(), 
+                        'Depth': '1' 
+                    }
+                });
+                if (!response.ok) continue;
+
+                const xmlText = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(xmlText, 'text/xml');
+                const responses = doc.querySelectorAll('response, d\\:response');
+
+                responses.forEach(node => {
+                    const hrefNode = node.querySelector('href, d\\:href');
+                    const href = hrefNode ? hrefNode.textContent : '';
+                    if (!href) return;
+
+                    const cleanHref = href.replace(/\/+$/, '');
+                    const cleanTarget = targetUrl.replace(/\/+$/, '');
+                    if (cleanHref.endsWith('/diary') || cleanHref.endsWith('/diary/') || cleanHref === cleanTarget) return;
+
+                    const isCollection = node.querySelector('collection, d\\:collection') !== null;
+                    if (isCollection) return;
+
+                    const fileName = decodeURIComponent(cleanHref.split('/').pop());
+                    if (!fileName || seenNames.has(fileName)) return;
+                    seenNames.add(fileName);
+
+                    const contentLengthNode = node.querySelector('getcontentlength, d\\:getcontentlength');
+                    const lastModifiedNode = node.querySelector('getlastmodified, d\\:getlastmodified');
+                    
+                    const size = contentLengthNode ? parseInt(contentLengthNode.textContent || '0', 10) : 0;
+                    const lastModifiedStr = lastModifiedNode ? lastModifiedNode.textContent : '';
+                    const lastModified = lastModifiedStr ? new Date(lastModifiedStr).getTime() : Date.now();
+
+                    // Calculate web link based on diaryBaseUrl
+                    let webUrl = '';
+                    const diaryBaseUrl = (this.config.diaryBaseUrl || '').trim();
+                    if (diaryBaseUrl) {
+                        webUrl = `${diaryBaseUrl.replace(/\/+$/, '')}/${encodeURIComponent(fileName)}`;
+                    } else {
+                        webUrl = href.startsWith('http') ? href : `${baseUrl}${href.startsWith('/') ? '' : '/'}${href}`;
+                    }
+
+                    items.push({
+                        name: fileName,
+                        href,
+                        webUrl,
+                        size,
+                        lastModified
+                    });
+                });
+                if (items.length > 0) break;
+            } catch (e) {
+                console.warn('WebDAV listDiaryFiles error:', e);
+            }
+        }
+
+        items.sort((a, b) => b.lastModified - a.lastModified);
+        return items;
+    }
 }
 
 class S3StorageClient {

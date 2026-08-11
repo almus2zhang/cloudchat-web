@@ -198,6 +198,30 @@ export default function ChatArea({
 
   // Pagination & Lazy Load States
   const [visibleCount, setVisibleCount] = useState(100);
+
+  // WebDAV Diary Files listing state
+  const [diaryFiles, setDiaryFiles] = useState([]);
+  const [isLoadingDiary, setIsLoadingDiary] = useState(false);
+  const [previewWebUrl, setPreviewWebUrl] = useState(null);
+
+  const fetchDiaryFiles = React.useCallback(async () => {
+    if (!storageClient || !storageClient.listDiaryFiles) return;
+    setIsLoadingDiary(true);
+    try {
+      const list = await storageClient.listDiaryFiles();
+      setDiaryFiles(list || []);
+    } catch (e) {
+      console.error('Failed to list WebDAV diary files:', e);
+    } finally {
+      setIsLoadingDiary(false);
+    }
+  }, [storageClient]);
+
+  useEffect(() => {
+    if (activeCategory === 'diary') {
+      fetchDiaryFiles();
+    }
+  }, [activeCategory, fetchDiaryFiles]);
   const scrollPositionRef = useRef(null);
   const prevMessagesLengthRef = useRef(messages.length);
 
@@ -865,6 +889,128 @@ export default function ChatArea({
         }}
         className="flex-1 overflow-y-auto px-2 py-4 space-y-4 min-w-0 cursor-default"
       >
+        {/* WebDAV Diary Web Pages Section */}
+        {activeCategory === 'diary' && (
+          <div className="bg-bgSecondary/90 border border-cyan-500/30 rounded-2xl p-4 shadow-xl mb-4 animate-fade-in">
+            <div className="flex items-center justify-between border-b border-borderColor/50 pb-3 mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                  <i className="fa-solid fa-book-bookmark text-base"></i>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-textPrimary flex items-center gap-2">
+                    <span>WebDAV 日记网页列表</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400">
+                      {diaryFiles.length} 篇网页日记
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-textMuted">
+                    WebDAV 路径: <span className="font-mono text-cyan-400">{currentProfile?.serverPath || 'CloudChat'}/diary</span>
+                    {currentProfile?.diaryBaseUrl ? ` | 映射地址: ${currentProfile.diaryBaseUrl}` : ''}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchDiaryFiles}
+                  disabled={isLoadingDiary}
+                  className={`px-3 py-1.5 rounded-lg text-xs bg-bgPrimary border border-borderColor text-textSecondary hover:text-cyan-400 hover:border-cyan-500/40 transition-all flex items-center gap-1.5 ${
+                    isLoadingDiary ? 'animate-spin' : ''
+                  }`}
+                  title="刷新 WebDAV 日记文件列表"
+                >
+                  <i className="fa-solid fa-rotate-right text-xs"></i>
+                  <span>刷新</span>
+                </button>
+                <button
+                  onClick={onOpenDiaryExport}
+                  className="px-3 py-1.5 rounded-lg text-xs bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/25 transition-all flex items-center gap-1.5 font-medium"
+                >
+                  <i className="fa-solid fa-square-plus text-xs"></i>
+                  <span>生成新日记</span>
+                </button>
+              </div>
+            </div>
+
+            {isLoadingDiary ? (
+              <div className="py-8 flex items-center justify-center gap-2 text-textMuted text-xs">
+                <i className="fa-solid fa-spinner animate-spin text-cyan-400 text-sm"></i>
+                <span>正在读取 WebDAV diary 目录文件...</span>
+              </div>
+            ) : diaryFiles.length === 0 ? (
+              <div className="py-6 text-center text-textMuted text-xs bg-bgPrimary/30 rounded-xl border border-dashed border-borderColor">
+                <i className="fa-solid fa-folder-open text-2xl text-textMuted/40 mb-2 block"></i>
+                <span>WebDAV `diary` 目录下暂无生成的日记页面</span>
+                <button
+                  onClick={onOpenDiaryExport}
+                  className="mt-2 block mx-auto text-xs text-cyan-400 underline hover:text-cyan-300"
+                >
+                  点击生成全量或选定日期的 HTML 日记
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[320px] overflow-y-auto custom-scrollbar p-1">
+                {diaryFiles.map((file, idx) => (
+                  <div
+                    key={file.name + idx}
+                    className="p-3 bg-bgPrimary/60 border border-borderColor hover:border-cyan-500/50 rounded-xl transition-all flex flex-col justify-between gap-2 shadow-sm group hover:shadow-cyan-500/5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-accentColor/10 border border-accentColor/20 flex items-center justify-center shrink-0">
+                          <i className="fa-solid fa-globe text-accentColor text-xs"></i>
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-semibold text-textPrimary truncate group-hover:text-cyan-400 transition-colors" title={file.name}>
+                            {file.name}
+                          </h4>
+                          <p className="text-[10px] text-textMuted truncate font-mono" title={file.webUrl}>
+                            {file.webUrl}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-textMuted pt-1 border-t border-borderColor/30 font-mono">
+                      <span>{new Date(file.lastModified).toLocaleString()}</span>
+                      <span>{(file.size / 1024).toFixed(1)} KB</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <a
+                        href={file.webUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-1 px-2.5 rounded-lg text-[11px] font-medium bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/25 transition-all text-center flex items-center justify-center gap-1.5"
+                      >
+                        <i className="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                        <span>打开页面</span>
+                      </a>
+                      <button
+                        onClick={() => setPreviewWebUrl(file.webUrl)}
+                        className="py-1 px-2.5 rounded-lg text-[11px] font-medium bg-bgPrimary border border-borderColor text-textSecondary hover:text-textPrimary hover:bg-white/5 transition-all flex items-center gap-1"
+                        title="在框架中快速预览"
+                      >
+                        <i className="fa-solid fa-eye text-[10px]"></i>
+                        <span>预览</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(file.webUrl);
+                          alert('✅ 已复制日记 URL 到剪贴板！');
+                        }}
+                        className="py-1 px-2.5 rounded-lg text-[11px] text-textMuted hover:text-textPrimary bg-bgPrimary border border-borderColor hover:bg-white/5 transition-all"
+                        title="复制 URL 地址"
+                      >
+                        <i className="fa-solid fa-copy text-[10px]"></i>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {currentFolderId && (() => {
           const folderMsg = messages.find(m => m.id === currentFolderId);
           const folderName = folderMsg ? (folderMsg.content || '文件夹') : '文件夹';
@@ -1833,6 +1979,42 @@ export default function ChatArea({
         messages={filteredMessages}
         onSelectDate={handleSelectCalendarDate}
       />
+
+      {/* Diary Web Page Live Preview Modal */}
+      {previewWebUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className="bg-bgSecondary border border-borderColor rounded-2xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-borderColor bg-bgPrimary/60">
+              <div className="flex items-center gap-2 min-w-0">
+                <i className="fa-solid fa-globe text-cyan-400"></i>
+                <span className="text-xs font-mono text-textPrimary truncate max-w-md">{previewWebUrl}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewWebUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1 rounded-lg text-xs bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30 transition-all flex items-center gap-1"
+                >
+                  <i className="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                  <span>新窗口打开</span>
+                </a>
+                <button
+                  onClick={() => setPreviewWebUrl(null)}
+                  className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-bgPrimary text-textMuted hover:text-textPrimary transition-all"
+                >
+                  <i className="fa-solid fa-xmark text-sm"></i>
+                </button>
+              </div>
+            </div>
+            <iframe
+              src={previewWebUrl}
+              className="flex-1 w-full h-full border-none bg-white"
+              title="Diary Preview"
+            />
+          </div>
+        </div>
+      )}
     </main>
   );
 }
