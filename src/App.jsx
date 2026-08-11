@@ -925,34 +925,80 @@ export default function App() {
 
   // --- Manual Message Grouping & Ungrouping Actions ---
   const handleGroupSelected = () => {
-    if (selectedMessageIds.size < 1) return;
-    
-    // Ignore FOLDER type items from being placed inside a contiguous image/file group
-    const nonFolderMsgs = messages.filter(m => selectedMessageIds.has(m.id) && m.type !== 'FOLDER');
-    if (nonFolderMsgs.length < 2) return;
+    if (selectedMessageIds.size < 2) return;
 
-    const existingGroupIds = new Set(
-      nonFolderMsgs
-        .filter(m => m.groupId)
-        .map(m => m.groupId)
-    );
+    const selectedMsgs = messages
+      .filter(m => selectedMessageIds.has(m.id) && !m.isDeleted)
+      .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-    const allTargetIds = new Set();
-    messages.forEach(m => {
-      if (m.type !== 'FOLDER' && (selectedMessageIds.has(m.id) || (m.groupId && existingGroupIds.has(m.groupId)))) {
-        allTargetIds.add(m.id);
-      }
-    });
+    if (selectedMsgs.length < 2) return;
 
-    if (allTargetIds.size < 2) return;
+    const mediaMsgs = selectedMsgs.filter(m => m.type === 'IMAGE' || m.type === 'VIDEO');
+    const nonMediaMsgs = selectedMsgs.filter(m => m.type !== 'IMAGE' && m.type !== 'VIDEO');
 
-    const newGroupId = 'group_' + Date.now();
-    const updated = messages.map(m => {
-      if (allTargetIds.has(m.id)) {
-        return { ...m, groupId: newGroupId, lastModified: Date.now() };
-      }
-      return m;
-    });
+    let updated = [...messages];
+    const now = Date.now();
+
+    // 1. Group IMAGE / VIDEO into grid bubble
+    if (mediaMsgs.length >= 2) {
+      const existingGroupIds = new Set(
+        mediaMsgs.filter(m => m.groupId).map(m => m.groupId)
+      );
+      const allMediaTargetIds = new Set();
+      updated.forEach(m => {
+        if ((m.type === 'IMAGE' || m.type === 'VIDEO') && (selectedMessageIds.has(m.id) || (m.groupId && existingGroupIds.has(m.groupId)))) {
+          allMediaTargetIds.add(m.id);
+        }
+      });
+      const newGroupId = 'group_' + now;
+      updated = updated.map(m => {
+        if (allMediaTargetIds.has(m.id)) {
+          return { ...m, groupId: newGroupId, lastModified: now };
+        }
+        return m;
+      });
+    }
+
+    // 2. Combine all non-media messages into one text message (preserving first sender profile)
+    if (nonMediaMsgs.length >= 2) {
+      const firstMsg = nonMediaMsgs[0];
+      const lines = nonMediaMsgs.map(msg => {
+        if (msg.type === 'TEXT') return msg.content;
+        if (msg.type === 'AUDIO') return `[语音] ${msg.videoDuration || msg.duration || ''}" ${msg.caption || ''}`.trim();
+        if (msg.type === 'FILE') return `[文件] ${msg.content || ''} ${msg.caption || ''}`.trim();
+        if (msg.type === 'LOCATION') return `${msg.content || ''} ${msg.locationAddress || ''}`.trim();
+        if (msg.type === 'FOLDER') return `[文件夹] ${msg.content || ''}`;
+        return msg.content || '';
+      });
+      const mergedText = lines.join('\n');
+      const nonMediaIds = new Set(nonMediaMsgs.map(m => m.id));
+
+      const combinedMsg = {
+        id: 'msg_' + now + Math.random().toString(36).substring(2, 6),
+        sender: firstMsg.sender,
+        senderName: firstMsg.senderName || firstMsg.sender,
+        senderAvatar: firstMsg.senderAvatar || '',
+        content: mergedText,
+        timestamp: firstMsg.timestamp || now,
+        type: 'TEXT',
+        isOutgoing: firstMsg.isOutgoing,
+        status: 'SUCCESS',
+        folderId: firstMsg.folderId || undefined,
+        categories: firstMsg.categories || [],
+        lastModified: now
+      };
+
+      updated = updated.map(m => {
+        if (nonMediaIds.has(m.id)) {
+          return { ...m, isDeleted: true, lastModified: now };
+        }
+        return m;
+      });
+
+      updated.push(combinedMsg);
+      updated.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    }
+
     setMessages(updated);
     setSelectedMessageIds(new Set());
     pushHistoryToCloud(updated);

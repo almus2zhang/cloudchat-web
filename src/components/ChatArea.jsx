@@ -655,6 +655,7 @@ export default function ChatArea({
             id: msg.groupId,
             sender: msg.sender,
             senderName: msg.senderName,
+            senderAvatar: msg.senderAvatar,
             timestamp: msg.timestamp,
             isOutgoing: msg.isOutgoing,
             isGroup: true,
