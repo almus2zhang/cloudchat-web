@@ -199,7 +199,9 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
     if (avatar.startsWith('data:') || avatar.startsWith('https://') || avatar.startsWith('http://')) {
       authorAvatarStr = avatar;
     } else {
-      const syncedAvatarUrl = await syncAssetToDiaryFolder(avatar, 'avatar.jpg', targetAssetsDir, storageClient);
+      // Use the actual timestamped filename so we never reuse a cached old avatar blob
+      const avatarFileName = avatar.split('/').pop().replace(/[\\/:*?"<>|]/g, '_');
+      const syncedAvatarUrl = await syncAssetToDiaryFolder(avatar, avatarFileName, targetAssetsDir, storageClient);
       if (syncedAvatarUrl) authorAvatarStr = syncedAvatarUrl;
     }
   }
