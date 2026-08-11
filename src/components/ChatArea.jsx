@@ -222,6 +222,9 @@ export default function ChatArea({
   useEffect(() => {
     if (activeCategory === 'diary') {
       fetchDiaryFiles();
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = 0;
+      }
     }
   }, [activeCategory, fetchDiaryFiles]);
   const scrollPositionRef = useRef(null);
@@ -1023,6 +1026,22 @@ export default function ChatArea({
                         title="复制 URL 地址"
                       >
                         <i className="fa-solid fa-copy text-[10px]"></i>
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (window.confirm(`确定要从 WebDAV 删除日记页面 "${file.name}" 吗？`)) {
+                            try {
+                              await storageClient.deleteDiaryFile(file.name);
+                              fetchDiaryFiles();
+                            } catch (e) {
+                              alert(`删除失败: ${e.message}`);
+                            }
+                          }
+                        }}
+                        className="py-1 px-2.5 rounded-lg text-[11px] text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all"
+                        title="删除此日记网页"
+                      >
+                        <i className="fa-solid fa-trash-can text-[10px]"></i>
                       </button>
                     </div>
                   </div>

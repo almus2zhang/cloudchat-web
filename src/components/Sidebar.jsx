@@ -33,11 +33,14 @@ export default function Sidebar({
     }
   }, [currentProfile?.avatar, resolveAvatarUrl]);
 
-  // Count diary messages
+  // Count diary messages and folders
   const diaryCount = React.useMemo(() => {
     return messages.filter(msg => {
-      if (!Array.isArray(msg.categories)) return false;
-      return msg.categories.some(cat => cat === 'diary' || cat === '日记');
+      if (msg.isDeleted) return false;
+      let cats = [];
+      if (Array.isArray(msg.categories)) cats = msg.categories;
+      else if (typeof msg.categories === 'string') cats = [msg.categories];
+      return cats.some(c => c === 'diary' || c === '日记');
     }).length;
   }, [messages]);
 
