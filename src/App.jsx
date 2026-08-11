@@ -337,8 +337,8 @@ export default function App() {
         repairedCount++;
       }
 
-      let safeType = msg.type;
-      if (!safeType || safeType === 'TEXT') {
+      let safeType = msg.type ? String(msg.type).toUpperCase() : 'TEXT';
+      if (!msg.type || safeType === 'TEXT') {
         const textContent = msg.content || '';
         if (textContent.startsWith('[位置] ')) {
           safeType = 'LOCATION';

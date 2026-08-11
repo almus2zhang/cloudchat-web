@@ -1123,7 +1123,10 @@ export default function ChatArea({
                   {/* Bubble Content Body */}
                   <div className="relative">
                     {isGroup ? (
-                      item.messages.every(m => m.type === 'IMAGE' || m.type === 'VIDEO') ? (
+                      item.messages.every(m => {
+                        const t = String(m.type || '').toUpperCase();
+                        return t === 'IMAGE' || t === 'VIDEO';
+                      }) ? (
                         /* RENDER GRID GROUP (NINE GRID FOR ALL MEDIA) */
                         <div className="border border-borderColor bg-bgSecondary p-1 rounded-lg overflow-hidden shadow-md max-w-[240px]">
                           <div 
@@ -1165,19 +1168,24 @@ export default function ChatArea({
                         </div>
                       ) : (
                         /* RENDER COMPOSITE GROUP (MIXED / NON-MEDIA CARD) */
-                        <div className="border border-borderColor bg-bgSecondary p-3 rounded-xl shadow-md max-w-[320px] flex flex-col gap-2 font-sans">
+                        <div className={`p-3 rounded-2xl border shadow-sm max-w-[320px] flex flex-col gap-2 font-sans ${
+                          item.isOutgoing
+                            ? 'bg-accentColor/10 border-accentColor/40 text-textPrimary rounded-tr-none'
+                            : 'bg-bgSecondary border-borderColor text-textPrimary rounded-tl-none'
+                        }`}>
                           {item.messages.map((msg, idx) => {
+                            const msgType = String(msg.type || '').toUpperCase();
                             return (
                               <div key={msg.id} className={`flex flex-col gap-1 ${idx > 0 ? 'pt-2 border-t border-borderColor/40' : ''}`}>
-                                {msg.type === 'TEXT' && (
+                                {(msgType === 'TEXT' || !msgType) && (
                                   <span className="text-sm whitespace-pre-wrap break-words text-textPrimary leading-relaxed">{msg.content}</span>
                                 )}
-                                {msg.type === 'AUDIO' && (() => {
+                                {msgType === 'AUDIO' && (() => {
                                   const loadedDur = audioProgress[msg.id]?.duration;
                                   const fallbackDur = getDurationFromMsg(msg);
                                   const totalDuration = (loadedDur && !isNaN(loadedDur) && isFinite(loadedDur) && loadedDur > 0) ? loadedDur : fallbackDur;
                                   return (
-                                    <div className="flex items-center gap-2 text-xs">
+                                    <div className="flex items-center gap-2 text-xs my-0.5">
                                       <audio 
                                         ref={el => audioRefs.current[msg.id] = el}
                                         src={msg.url}
@@ -1188,18 +1196,18 @@ export default function ChatArea({
                                       />
                                       <button 
                                         onClick={(e) => { e.stopPropagation(); handleToggleAudio(msg.id); }}
-                                        className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm hover:opacity-90 cursor-pointer"
+                                        className="px-3 py-1.5 rounded-full bg-emerald-500 text-white flex items-center gap-1.5 shrink-0 shadow-sm hover:opacity-90 cursor-pointer font-semibold"
                                       >
                                         <i className={`fa-solid ${audioPlayingId === msg.id ? 'fa-pause text-xs' : 'fa-play text-xs'}`}></i>
+                                        <span>{totalDuration ? `${Math.round(totalDuration)}s` : '语音'}</span>
                                       </button>
-                                      <span className="font-mono text-emerald-400 font-semibold">{totalDuration ? `${Math.round(totalDuration)}s` : '语音'}</span>
                                       {msg.caption && <span className="text-[11px] text-textMuted ml-1 truncate">{msg.caption}</span>}
                                     </div>
                                   );
                                 })()}
-                                {msg.type === 'FILE' && (
-                                  <div className="flex items-center gap-2 p-1.5 rounded-lg bg-bgPrimary/50 border border-borderColor/40 text-xs">
-                                    <i className="fa-solid fa-file-arrow-down text-cyan-400 text-sm shrink-0"></i>
+                                {msgType === 'FILE' && (
+                                  <div className="flex items-center gap-2 p-2 rounded-xl bg-bgPrimary/60 border border-borderColor/40 text-xs">
+                                    <i className="fa-solid fa-file-arrow-down text-cyan-400 text-base shrink-0"></i>
                                     <div className="min-w-0 flex-1">
                                       <span className="font-semibold block truncate">{msg.content.replace(/^\d+_/, '')}</span>
                                       <span className="text-[10px] text-textMuted block">{msg.fileSize ? formatSize(msg.fileSize) : ''}</span>
@@ -1213,12 +1221,12 @@ export default function ChatArea({
                                     </button>
                                   </div>
                                 )}
-                                {(msg.type === 'IMAGE' || msg.type === 'VIDEO') && (
-                                  <div className="rounded-lg overflow-hidden max-h-40 bg-black/10 border border-borderColor/40 cursor-pointer" onClick={() => handleOpenMediaViewer(msg.id)}>
-                                    {msg.type === 'IMAGE' ? (
-                                      <img src={msg.url} alt="Group media" className="w-full h-full object-cover max-h-40" />
+                                {(msgType === 'IMAGE' || msgType === 'VIDEO') && (
+                                  <div className="rounded-xl overflow-hidden max-h-48 bg-black/10 border border-borderColor/40 cursor-pointer" onClick={() => handleOpenMediaViewer(msg.id)}>
+                                    {msgType === 'IMAGE' ? (
+                                      <img src={msg.url} alt="Group media" className="w-full h-full object-cover max-h-48" />
                                     ) : (
-                                      <video src={msg.url} className="w-full h-full object-cover max-h-40" />
+                                      <video src={msg.url} className="w-full h-full object-cover max-h-48" />
                                     )}
                                   </div>
                                 )}
