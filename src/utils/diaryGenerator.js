@@ -254,6 +254,30 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
     await Promise.all(batch.map(msg => processMediaItem(msg)));
   }
 
+  // 4b. Pre-resolve all unique senderAvatar values in messages
+  const avatarUrlMap = {};
+  const uniqueAvatars = new Set(sortedMsgs.map(m => m.senderAvatar).filter(Boolean));
+  await Promise.all([...uniqueAvatars].map(async (av) => {
+    if (av.startsWith('data:') || av.startsWith('https://') || av.startsWith('http://')) {
+      avatarUrlMap[av] = av;
+    } else if (isSingleFile) {
+      const senderName = sortedMsgs.find(m => m.senderAvatar === av)?.senderName || authorStr;
+      const resolved = await getBase64AvatarUrl(av, senderName, storageClient);
+      if (resolved) avatarUrlMap[av] = resolved;
+    } else {
+      // In relative/folder mode: sync avatar file to assets dir with unique filename
+      const cleanAvatarName = av.split('/').pop().replace(/[\\/:*?"<>|]/g, '_');
+      const synced = await syncAssetToDiaryFolder(av, cleanAvatarName, targetAssetsDir, storageClient);
+      if (synced) avatarUrlMap[av] = synced;
+    }
+  }));
+
+  // Helper to get per-message avatar URL, falling back to authorAvatarStr
+  const resolveItemAvatar = (item) => {
+    if (item.senderAvatar && avatarUrlMap[item.senderAvatar]) return avatarUrlMap[item.senderAvatar];
+    return authorAvatarStr;
+  };
+
   // Helper to resolve media URL for template renderers
   const resolveMediaUrl = (msg) => {
     if (!msg) return '';
@@ -394,9 +418,10 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
         }
       }
 
+      const itemAvatarSrc = resolveItemAvatar(item);
       return `
         <div class="wechat-item">
-          <img src="${authorAvatarStr}" class="wechat-avatar" alt="Avatar"/>
+          <img src="${itemAvatarSrc}" class="wechat-avatar" alt="Avatar"/>
           <div class="wechat-body">
             <div class="wechat-nickname">${escapeHtml(item.senderName || item.sender || authorStr)}</div>
             ${contentBlock}
