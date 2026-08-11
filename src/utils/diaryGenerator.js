@@ -306,35 +306,96 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
     return { full: `${y}-${m}-${day} ${h}:${min}`, date: `${y}-${m}-${day}`, time: `${h}:${min}`, year: y, monthDay: `${m}月${day}日` };
   };
 
-  // Group contiguous messages sharing the same groupId
+  // Group all messages sharing the same groupId for diary export
   const groupMessagesForDiary = (msgs) => {
+    const emitted = new Set();
     const result = [];
-    const groupMap = {};
 
-    msgs.forEach(msg => {
-      if (msg.groupId && msg.type !== 'TEXT' && msg.type !== 'FOLDER') {
-        if (!groupMap[msg.groupId]) {
-          groupMap[msg.groupId] = {
-            id: msg.groupId,
-            sender: msg.sender,
-            senderName: msg.senderName,
-            timestamp: msg.timestamp,
+    for (let i = 0; i < msgs.length; i++) {
+      const msg = msgs[i];
+      if (emitted.has(msg.id)) continue;
+
+      const gid = (msg.groupId !== undefined && msg.groupId !== null && String(msg.groupId).trim() !== '') ? String(msg.groupId).trim() : null;
+      if (gid) {
+        const groupMembers = msgs.filter(m => {
+          const mGid = (m.groupId !== undefined && m.groupId !== null && String(m.groupId).trim() !== '') ? String(m.groupId).trim() : null;
+          return mGid === gid;
+        });
+
+        groupMembers.forEach(m => emitted.add(m.id));
+
+        if (groupMembers.length > 1) {
+          result.push({
+            id: gid,
+            sender: groupMembers[0].sender,
+            senderName: groupMembers[0].senderName,
+            timestamp: groupMembers[0].timestamp,
             isGroup: true,
-            groupId: msg.groupId,
-            messages: []
-          };
-          result.push(groupMap[msg.groupId]);
+            groupId: gid,
+            messages: groupMembers
+          });
+        } else {
+          result.push({ ...msg, isGroup: false });
         }
-        groupMap[msg.groupId].messages.push(msg);
       } else {
         result.push({ ...msg, isGroup: false });
+        emitted.add(msg.id);
       }
-    });
+    }
 
     return result;
   };
 
   const groupedItems = groupMessagesForDiary(sortedMsgs);
+
+  // Helper to render single subitem content in diary
+  const renderSingleSubitem = (subMsg) => {
+    const isText = subMsg.type === 'TEXT' || (!subMsg.type && subMsg.content);
+    const isImage = subMsg.type === 'IMAGE';
+    const isVideo = subMsg.type === 'VIDEO';
+    const isAudio = subMsg.type === 'AUDIO';
+    const isLocation = subMsg.type === 'LOCATION' || (subMsg.content && subMsg.content.startsWith('[位置]'));
+    const isFile = subMsg.type === 'FILE';
+    const mediaUrl = resolveMediaUrl(subMsg);
+
+    if (isLocation) {
+      const addr = subMsg.locationAddress || subMsg.content.replace(/^\[位置\]\s*/, '');
+      return `
+        <div class="wechat-location-badge" style="margin: 4px 0;">
+          <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+          <span>${escapeHtml(addr)}</span>
+        </div>`;
+    } else if (isText) {
+      return `<div class="wechat-text-content" style="margin: 4px 0;">${escapeHtml(subMsg.content)}</div>`;
+    } else if (isImage) {
+      return `
+        <div class="wechat-media-box" style="margin: 4px 0;">
+          <img src="${mediaUrl}" class="wechat-single-img" alt="${escapeHtml(subMsg.caption || '')}" loading="lazy" onclick="openLightbox(this.src)"/>
+          ${subMsg.caption ? `<div class="wechat-caption-sub"><div class="caption-item">${escapeHtml(subMsg.caption)}</div></div>` : ''}
+        </div>`;
+    } else if (isVideo) {
+      return `
+        <div class="wechat-media-box" style="margin: 4px 0;">
+          <video src="${mediaUrl}" controls class="wechat-video-player"></video>
+          ${subMsg.caption ? `<div class="wechat-caption-sub"><div class="caption-item">${escapeHtml(subMsg.caption)}</div></div>` : ''}
+        </div>`;
+    } else if (isAudio) {
+      return `
+        <div class="wechat-audio-box" style="margin: 4px 0;">
+          <audio src="${mediaUrl}" controls class="wechat-audio-player"></audio>
+        </div>`;
+    } else if (isFile) {
+      return `
+        <div class="wechat-file-box" style="margin: 4px 0;">
+          <svg class="file-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+          <div class="file-info">
+            <a href="${mediaUrl}" target="_blank" download="${escapeHtml(subMsg.content)}" class="file-name">${escapeHtml(subMsg.content)}</a>
+            <span class="file-size">${formatBytes(subMsg.fileSize || 0)}</span>
+          </div>
+        </div>`;
+    }
+    return `<div class="wechat-text-content" style="margin: 4px 0;">${escapeHtml(subMsg.content || '')}</div>`;
+  };
 
   // Render WeChat Moments Feed Item
   const renderWeChatMoments = () => {
@@ -343,81 +404,50 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
       let contentBlock = '';
 
       if (item.isGroup) {
-        // Grouped Grid (2-9 items)
         const subMsgs = item.messages;
-        const count = subMsgs.length;
-        const gridClass = `grid-count-${Math.min(count, 9)}`;
+        const isAllMedia = subMsgs.every(m => m.type === 'IMAGE' || m.type === 'VIDEO');
 
-        const imgsHtml = subMsgs.map(subMsg => {
-          const mUrl = resolveMediaUrl(subMsg);
-          if (subMsg.type === 'VIDEO') {
-            return `<video src="${mUrl}" controls class="wechat-grid-img"></video>`;
-          }
-          return `<img src="${mUrl}" class="wechat-grid-img" alt="${escapeHtml(subMsg.caption || '')}" loading="lazy" onclick="openLightbox(this.src)"/>`;
-        }).join('');
+        if (isAllMedia) {
+          // Pure media Grid (2-9 items)
+          const count = subMsgs.length;
+          const gridClass = `grid-count-${Math.min(count, 9)}`;
 
-        // Extract captions & EXIF location notes from all grouped items
-        const captions = subMsgs
-          .map(sub => sub.caption || (sub.locationAddress ? sub.locationAddress : ''))
-          .filter(Boolean);
+          const imgsHtml = subMsgs.map(subMsg => {
+            const mUrl = resolveMediaUrl(subMsg);
+            if (subMsg.type === 'VIDEO') {
+              return `<video src="${mUrl}" controls class="wechat-grid-img"></video>`;
+            }
+            return `<img src="${mUrl}" class="wechat-grid-img" alt="${escapeHtml(subMsg.caption || '')}" loading="lazy" onclick="openLightbox(this.src)"/>`;
+          }).join('');
 
-        contentBlock = `
-          <div class="wechat-grid-container ${gridClass}">
-            ${imgsHtml}
-          </div>
-          ${captions.length > 0 ? `
-            <div class="wechat-caption-sub">
-              ${captions.map(c => `<div class="caption-item">${escapeHtml(c)}</div>`).join('')}
+          const captions = subMsgs
+            .map(sub => sub.caption || (sub.locationAddress ? sub.locationAddress : ''))
+            .filter(Boolean);
+
+          contentBlock = `
+            <div class="wechat-grid-container ${gridClass}">
+              ${imgsHtml}
             </div>
-          ` : ''}
-        `;
+            ${captions.length > 0 ? `
+              <div class="wechat-caption-sub">
+                ${captions.map(c => `<div class="caption-item">${escapeHtml(c)}</div>`).join('')}
+              </div>
+            ` : ''}
+          `;
+        } else {
+          // Composite Mixed Merged Group Card
+          contentBlock = `
+            <div class="wechat-composite-group" style="background:#ffffff; border:1px solid #e2e2e2; border-radius:12px; padding:12px; margin:4px 0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+              ${subMsgs.map((sub, idx) => `
+                ${idx > 0 ? '<div style="border-top:1px solid #eeeeee; margin:8px 0;"></div>' : ''}
+                ${renderSingleSubitem(sub)}
+              `).join('')}
+            </div>
+          `;
+        }
       } else {
         // Single Item
-        const msg = item;
-        const isText = msg.type === 'TEXT';
-        const isImage = msg.type === 'IMAGE';
-        const isVideo = msg.type === 'VIDEO';
-        const isAudio = msg.type === 'AUDIO';
-        const isLocation = msg.type === 'LOCATION' || (msg.content && msg.content.startsWith('[位置]'));
-        const isFile = msg.type === 'FILE';
-        const mediaUrl = resolveMediaUrl(msg);
-
-        if (isLocation) {
-          const addr = msg.locationAddress || msg.content.replace(/^\[位置\]\s*/, '');
-          contentBlock = `
-            <div class="wechat-location-badge">
-              <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-              <span>${escapeHtml(addr)}</span>
-            </div>`;
-        } else if (isText) {
-          contentBlock = `<div class="wechat-text-content">${escapeHtml(msg.content)}</div>`;
-        } else if (isImage) {
-          contentBlock = `
-            <div class="wechat-media-box">
-              <img src="${mediaUrl}" class="wechat-single-img" alt="${escapeHtml(msg.caption || '')}" loading="lazy" onclick="openLightbox(this.src)"/>
-              ${msg.caption ? `<div class="wechat-caption-sub"><div class="caption-item">${escapeHtml(msg.caption)}</div></div>` : ''}
-            </div>`;
-        } else if (isVideo) {
-          contentBlock = `
-            <div class="wechat-media-box">
-              <video src="${mediaUrl}" controls class="wechat-video-player"></video>
-              ${msg.caption ? `<div class="wechat-caption-sub"><div class="caption-item">${escapeHtml(msg.caption)}</div></div>` : ''}
-            </div>`;
-        } else if (isAudio) {
-          contentBlock = `
-            <div class="wechat-audio-box">
-              <audio src="${mediaUrl}" controls class="wechat-audio-player"></audio>
-            </div>`;
-        } else if (isFile) {
-          contentBlock = `
-            <div class="wechat-file-box">
-              <svg class="file-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-              <div class="file-info">
-                <a href="${mediaUrl}" target="_blank" download="${escapeHtml(msg.content)}" class="file-name">${escapeHtml(msg.content)}</a>
-                <span class="file-size">${formatBytes(msg.fileSize || 0)}</span>
-              </div>
-            </div>`;
-        }
+        contentBlock = renderSingleSubitem(item);
       }
 
       const itemAvatarSrc = resolveItemAvatar(item);
@@ -448,34 +478,57 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
       
       if (item.isGroup) {
         const subMsgs = item.messages;
-        const imgsHtml = subMsgs.map(subMsg => {
-          const mUrl = resolveMediaUrl(subMsg);
-          return `<img src="${mUrl}" class="card-grid-img" alt="${escapeHtml(subMsg.caption || '')}" loading="lazy" onclick="openLightbox(this.src)"/>`;
-        }).join('');
+        const isAllMedia = subMsgs.every(m => m.type === 'IMAGE' || m.type === 'VIDEO');
 
-        const captions = subMsgs
-          .map(sub => sub.caption || (sub.locationAddress ? sub.locationAddress : ''))
-          .filter(Boolean);
+        if (isAllMedia) {
+          const imgsHtml = subMsgs.map(subMsg => {
+            const mUrl = resolveMediaUrl(subMsg);
+            return `<img src="${mUrl}" class="card-grid-img" alt="${escapeHtml(subMsg.caption || '')}" loading="lazy" onclick="openLightbox(this.src)"/>`;
+          }).join('');
 
-        return `
-          <div class="timeline-node">
-            <div class="timeline-dot"></div>
-            <div class="timeline-content-card">
-              <div class="card-header">
-                <span class="card-date">${dateInfo.full}</span>
-                <span class="location-badge">📷 图片组 (${subMsgs.length}张)</span>
-              </div>
-              <div class="card-grid-wrap grid-count-${Math.min(subMsgs.length, 9)}">
-                ${imgsHtml}
-              </div>
-              ${captions.length > 0 ? `
-                <div class="card-captions">
-                  ${captions.map(c => `<div class="caption-item">${escapeHtml(c)}</div>`).join('')}
+          const captions = subMsgs
+            .map(sub => sub.caption || (sub.locationAddress ? sub.locationAddress : ''))
+            .filter(Boolean);
+
+          return `
+            <div class="timeline-node">
+              <div class="timeline-dot"></div>
+              <div class="timeline-content-card">
+                <div class="card-header">
+                  <span class="card-date">${dateInfo.full}</span>
+                  <span class="location-badge">📷 图片组 (${subMsgs.length}张)</span>
                 </div>
-              ` : ''}
+                <div class="card-grid-wrap grid-count-${Math.min(subMsgs.length, 9)}">
+                  ${imgsHtml}
+                </div>
+                ${captions.length > 0 ? `
+                  <div class="card-captions">
+                    ${captions.map(c => `<div class="caption-item">${escapeHtml(c)}</div>`).join('')}
+                  </div>
+                ` : ''}
+              </div>
             </div>
-          </div>
-        `;
+          `;
+        } else {
+          // Composite Mixed Group
+          return `
+            <div class="timeline-node">
+              <div class="timeline-dot"></div>
+              <div class="timeline-content-card" style="background:#ffffff; border:1px solid #e2e2e2; border-radius:12px; padding:12px;">
+                <div class="card-header">
+                  <span class="card-date">${dateInfo.full}</span>
+                  <span class="location-badge">📦 合并条目 (${subMsgs.length}条)</span>
+                </div>
+                <div style="margin-top:8px;">
+                  ${subMsgs.map((sub, idx) => `
+                    ${idx > 0 ? '<div style="border-top:1px solid #eeeeee; margin:8px 0;"></div>' : ''}
+                    ${renderSingleSubitem(sub)}
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          `;
+        }
       }
 
       const msg = item;
