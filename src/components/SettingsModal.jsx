@@ -55,7 +55,7 @@ export default function SettingsModal({
     } else {
       handleInitNewProfile();
     }
-  }, [isOpen, profiles, activeProfileId]);
+  }, [isOpen, activeProfileId]);
 
   useEffect(() => {
     if (!editingProfile?.avatar) {

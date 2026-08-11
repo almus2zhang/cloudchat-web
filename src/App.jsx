@@ -525,11 +525,15 @@ export default function App() {
   };
 
   const pushHistoryToCloud = async (overrideMsgs) => {
-    if (!currentProfile || !activeClientRef.current) return;
+    const profile = currentProfileRef.current || currentProfile;
+    if (!profile || !activeClientRef.current) return;
     const client = activeClientRef.current;
 
-    const targetList = overrideMsgs || messages;
-    cacheFile(`history_array_${currentProfile.id}`, targetList);
+    const rawList = overrideMsgs || messages;
+    const targetList = rawList.filter(m => m.status === 'SUCCESS');
+    if (targetList.length === 0) return;
+
+    cacheFile(`history_array_${profile.id}`, targetList);
 
     try {
       const shards = {};
@@ -742,15 +746,11 @@ export default function App() {
             return next;
           });
           
-          let updatedList = [];
           setMessages(prev => {
-            updatedList = prev.map(m => m.id === newMsg.id ? { ...m, status: 'SUCCESS' } : m);
-            return updatedList;
+            const list = prev.map(m => m.id === newMsg.id ? { ...m, status: 'SUCCESS' } : m);
+            pushHistoryToCloud(list);
+            return list;
           });
-          
-          setTimeout(() => {
-            if (updatedList.length > 0) pushHistoryToCloud(updatedList);
-          }, 0);
           
         } catch (e) {
           console.error(e);
@@ -809,7 +809,7 @@ export default function App() {
       if (msg.type === 'TEXT' || !fileName) {
         setMessages(prev => {
           const list = prev.map(m => m.id === messageId ? { ...m, status: 'SUCCESS', lastModified: Date.now() } : m);
-          setTimeout(() => pushHistoryToCloud(list), 0);
+          pushHistoryToCloud(list);
           return list;
         });
         return;
@@ -826,7 +826,7 @@ export default function App() {
         console.log(`[Retry] File ${fileName} already exists on server (${remoteSize} bytes), marking SUCCESS`);
         setMessages(prev => {
           const list = prev.map(m => m.id === messageId ? { ...m, status: 'SUCCESS', lastModified: Date.now() } : m);
-          setTimeout(() => pushHistoryToCloud(list), 0);
+          pushHistoryToCloud(list);
           return list;
         });
         return;
@@ -847,7 +847,7 @@ export default function App() {
 
       setMessages(prev => {
         const list = prev.map(m => m.id === messageId ? { ...m, status: 'SUCCESS', lastModified: Date.now() } : m);
-        setTimeout(() => pushHistoryToCloud(list), 0);
+        pushHistoryToCloud(list);
         return list;
       });
     } catch (e) {
