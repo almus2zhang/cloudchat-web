@@ -573,6 +573,31 @@ export default function ChatArea({
     }));
   };
 
+  const handleLoadedAudioMetadata = (msgId, e) => {
+    const audio = e.target;
+    if (audio && audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+      setAudioProgress(prev => ({
+        ...prev,
+        [msgId]: { 
+          progress: prev[msgId]?.progress || 0, 
+          duration: audio.duration, 
+          currentTime: prev[msgId]?.currentTime || 0 
+        }
+      }));
+    }
+  };
+
+  const getDurationFromMsg = (msg) => {
+    if (msg.duration && !isNaN(msg.duration)) return msg.duration;
+    if (msg.videoDuration && !isNaN(msg.videoDuration)) return msg.videoDuration;
+    if (msg.audioDuration && !isNaN(msg.audioDuration)) return msg.audioDuration;
+    if (msg.content) {
+      const match = msg.content.match(/(\d+)\s*(?:秒|s|"|'|”)/);
+      if (match) return parseInt(match[1], 10);
+    }
+    return 0;
+  };
+
   const handleAudioSeek = (msgId, e) => {
     const audio = audioRefs.current[msgId];
     if (!audio) return;
@@ -582,7 +607,7 @@ export default function ChatArea({
   };
 
   const formatAudioTime = (seconds) => {
-    if (isNaN(seconds)) return '0:00';
+    if (isNaN(seconds) || seconds <= 0) return '0:00';
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
@@ -1036,43 +1061,56 @@ export default function ChatArea({
                           </div>
                         )}
 
-                        {item.type === 'AUDIO' && (
-                          /* Audio Player Card */
-                          <div className="flex items-center gap-3.5 min-w-[200px] font-sans">
-                            <audio 
-                              ref={el => audioRefs.current[item.id] = el}
-                              src={item.url}
-                              onTimeUpdate={() => handleAudioTimeUpdate(item.id)}
-                              onEnded={() => setAudioPlayingId(null)}
-                            />
-                            <button 
-                              onClick={() => handleToggleAudio(item.id)}
-                              className={`w-9 h-9 rounded-full flex items-center justify-center text-sm transition-all shrink-0 ${
-                                item.isOutgoing 
-                                  ? 'bg-white text-accentColor' 
-                                  : 'bg-accentColor text-white'
-                              }`}
-                            >
-                              <i className={`fa-solid ${audioPlayingId === item.id ? 'fa-pause' : 'fa-play'}`}></i>
-                            </button>
-                            <div className="flex-1 flex flex-col gap-1.5">
-                              <div 
-                                className="h-1.5 bg-black/20 hover:bg-black/35 rounded-full overflow-hidden cursor-pointer relative"
-                                onClick={(e) => handleAudioSeek(item.id, e)}
+                        {item.type === 'AUDIO' && (() => {
+                          const loadedDur = audioProgress[item.id]?.duration;
+                          const fallbackDur = getDurationFromMsg(item);
+                          const totalDuration = (loadedDur && !isNaN(loadedDur) && isFinite(loadedDur) && loadedDur > 0) 
+                            ? loadedDur 
+                            : fallbackDur;
+                          const currentAudioTime = audioProgress[item.id]?.currentTime || 0;
+
+                          return (
+                            /* Audio Player Card */
+                            <div className="flex items-center gap-3.5 min-w-[210px] font-sans">
+                              <audio 
+                                ref={el => audioRefs.current[item.id] = el}
+                                src={item.url}
+                                onLoadedMetadata={(e) => handleLoadedAudioMetadata(item.id, e)}
+                                onLoadedData={(e) => handleLoadedAudioMetadata(item.id, e)}
+                                onTimeUpdate={() => handleAudioTimeUpdate(item.id)}
+                                onEnded={() => setAudioPlayingId(null)}
+                                preload="metadata"
+                              />
+                              <button 
+                                onClick={() => handleToggleAudio(item.id)}
+                                className={`w-9 h-9 rounded-full flex items-center justify-center text-sm transition-all shrink-0 ${
+                                  item.isOutgoing 
+                                    ? 'bg-white text-accentColor shadow-sm' 
+                                    : 'bg-accentColor text-white shadow-sm'
+                                }`}
                               >
+                                <i className={`fa-solid ${audioPlayingId === item.id ? 'fa-pause' : 'fa-play'}`}></i>
+                              </button>
+                              <div className="flex-1 flex flex-col gap-1.5 min-w-[120px]">
                                 <div 
-                                  className={`h-full ${item.isOutgoing ? 'bg-white' : 'bg-accentColor'}`}
-                                  style={{ width: `${audioProgress[item.id]?.progress || 0}%` }}
-                                />
+                                  className="h-2 bg-black/20 hover:bg-black/35 rounded-full overflow-hidden cursor-pointer relative"
+                                  onClick={(e) => handleAudioSeek(item.id, e)}
+                                >
+                                  <div 
+                                    className={`h-full transition-all ${item.isOutgoing ? 'bg-white' : 'bg-accentColor'}`}
+                                    style={{ width: `${audioProgress[item.id]?.progress || 0}%` }}
+                                  />
+                                </div>
+                                <div className={`flex items-center justify-between text-[10px] font-mono leading-none ${
+                                  item.isOutgoing ? 'text-white/80' : 'text-textSecondary'
+                                }`}>
+                                  <span>{formatAudioTime(currentAudioTime)}</span>
+                                  <span className="font-semibold">{formatAudioTime(totalDuration)}</span>
+                                </div>
                               </div>
-                              <span className={`text-[10px] font-mono leading-none ${
-                                item.isOutgoing ? 'text-white/80' : 'text-textSecondary'
-                              }`}>
-                                {formatAudioTime(audioProgress[item.id]?.currentTime || 0)} / {formatAudioTime(audioProgress[item.id]?.duration || 0)}
-                              </span>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
 
                         {item.type === 'FILE' && (
                           /* File card (APK, PDF, ZIP, etc.) */
