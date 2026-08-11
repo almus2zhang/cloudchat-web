@@ -792,6 +792,74 @@ export default function App() {
     }
   };
 
+  const handleRetryMessage = async (messageId) => {
+    if (!currentProfile || !activeClientRef.current) return;
+    const client = activeClientRef.current;
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg) return;
+
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status: 'SENDING' } : m));
+
+    const cachedFile = fileCacheRef.current ? fileCacheRef.current.get(messageId) : null;
+    const fileName = msg.content;
+    const fileSize = cachedFile ? cachedFile.size : (msg.fileSize || 0);
+
+    try {
+      if (msg.type === 'TEXT' || !fileName) {
+        setMessages(prev => {
+          const list = prev.map(m => m.id === messageId ? { ...m, status: 'SUCCESS', lastModified: Date.now() } : m);
+          setTimeout(() => pushHistoryToCloud(list), 0);
+          return list;
+        });
+        return;
+      }
+
+      let remoteSize = -1;
+      try {
+        if (client.getFileSize) {
+          remoteSize = await client.getFileSize(fileName);
+        }
+      } catch (e) {}
+
+      if (fileSize > 0 && remoteSize === fileSize) {
+        console.log(`[Retry] File ${fileName} already exists on server (${remoteSize} bytes), marking SUCCESS`);
+        setMessages(prev => {
+          const list = prev.map(m => m.id === messageId ? { ...m, status: 'SUCCESS', lastModified: Date.now() } : m);
+          setTimeout(() => pushHistoryToCloud(list), 0);
+          return list;
+        });
+        return;
+      }
+
+      if (cachedFile) {
+        const updateProgress = (overall) => {
+          setActiveUploads(prev => ({ ...prev, [messageId]: overall }));
+        };
+        await client.uploadFile(cachedFile, fileName, cachedFile.type || 'application/octet-stream', updateProgress);
+      }
+
+      setActiveUploads(prev => {
+        const next = { ...prev };
+        delete next[messageId];
+        return next;
+      });
+
+      setMessages(prev => {
+        const list = prev.map(m => m.id === messageId ? { ...m, status: 'SUCCESS', lastModified: Date.now() } : m);
+        setTimeout(() => pushHistoryToCloud(list), 0);
+        return list;
+      });
+    } catch (e) {
+      console.error('[Retry failed]', e);
+      setActiveUploads(prev => {
+        const next = { ...prev };
+        delete next[messageId];
+        return next;
+      });
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status: 'FAILED' } : m));
+    }
+  };
+
   // --- Deletion and Category modifications ---
   const handleToggleMessageSelection = (msgIdOrIds) => {
     setSelectedMessageIds(prev => {
