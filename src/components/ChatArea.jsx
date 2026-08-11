@@ -1191,27 +1191,31 @@ export default function ChatArea({
                         </div>
                       ) : (
                         /* RENDER COMPOSITE GROUP (MIXED / NON-MEDIA CARD) */
-                        <div className="p-3.5 rounded-2xl border border-black/10 bg-white text-textPrimary shadow-sm max-w-[300px] flex flex-col gap-2 font-sans">
+                        <div className={`p-3.5 rounded-2xl border shadow-sm max-w-[300px] flex flex-col gap-2 font-sans ${
+                          item.isOutgoing
+                            ? 'bg-accentColor border-accentColor/40 text-white rounded-tr-none'
+                            : 'bg-bgSecondary border-borderColor text-textPrimary rounded-tl-none'
+                        }`}>
                           {item.messages.map((msg, idx) => {
                             const msgType = String(msg.type || '').toUpperCase();
                             const isTextOrUnknown = msgType === 'TEXT' || msgType === '' || !['AUDIO', 'FILE', 'IMAGE', 'VIDEO', 'LOCATION', 'FOLDER'].includes(msgType);
                             return (
-                              <div key={msg.id || idx} className={`flex flex-col gap-1 ${idx > 0 ? 'pt-2.5 border-t border-black/10' : ''}`}>
+                              <div key={msg.id || idx} className={`flex flex-col gap-1 ${idx > 0 ? (item.isOutgoing ? 'pt-2.5 border-t border-white/20' : 'pt-2.5 border-t border-borderColor/40') : ''}`}>
                                 {isTextOrUnknown && (
-                                  <span className="text-[14.5px] whitespace-pre-wrap break-words text-[#222222] leading-relaxed select-text font-normal">
+                                  <span className={`text-[14.5px] whitespace-pre-wrap break-words leading-relaxed select-text font-normal ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}>
                                     {msg.content || (typeof msg === 'string' ? msg : '')}
                                   </span>
                                 )}
                                 {msgType === 'LOCATION' && (
-                                  <div className="flex items-center gap-1.5 text-xs text-textSecondary py-0.5">
-                                    <i className="fa-solid fa-location-dot text-red-500 text-sm shrink-0"></i>
+                                  <div className={`flex items-center gap-1.5 text-xs py-0.5 ${item.isOutgoing ? 'text-white/90' : 'text-textSecondary'}`}>
+                                    <i className={`fa-solid fa-location-dot text-sm shrink-0 ${item.isOutgoing ? 'text-white' : 'text-red-500'}`}></i>
                                     <span className="break-words font-medium">{msg.content}</span>
                                   </div>
                                 )}
                                 {msgType === 'FOLDER' && (
-                                  <div className="flex items-center gap-2 p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-xs">
-                                    <i className="fa-solid fa-folder text-cyan-500 text-base shrink-0"></i>
-                                    <span className="font-semibold block truncate text-textPrimary">{msg.content || '文件夹'}</span>
+                                  <div className={`flex items-center gap-2 p-2 rounded-xl border text-xs ${item.isOutgoing ? 'bg-white/10 border-white/20' : 'bg-cyan-500/10 border-cyan-500/20'}`}>
+                                    <i className={`fa-solid fa-folder text-base shrink-0 ${item.isOutgoing ? 'text-white' : 'text-cyan-500'}`}></i>
+                                    <span className={`font-semibold block truncate ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}>{msg.content || '文件夹'}</span>
                                   </div>
                                 )}
                                 {msgType === 'AUDIO' && (() => {
@@ -1230,25 +1234,29 @@ export default function ChatArea({
                                       />
                                       <button 
                                         onClick={(e) => { e.stopPropagation(); handleToggleAudio(msg.id); }}
-                                        className="px-3.5 py-1.5 rounded-full bg-[#07C160] text-white flex items-center gap-1.5 shrink-0 shadow-sm hover:opacity-90 cursor-pointer font-medium text-xs"
+                                        className={`px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shrink-0 shadow-sm hover:opacity-90 cursor-pointer font-medium text-xs ${
+                                          item.isOutgoing ? 'bg-white text-accentColor' : 'bg-[#07C160] text-white'
+                                        }`}
                                       >
                                         <i className={`fa-solid ${audioPlayingId === msg.id ? 'fa-pause text-xs' : 'fa-play text-xs'}`}></i>
                                         <span>{totalDuration ? `${Math.round(totalDuration)}s` : '语音'}</span>
                                       </button>
-                                      {msg.caption && <span className="text-[11px] text-textMuted ml-1 truncate">{msg.caption}</span>}
+                                      {msg.caption && <span className={`text-[11px] ml-1 truncate ${item.isOutgoing ? 'text-white/80' : 'text-textMuted'}`}>{msg.caption}</span>}
                                     </div>
                                   );
                                 })()}
                                 {msgType === 'FILE' && (
-                                  <div className="flex items-center gap-2 p-2 rounded-xl bg-bgPrimary/60 border border-borderColor/40 text-xs">
-                                    <i className="fa-solid fa-file-arrow-down text-cyan-400 text-base shrink-0"></i>
+                                  <div className={`flex items-center gap-2 p-2 rounded-xl border text-xs ${item.isOutgoing ? 'bg-white/10 border-white/20' : 'bg-bgPrimary/60 border-borderColor/40'}`}>
+                                    <i className={`fa-solid fa-file-arrow-down text-base shrink-0 ${item.isOutgoing ? 'text-white' : 'text-cyan-400'}`}></i>
                                     <div className="min-w-0 flex-1">
-                                      <span className="font-semibold block truncate">{msg.content.replace(/^\d+_/, '')}</span>
-                                      <span className="text-[10px] text-textMuted block">{msg.fileSize ? formatSize(msg.fileSize) : ''}</span>
+                                      <span className={`font-semibold block truncate ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}>{msg.content.replace(/^\d+_/, '')}</span>
+                                      <span className={`text-[10px] block ${item.isOutgoing ? 'text-white/80' : 'text-textMuted'}`}>{msg.fileSize ? formatSize(msg.fileSize) : ''}</span>
                                     </div>
                                     <button 
                                       onClick={(e) => { e.stopPropagation(); handleStartDownload(msg, false); }}
-                                      className="w-7 h-7 rounded-full bg-black/10 hover:bg-black/20 flex items-center justify-center text-xs text-textPrimary shrink-0 cursor-pointer"
+                                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 cursor-pointer ${
+                                        item.isOutgoing ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-black/10 hover:bg-black/20 text-textPrimary'
+                                      }`}
                                       title="下载文件"
                                     >
                                       <i className="fa-solid fa-download"></i>
