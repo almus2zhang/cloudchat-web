@@ -1174,11 +1174,7 @@ export default function ChatArea({
                         </div>
                       ) : (
                         /* RENDER COMPOSITE GROUP (MIXED / NON-MEDIA CARD) */
-                        <div className={`p-3 rounded-2xl border shadow-sm max-w-[320px] flex flex-col gap-2 font-sans ${
-                          item.isOutgoing
-                            ? 'bg-accentColor/10 border-accentColor/40 text-textPrimary rounded-tr-none'
-                            : 'bg-bgSecondary border-borderColor text-textPrimary rounded-tl-none'
-                        }`}>
+                        <div className="p-3 rounded-2xl border border-borderColor bg-bgSecondary text-textPrimary shadow-sm max-w-[320px] flex flex-col gap-2 font-sans">
                           {item.messages.map((msg, idx) => {
                             const msgType = String(msg.type || '').toUpperCase();
                             return (
