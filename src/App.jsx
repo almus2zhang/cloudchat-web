@@ -150,8 +150,9 @@ export default function App() {
         const dbMsgs = await getCachedFile(`history_array_${activeProfileId}`);
         if (dbMsgs && Array.isArray(dbMsgs)) {
           const { sanitized } = sanitizeMessages(dbMsgs);
-          setMessages(sanitized);
-          resolveLocalMediaUrls(sanitized);
+          const alive = sanitized.filter(m => !m.isDeleted);
+          setMessages(alive);
+          resolveLocalMediaUrls(alive);
           return;
         }
       } catch (e) {
@@ -163,9 +164,10 @@ export default function App() {
         try {
           const msgs = JSON.parse(cached);
           const { sanitized } = sanitizeMessages(msgs);
-          setMessages(sanitized);
-          resolveLocalMediaUrls(sanitized);
-          // Migrate legacy cache to DB
+          const alive = sanitized.filter(m => !m.isDeleted);
+          setMessages(alive);
+          resolveLocalMediaUrls(alive);
+          // Migrate legacy cache to DB (keep full list with isDeleted for merge correctness)
           cacheFile(`history_array_${activeProfileId}`, sanitized);
           localStorage.removeItem(`cloudchat_history_${activeProfileId}`);
         } catch (e) {
@@ -322,8 +324,7 @@ export default function App() {
     const sanitized = list.map((msg, idx) => {
       if (!msg || typeof msg !== 'object') return null;
       
-      // Ignore completely empty/corrupted ghost entries or soft-deleted messages
-      if (msg.isDeleted) return null;
+      // Ignore completely empty/corrupted ghost entries
       if (!msg.id && !msg.content && !msg.remoteUrl && !msg.url) return null;
 
       const safeId = (msg.id && typeof msg.id === 'string' && msg.id.trim()) 
@@ -487,17 +488,19 @@ export default function App() {
                 }
             });
 
+            // Remove soft-deleted messages AFTER merge so remote deletes override local copies
             const merged = Array.from(mergedMap.values());
-            merged.sort((a, b) => a.timestamp - b.timestamp);
+            const alive = merged.filter(m => !m.isDeleted);
+            alive.sort((a, b) => a.timestamp - b.timestamp);
 
             cacheFile(`history_array_${currentProfileRef.current.id}`, merged);
-            resolveLocalMediaUrls(merged);
+            resolveLocalMediaUrls(alive);
             
             if (needsMigration || repairedTotal > 0) {
               pushHistoryToCloud(merged);
             }
 
-            return merged;
+            return alive;
           });
 
           setStatusText('Synchronized');

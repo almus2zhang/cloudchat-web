@@ -1191,7 +1191,7 @@ export default function ChatArea({
                         </div>
                       ) : (
                         /* RENDER COMPOSITE GROUP (MIXED / NON-MEDIA CARD) */
-                        <div className={`p-3.5 rounded-2xl border shadow-sm max-w-[300px] flex flex-col gap-2 font-sans ${
+                        <div className={`p-3 rounded-2xl border shadow-sm max-w-[300px] flex flex-col gap-1.5 font-sans ${
                           item.isOutgoing
                             ? 'bg-accentColor border-accentColor/40 text-white rounded-tr-none'
                             : 'bg-bgSecondary border-borderColor text-textPrimary rounded-tl-none'
@@ -1199,21 +1199,57 @@ export default function ChatArea({
                           {item.messages.map((msg, idx) => {
                             const msgType = String(msg.type || '').toUpperCase();
                             const isTextOrUnknown = msgType === 'TEXT' || msgType === '' || !['AUDIO', 'FILE', 'IMAGE', 'VIDEO', 'LOCATION', 'FOLDER'].includes(msgType);
+                            const isSubSelected = selectedMessageIds.has(msg.id);
+
+                            const handleSubItemClick = (e) => {
+                              if (selectedMessageIds.size > 0) {
+                                e.stopPropagation();
+                                onToggleMessageSelection(msg.id);
+                                setSelectionMenuCoords({ x: e.clientX, y: e.clientY });
+                              }
+                            };
+
+                            const handleSubItemContextMenu = (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setContextMenu({ msg, msgs: [msg], x: e.clientX, y: e.clientY });
+                            };
+
                             return (
-                              <div key={msg.id || idx} className={`flex flex-col gap-1 ${idx > 0 ? (item.isOutgoing ? 'pt-2.5 border-t border-white/20' : 'pt-2.5 border-t border-borderColor/40') : ''}`}>
+                              <div 
+                                key={msg.id || idx} 
+                                onMouseDown={(e) => handleTouchStart(e, msg.id)}
+                                onMouseUp={(e) => handleTouchEnd(e, msg.id)}
+                                onMouseMove={(e) => handleTouchMove(e, msg.id)}
+                                onTouchStart={(e) => handleTouchStart(e, msg.id)}
+                                onTouchEnd={(e) => handleTouchEnd(e, msg.id)}
+                                onTouchMove={(e) => handleTouchMove(e, msg.id)}
+                                onContextMenu={handleSubItemContextMenu}
+                                onClick={handleSubItemClick}
+                                className={`flex flex-col gap-1 relative transition-all rounded-lg p-1.5 cursor-pointer ${
+                                  idx > 0 ? (item.isOutgoing ? 'border-t border-white/20' : 'border-t border-borderColor/40') : ''
+                                } ${
+                                  isSubSelected ? (item.isOutgoing ? 'bg-white/25 ring-1 ring-white' : 'bg-accentColor/15 ring-1 ring-accentColor') : 'hover:bg-black/5'
+                                }`}
+                              >
+                                {isSubSelected && (
+                                  <div className="absolute top-1 right-1 text-xs z-10">
+                                    <i className={`fa-solid fa-circle-check ${item.isOutgoing ? 'text-white' : 'text-accentColor'}`}></i>
+                                  </div>
+                                )}
                                 {isTextOrUnknown && (
-                                  <span className={`text-[14.5px] whitespace-pre-wrap break-words leading-relaxed select-text font-normal ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}>
+                                  <span className={`text-[14.5px] whitespace-pre-wrap break-words leading-relaxed select-text font-normal pr-4 ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}>
                                     {msg.content || (typeof msg === 'string' ? msg : '')}
                                   </span>
                                 )}
                                 {msgType === 'LOCATION' && (
-                                  <div className={`flex items-center gap-1.5 text-xs py-0.5 ${item.isOutgoing ? 'text-white/90' : 'text-textSecondary'}`}>
+                                  <div className={`flex items-center gap-1.5 text-xs py-0.5 pr-4 ${item.isOutgoing ? 'text-white/90' : 'text-textSecondary'}`}>
                                     <i className={`fa-solid fa-location-dot text-sm shrink-0 ${item.isOutgoing ? 'text-white' : 'text-red-500'}`}></i>
                                     <span className="break-words font-medium">{msg.content}</span>
                                   </div>
                                 )}
                                 {msgType === 'FOLDER' && (
-                                  <div className={`flex items-center gap-2 p-2 rounded-xl border text-xs ${item.isOutgoing ? 'bg-white/10 border-white/20' : 'bg-cyan-500/10 border-cyan-500/20'}`}>
+                                  <div className={`flex items-center gap-2 p-2 rounded-xl border text-xs pr-4 ${item.isOutgoing ? 'bg-white/10 border-white/20' : 'bg-cyan-500/10 border-cyan-500/20'}`}>
                                     <i className={`fa-solid fa-folder text-base shrink-0 ${item.isOutgoing ? 'text-white' : 'text-cyan-500'}`}></i>
                                     <span className={`font-semibold block truncate ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}>{msg.content || '文件夹'}</span>
                                   </div>
@@ -1223,7 +1259,7 @@ export default function ChatArea({
                                   const fallbackDur = getDurationFromMsg(msg);
                                   const totalDuration = (loadedDur && !isNaN(loadedDur) && isFinite(loadedDur) && loadedDur > 0) ? loadedDur : fallbackDur;
                                   return (
-                                    <div className="flex items-center gap-2 text-xs my-0.5">
+                                    <div className="flex items-center gap-2 text-xs my-0.5 pr-4">
                                       <audio 
                                         ref={el => audioRefs.current[msg.id] = el}
                                         src={msg.url}
@@ -1246,7 +1282,7 @@ export default function ChatArea({
                                   );
                                 })()}
                                 {msgType === 'FILE' && (
-                                  <div className={`flex items-center gap-2 p-2 rounded-xl border text-xs ${item.isOutgoing ? 'bg-white/10 border-white/20' : 'bg-bgPrimary/60 border-borderColor/40'}`}>
+                                  <div className={`flex items-center gap-2 p-2 rounded-xl border text-xs pr-4 ${item.isOutgoing ? 'bg-white/10 border-white/20' : 'bg-bgPrimary/60 border-borderColor/40'}`}>
                                     <i className={`fa-solid fa-file-arrow-down text-base shrink-0 ${item.isOutgoing ? 'text-white' : 'text-cyan-400'}`}></i>
                                     <div className="min-w-0 flex-1">
                                       <span className={`font-semibold block truncate ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}>{msg.content.replace(/^\d+_/, '')}</span>
