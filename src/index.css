@@ -68,20 +68,22 @@ body {
   animation: slideDown 0.2s ease-out forwards;
 }
 
-/* Compact message media styling */
+/* Message media styling matching modern layout */
 .message-media {
-  max-width: 240px;
-  border-radius: 8px;
+  max-width: 480px;
+  border-radius: 12px;
   overflow: hidden;
   position: relative;
   margin-top: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: rgba(23, 32, 48, 0.6);
 }
 .message-media img,
 .message-media video {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 180px;
+  max-height: 520px;
   object-fit: cover;
   cursor: pointer;
 }

@@ -1140,7 +1140,41 @@ export default function ChatArea({
                   </div>
                 )}
                 
-                {/* Bubble Wrapper */}
+                {/* Left Side Avatar */}
+                <div className="shrink-0 mt-0.5 select-none">
+                  {(() => {
+                    const senderName = item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User');
+                    const fallback = `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(senderName)}`;
+                    const matchesCurrentProfile = currentProfile?.username && 
+                      (item.sender === currentProfile.username || item.senderName === currentProfile.username);
+                    const rawAvatar = item.senderAvatar || (matchesCurrentProfile ? currentProfile?.avatar : null);
+                    const isSafe = (u) => u && (u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('https://api.dicebear.com'));
+                    const resolvedBlob = rawAvatar && avatarBlobUrls[rawAvatar];
+                    const avatarSrc = resolvedBlob || (isSafe(rawAvatar) ? rawAvatar : fallback);
+                    const firstLetter = (senderName || 'U').charAt(0).toUpperCase();
+
+                    return (
+                      <div className="w-10 h-10 rounded-lg bg-[#212c3d] border border-white/10 flex items-center justify-center overflow-hidden shadow-sm">
+                        {avatarSrc ? (
+                          <img 
+                            src={avatarSrc} 
+                            alt="Avatar"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                        ) : null}
+                        <span className={`font-bold text-sm text-indigo-400 ${avatarSrc ? 'hidden' : 'flex'} items-center justify-center w-full h-full`}>
+                          {firstLetter}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Bubble Wrapper (Content Column) */}
                 <div 
                   onMouseDown={(e) => handleTouchStart(e, gestureMsgId)}
                   onMouseUp={(e) => handleTouchEnd(e, gestureMsgId)}
@@ -1149,8 +1183,13 @@ export default function ChatArea({
                   onTouchEnd={(e) => handleTouchEnd(e, gestureMsgId)}
                   onTouchMove={(e) => handleTouchMove(e, gestureMsgId)}
                   onContextMenu={handleRowContextMenu}
-                  className="flex flex-col max-w-[80%] md:max-w-[68%] min-w-0 relative message-bubble items-start"
+                  className="flex flex-col max-w-[85%] md:max-w-[75%] min-w-0 relative message-bubble items-start"
                 >
+                  {/* Sender Name above message */}
+                  <span className="text-[12px] font-semibold text-textMuted/90 leading-tight mb-1 truncate max-w-[240px]">
+                    {item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User')}
+                  </span>
+
                   {isPrivacyMode && item.isHidden && (
                     <div className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-mono flex items-center gap-1 leading-none mb-1">
                       <i className="fa-solid fa-eye-slash text-[8px]"></i> 隐藏
@@ -1644,32 +1683,6 @@ export default function ChatArea({
                       </div>
                     )}
                   </div>
-                </div>
-
-                {/* Right Side Column (name + avatar) for ALL messages */}
-                <div className="flex flex-col items-center gap-1 shrink-0 mt-0.5">
-                  <span className="text-[11px] font-semibold text-textMuted leading-tight whitespace-nowrap max-w-[72px] text-right truncate">
-                    {item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User')}
-                  </span>
-                  {(() => {
-                    const senderName = item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User');
-                    const fallback = `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(senderName)}`;
-                    // Only fallback to currentProfile.avatar if the message sender matches currentProfile.username
-                    const matchesCurrentProfile = currentProfile?.username && 
-                      (item.sender === currentProfile.username || item.senderName === currentProfile.username);
-                    const rawAvatar = item.senderAvatar || (matchesCurrentProfile ? currentProfile?.avatar : null);
-                    // Look up the resolved blob URL; for data:/blob: URLs or Dicebear presets use directly
-                    const isSafe = (u) => u && (u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('https://api.dicebear.com'));
-                    const resolvedBlob = rawAvatar && avatarBlobUrls[rawAvatar];
-                    const avatarSrc = resolvedBlob || (isSafe(rawAvatar) ? rawAvatar : fallback);
-                    return (
-                      <img 
-                        src={avatarSrc}
-                        alt="Avatar"
-                        className="w-11 h-11 rounded-md object-cover border-2 border-borderColor/60 bg-bgSecondary shadow-sm"
-                      />
-                    );
-                  })()}
                 </div>
               </div>
             );

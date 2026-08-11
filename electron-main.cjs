@@ -19,8 +19,8 @@ function createWindow() {
   // Set window menu to null for a cleaner, premium application feel
   mainWindow.setMenu(null);
 
-  // Open Chrome Developer Tools by default to inspect WebDAV requests and console warnings
-  mainWindow.webContents.openDevTools();
+  // Open Chrome Developer Tools if needed for debugging
+  // mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
