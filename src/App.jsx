@@ -1261,7 +1261,6 @@ export default function App() {
       {/* Main Chat Area */}
       <ChatArea 
         currentProfile={currentProfile}
-        storageClient={storageClient}
         messages={messages.filter(m => !m.isDeleted)}
         activeCategory={activeCategory}
         selectedMessageIds={selectedMessageIds}
