@@ -6,7 +6,7 @@ export default function CalendarModal({ isOpen, onClose, messages = [], onSelect
   const [currentMonth, setCurrentMonth] = useState(today.getMonth()); // 0 - 11
   const [viewMode, setViewMode] = useState('DAY'); // 'DAY' | 'MONTH' | 'YEAR'
 
-  // Extract maps & sets for dates, months, years with messages
+  // Extract maps & sets for dates, months, years with messages (Hooks called unconditionally at top)
   const { datesWithMessagesMap, yearsWithMessages, monthsWithMessages } = useMemo(() => {
     const datesMap = new Map();
     const yearsSet = new Set();
@@ -36,6 +36,38 @@ export default function CalendarModal({ isOpen, onClose, messages = [], onSelect
   }, [yearsWithMessages]);
 
   if (!isOpen) return null;
+
+  // Month navigation helpers
+  const handlePrevMonth = () => {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear(prev => prev - 1);
+    } else {
+      setCurrentMonth(prev => prev - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear(prev => prev + 1);
+    } else {
+      setCurrentMonth(prev => prev + 1);
+    }
+  };
+
+  const handleToday = () => {
+    setCurrentYear(today.getFullYear());
+    setCurrentMonth(today.getMonth());
+    setViewMode('DAY');
+  };
+
+  // Calendar matrix calculations
+  const firstDayOfWeek = new Date(currentYear, currentMonth, 1).getDay(); // 0 = Sun
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
 
   const availableYears = [];
   const startYear = earliestMsgYear;
