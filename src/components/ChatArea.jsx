@@ -1548,7 +1548,7 @@ export default function ChatArea({
                       <img 
                         src={avatarSrc}
                         alt="Avatar"
-                        className="w-11 h-11 rounded-2xl object-cover border-2 border-borderColor/60 bg-bgSecondary shadow-sm"
+                        className="w-11 h-11 rounded-md object-cover border-2 border-borderColor/60 bg-bgSecondary shadow-sm"
                       />
                     );
                   })()}
