@@ -145,7 +145,8 @@ export default function SettingsModal({
     if (editingProfile._avatarPendingUpload && editingProfile.avatar?.startsWith('data:') && storageClient) {
       try {
         setIsUploadingAvatar(true);
-        const avatarFileName = await getSafeAvatarFileName(editingProfile.username);
+        const cleanName = (editingProfile.username || 'user').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const avatarFileName = `avatar_${cleanName}_${Date.now()}.jpg`;
         const res = await fetch(editingProfile.avatar);
         const blob = await res.blob();
         
@@ -153,7 +154,13 @@ export default function SettingsModal({
         await storageClient.uploadFile(blob, avatarFileName, 'image/jpeg');
         // Cache blob in IndexedDB immediately for instant offline & F5 refresh availability
         cacheFile(`avatar_${avatarFileName}`, blob);
-        // Store ONLY the filename (e.g. "avatar_Ken.jpg"), resolved safely via downloadFile later
+
+        // Instant memory blob URL caching
+        if (window.__cachedAvatarUrls) {
+          window.__cachedAvatarUrls[avatarFileName] = URL.createObjectURL(blob);
+        }
+        
+        // Store ONLY the new filename (e.g. "avatar_Ken_1786432.jpg")
         profileToSave.avatar = avatarFileName;
       } catch (err) {
         console.warn('Avatar upload to WebDAV warning:', err);

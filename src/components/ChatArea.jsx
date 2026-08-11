@@ -58,10 +58,12 @@ export default function ChatArea({
       if (item.senderAvatar) avatarValues.add(item.senderAvatar);
     });
     avatarValues.forEach(async (av) => {
-      if (avatarBlobUrls[av]) return; // already resolved
       const resolved = await resolveAvatarUrl(av);
       if (resolved) {
-        setAvatarBlobUrls(prev => ({ ...prev, [av]: resolved }));
+        setAvatarBlobUrls(prev => {
+          if (prev[av] === resolved) return prev;
+          return { ...prev, [av]: resolved };
+        });
       }
     });
   }, [messages, resolveAvatarUrl]);

@@ -13,6 +13,9 @@ import { initDB, cacheFile, getCachedFile } from './services/db';
 const cachedMediaUrls = {};
 // Global avatar URL lookup cache (filename -> blob URL)
 const cachedAvatarUrls = {};
+if (typeof window !== 'undefined') {
+  window.__cachedAvatarUrls = cachedAvatarUrls;
+}
 
 export default function App() {
   const [profiles, setProfiles] = useState([]);
@@ -1180,13 +1183,17 @@ export default function App() {
 
     // Update avatar ONLY for messages that belong to this profile's nickname
     if (profile.username && profile.avatar) {
-      setMessages(prev => prev.map(m => {
-        const isMine = m.isOutgoing || m.sender === profile.username || m.senderName === profile.username;
-        if (isMine) {
-          return { ...m, senderAvatar: profile.avatar };
-        }
-        return m;
-      }));
+      setMessages(prev => {
+        const newMsgs = prev.map(m => {
+          const isMine = m.isOutgoing || m.sender === profile.username || m.senderName === profile.username;
+          if (isMine) {
+            return { ...m, senderAvatar: profile.avatar };
+          }
+          return m;
+        });
+        pushHistoryToCloud(newMsgs);
+        return newMsgs;
+      });
     }
 
     setSettingsOpen(false);
