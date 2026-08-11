@@ -633,7 +633,39 @@ export default function ChatArea({
   };
 
   const formatTime = (ts) => {
-    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (!ts) return '';
+    const date = new Date(ts);
+    const now = new Date();
+    
+    // Check if same day (Today)
+    const isToday = date.getFullYear() === now.getFullYear() &&
+                    date.getMonth() === now.getMonth() &&
+                    date.getDate() === now.getDate();
+                    
+    // Check if Yesterday
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = date.getFullYear() === yesterday.getFullYear() &&
+                        date.getMonth() === yesterday.getMonth() &&
+                        date.getDate() === yesterday.getDate();
+
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const timeStr = `${hours}:${minutes}`;
+
+    if (isToday) {
+      return timeStr;
+    } else if (isYesterday) {
+      return `昨天 ${timeStr}`;
+    } else {
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      if (date.getFullYear() === now.getFullYear()) {
+        return `${month}/${day} ${timeStr}`;
+      } else {
+        return `${date.getFullYear()}/${month}/${day} ${timeStr}`;
+      }
+    }
   };
 
   const handleOpenMediaViewer = (msgId) => {
