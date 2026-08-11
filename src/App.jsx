@@ -1269,6 +1269,14 @@ export default function App() {
 
   // --- Profile Settings Actions ---
   const handleSaveProfile = (profile) => {
+    const oldProfile = currentProfile;
+    const isLocationChanged = !oldProfile || 
+      oldProfile.webDavUrl !== profile.webDavUrl ||
+      oldProfile.serverPath !== profile.serverPath ||
+      oldProfile.saveDir !== profile.saveDir ||
+      oldProfile.bucket !== profile.bucket ||
+      oldProfile.endpoint !== profile.endpoint;
+
     const exists = profiles.some(p => p.id === profile.id);
     let updated;
     if (exists) {
@@ -1281,7 +1289,21 @@ export default function App() {
     setActiveProfileId(profile.id);
     localStorage.setItem('cloudchat_web_active_profile_id', profile.id);
 
+    // Update active storage client & refs immediately
+    activeClientRef.current = StorageClient.create(profile);
+    currentProfileRef.current = profile;
+
+    if (isLocationChanged) {
+      setMessages([]);
+      cacheFile(`history_array_${profile.id}`, []);
+      lastKnownCloudIndexTimeRef.current = 0;
+      shardTimestampsRef.current = {};
+    }
+
     setSettingsOpen(false);
+    setTimeout(() => {
+      syncHistory(true);
+    }, 50);
   };
 
   const handleDeleteProfile = (profileId) => {

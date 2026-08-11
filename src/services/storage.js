@@ -155,6 +155,7 @@ export class StorageClient {
 class WebDavStorageClient {
     constructor(config) {
         this.config = config;
+        this.type = 'WEBDAV';
     }
 
     getAuthHeader() {
@@ -598,7 +599,8 @@ class WebDavStorageClient {
     }
 
     async testConnection() {
-        if (this.type === 'WEBDAV') {
+        const type = (this.config && this.config.type) || this.type || 'WEBDAV';
+        if (type === 'WEBDAV') {
             const buildUrl = (webDavBaseUrl) => {
                 const baseUrl = (webDavBaseUrl || '').trim().replace(/\/+$/, '');
                 if (!baseUrl) return '';
@@ -700,6 +702,7 @@ class WebDavStorageClient {
 class S3StorageClient {
     constructor(config) {
         this.config = config;
+        this.type = 'S3';
     }
 
     getKey(fileName) {
