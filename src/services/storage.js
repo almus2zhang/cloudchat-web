@@ -468,6 +468,7 @@ class WebDavStorageClient {
         const diaryDirUrls = [diaryDirUrl, fallbackDiaryDirUrl];
         const items = [];
         const seenNames = new Set();
+        const diaryBaseUrl = (this.config.diaryBaseUrl || '').trim().replace(/\/+$/, '');
 
         for (const targetUrl of diaryDirUrls) {
             try {
@@ -485,21 +486,18 @@ class WebDavStorageClient {
                 const doc = parser.parseFromString(xmlText, 'text/xml');
                 const responses = doc.querySelectorAll('response, d\\:response');
 
-                responses.forEach(node => {
+                for (const node of responses) {
                     const hrefNode = node.querySelector('href, d\\:href');
                     const href = hrefNode ? hrefNode.textContent : '';
-                    if (!href) return;
+                    if (!href) continue;
 
                     const cleanHref = href.replace(/\/+$/, '');
                     const cleanTarget = targetUrl.replace(/\/+$/, '');
-                    if (cleanHref.endsWith('/diary') || cleanHref.endsWith('/diary/') || cleanHref === cleanTarget) return;
+                    if (cleanHref.endsWith('/diary') || cleanHref.endsWith('/diary/') || cleanHref === cleanTarget) continue;
 
                     const isCollection = node.querySelector('collection, d\\:collection') !== null;
-                    if (isCollection) return;
-
-                    const fileName = decodeURIComponent(cleanHref.split('/').pop());
-                    if (!fileName || seenNames.has(fileName)) return;
-                    seenNames.add(fileName);
+                    const itemName = decodeURIComponent(cleanHref.split('/').pop());
+                    if (!itemName || seenNames.has(itemName)) continue;
 
                     const contentLengthNode = node.querySelector('getcontentlength, d\\:getcontentlength');
                     const lastModifiedNode = node.querySelector('getlastmodified, d\\:getlastmodified');
@@ -508,23 +506,87 @@ class WebDavStorageClient {
                     const lastModifiedStr = lastModifiedNode ? lastModifiedNode.textContent : '';
                     const lastModified = lastModifiedStr ? new Date(lastModifiedStr).getTime() : Date.now();
 
-                    // Calculate web link based on diaryBaseUrl
-                    let webUrl = '';
-                    const diaryBaseUrl = (this.config.diaryBaseUrl || '').trim();
-                    if (diaryBaseUrl) {
-                        webUrl = `${diaryBaseUrl.replace(/\/+$/, '')}/${encodeURIComponent(fileName)}`;
-                    } else {
-                        webUrl = href.startsWith('http') ? href : `${baseUrl}${href.startsWith('/') ? '' : '/'}${href}`;
-                    }
+                    if (isCollection) {
+                        // Subdirectory under diary/ (e.g. 2026-08-11_日记)
+                        // Check if it contains index.html
+                        const subDirUrl = `${cleanTarget}/${encodeURIComponent(itemName)}`;
+                        let indexFileName = 'index.html';
+                        let subLastModified = lastModified;
+                        let subSize = size;
 
-                    items.push({
-                        name: fileName,
-                        href,
-                        webUrl,
-                        size,
-                        lastModified
-                    });
-                });
+                        try {
+                            const subRes = await fetch(subDirUrl, {
+                                method: 'PROPFIND',
+                                headers: { 'Authorization': this.getAuthHeader(), 'Depth': '1' }
+                            });
+                            if (subRes.ok) {
+                                const subXml = await subRes.text();
+                                const subDoc = parser.parseFromString(subXml, 'text/xml');
+                                const subNodes = subDoc.querySelectorAll('response, d\\:response');
+                                let foundIndex = false;
+
+                                subNodes.forEach(subNode => {
+                                    const subHrefNode = subNode.querySelector('href, d\\:href');
+                                    const subHref = subHrefNode ? subHrefNode.textContent : '';
+                                    const subName = decodeURIComponent(subHref.replace(/\/+$/, '').split('/').pop());
+                                    if (subName.toLowerCase().startsWith('index.htm')) {
+                                        foundIndex = true;
+                                        indexFileName = subName;
+                                        const lmNode = subNode.querySelector('getlastmodified, d\\:getlastmodified');
+                                        if (lmNode && lmNode.textContent) subLastModified = new Date(lmNode.textContent).getTime();
+                                        const szNode = subNode.querySelector('getcontentlength, d\\:getcontentlength');
+                                        if (szNode && szNode.textContent) subSize = parseInt(szNode.textContent, 10);
+                                    }
+                                });
+
+                                if (!foundIndex && subNodes.length <= 1) continue; // empty collection
+                            }
+                        } catch (e) {}
+
+                        seenNames.add(itemName);
+                        let webUrl = '';
+                        if (diaryBaseUrl) {
+                            if (diaryBaseUrl.endsWith('/diary')) {
+                                webUrl = `${diaryBaseUrl}/${encodeURIComponent(itemName)}/${indexFileName}`;
+                            } else {
+                                webUrl = `${diaryBaseUrl}/diary/${encodeURIComponent(itemName)}/${indexFileName}`;
+                            }
+                        } else {
+                            webUrl = `${subDirUrl}/${indexFileName}`;
+                        }
+
+                        items.push({
+                            name: `${itemName}/${indexFileName}`,
+                            subDir: itemName,
+                            href,
+                            webUrl,
+                            size: subSize,
+                            lastModified: subLastModified
+                        });
+                    } else {
+                        // Direct file under diary/
+                        seenNames.add(itemName);
+                        let webUrl = '';
+                        if (diaryBaseUrl) {
+                            if (diaryBaseUrl.endsWith('/diary')) {
+                                webUrl = `${diaryBaseUrl}/${encodeURIComponent(itemName)}`;
+                            } else {
+                                webUrl = `${diaryBaseUrl}/diary/${encodeURIComponent(itemName)}`;
+                            }
+                        } else {
+                            webUrl = href.startsWith('http') ? href : `${baseUrl}${href.startsWith('/') ? '' : '/'}${href}`;
+                        }
+
+                        items.push({
+                            name: itemName,
+                            subDir: '',
+                            href,
+                            webUrl,
+                            size,
+                            lastModified
+                        });
+                    }
+                }
                 if (items.length > 0) break;
             } catch (e) {
                 console.warn('WebDAV listDiaryFiles error:', e);
