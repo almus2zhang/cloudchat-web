@@ -28,6 +28,24 @@ export default function SettingsModal({
   const [editingProfile, setEditingProfile] = useState(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [isTestingConn, setIsTestingConn] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+
+  const handleTestConnection = async () => {
+    if (!editingProfile) return;
+    setIsTestingConn(true);
+    setTestResult(null);
+    try {
+      const StorageModule = await import('../services/storage');
+      const testService = new StorageModule.StorageService(editingProfile);
+      const res = await testService.testConnection();
+      setTestResult({ success: true, message: res.message });
+    } catch (err) {
+      setTestResult({ success: false, message: err.message || '连接失败' });
+    } finally {
+      setIsTestingConn(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -335,10 +353,43 @@ export default function SettingsModal({
                         type="url" 
                         value={editingProfile.webDavFallbackUrl || ''}
                         onChange={(e) => handleFieldChange('webDavFallbackUrl', e.target.value)}
-                        placeholder="https://backup-nas.local:5006/dav"
+                        placeholder="http://192.168.1.100:5005/dav"
                         className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor transition-colors w-full"
                       />
                     </div>
+                  </div>
+
+                  {/* Test Connection Button & Result */}
+                  <div className="pt-1 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={handleTestConnection}
+                      disabled={isTestingConn}
+                      className="px-4 py-2 rounded-lg text-xs font-semibold bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/25 transition-all flex items-center justify-center gap-2 self-start"
+                    >
+                      {isTestingConn ? (
+                        <>
+                          <i className="fa-solid fa-spinner animate-spin text-xs"></i>
+                          <span>正在测试服务器连通性...</span>
+                        </>
+                      ) : (
+                        <>
+                          <i className="fa-solid fa-bolt text-xs"></i>
+                          <span>测试 WebDAV 服务器连接 (支持局域网 IP / HTTP / HTTPS)</span>
+                        </>
+                      )}
+                    </button>
+
+                    {testResult && (
+                      <div className={`p-2.5 rounded-lg text-xs flex items-center gap-2 border ${
+                        testResult.success 
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                          : 'bg-red-500/10 border-red-500/30 text-red-400'
+                      }`}>
+                        <i className={`fa-solid ${testResult.success ? 'fa-circle-check text-emerald-400' : 'fa-circle-exclamation text-red-400'}`}></i>
+                        <span>{testResult.message}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

@@ -596,6 +596,35 @@ class WebDavStorageClient {
         items.sort((a, b) => b.lastModified - a.lastModified);
         return items;
     }
+
+    async testConnection() {
+        if (this.type === 'WEBDAV') {
+            const baseUrl = (this.config.webDavUrl || '').replace(/\/+$/, '');
+            if (!baseUrl) throw new Error('WebDAV 服务器 URL 不能为空');
+            const response = await fetch(baseUrl, {
+                method: 'PROPFIND',
+                headers: {
+                    'Authorization': this.getAuthHeader(),
+                    'Depth': '0'
+                }
+            });
+            if (response.ok || response.status === 207 || response.status === 405 || response.status === 200) {
+                return { ok: true, status: response.status, message: 'WebDAV 服务器连通成功，响应正常！' };
+            } else if (response.status === 401) {
+                throw new Error('认证失败：账号或密码错误 (HTTP 401)');
+            } else if (response.status === 404) {
+                throw new Error('服务器地址未找到 (HTTP 404)');
+            } else {
+                throw new Error(`HTTP 状态码 ${response.status} (${response.statusText || '连接异常'})`);
+            }
+        } else if (this.type === 'S3') {
+            const endpoint = (this.config.endpoint || '').replace(/\/+$/, '');
+            if (!endpoint) throw new Error('S3 Endpoint 不能为空');
+            const response = await fetch(endpoint, { method: 'HEAD' });
+            return { ok: true, status: response.status, message: 'S3 服务器连通正常！' };
+        }
+        return { ok: true, message: '连接配置有效' };
+    }
 }
 
 class S3StorageClient {
