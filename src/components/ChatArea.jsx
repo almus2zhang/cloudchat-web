@@ -641,39 +641,53 @@ export default function ChatArea({
 
   // --- Message grouping by explicit groupId & Privacy filtering ---
   const grouped = React.useMemo(() => {
-    // Slice only the latest visibleCount messages to optimize DOM node performance
+    const emitted = new Set();
+    const result = [];
     const totalCount = filteredMessages.length;
     const sliced = filteredMessages.slice(Math.max(0, totalCount - visibleCount));
 
-    const groups = [];
-    const groupMap = {};
+    for (let i = 0; i < sliced.length; i++) {
+      const msg = sliced[i];
+      if (emitted.has(msg.id)) continue;
 
-    sliced.forEach(msg => {
-      if (msg.groupId) {
-        if (!groupMap[msg.groupId]) {
-          groupMap[msg.groupId] = {
-            id: msg.groupId,
-            sender: msg.sender,
-            senderName: msg.senderName,
-            senderAvatar: msg.senderAvatar,
-            timestamp: msg.timestamp,
-            isOutgoing: msg.isOutgoing,
+      const gid = (msg.groupId !== undefined && msg.groupId !== null && String(msg.groupId).trim() !== '') ? String(msg.groupId).trim() : null;
+      if (gid) {
+        // Gather ALL members in sliced sharing this groupId
+        const groupMembers = sliced.filter(m => {
+          const mGid = (m.groupId !== undefined && m.groupId !== null && String(m.groupId).trim() !== '') ? String(m.groupId).trim() : null;
+          return mGid === gid;
+        });
+
+        groupMembers.forEach(m => emitted.add(m.id));
+
+        if (groupMembers.size > 1 || groupMembers.length > 1) {
+          result.push({
+            id: gid,
+            sender: groupMembers[0].sender,
+            senderName: groupMembers[0].senderName,
+            senderAvatar: groupMembers[0].senderAvatar,
+            timestamp: groupMembers[0].timestamp,
+            isOutgoing: groupMembers[0].isOutgoing,
             isGroup: true,
-            groupId: msg.groupId,
-            messages: []
-          };
-          groups.push(groupMap[msg.groupId]);
+            groupId: gid,
+            messages: groupMembers
+          });
+        } else {
+          result.push({
+            ...msg,
+            isGroup: false
+          });
         }
-        groupMap[msg.groupId].messages.push(msg);
       } else {
-        groups.push({
+        result.push({
           ...msg,
           isGroup: false
         });
+        emitted.add(msg.id);
       }
-    });
+    }
 
-    return groups;
+    return result;
   }, [filteredMessages, visibleCount]);
 
   const formatSize = (bytes) => {
