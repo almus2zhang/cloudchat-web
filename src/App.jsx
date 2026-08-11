@@ -1181,12 +1181,14 @@ export default function App() {
     setActiveProfileId(profile.id);
     localStorage.setItem('cloudchat_web_active_profile_id', profile.id);
 
-    // Update avatar ONLY for messages that belong to this profile's nickname
+    // Update avatar ONLY for messages that match this profile's username
     if (profile.username && profile.avatar) {
       setMessages(prev => {
         const newMsgs = prev.map(m => {
-          const isMine = m.isOutgoing || m.sender === profile.username || m.senderName === profile.username;
-          if (isMine) {
+          const matchesName = (m.sender && m.sender === profile.username) || 
+                              (m.senderName && m.senderName === profile.username) ||
+                              (!m.sender && !m.senderName && m.isOutgoing);
+          if (matchesName) {
             return { ...m, senderAvatar: profile.avatar };
           }
           return m;
