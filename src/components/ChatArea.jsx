@@ -1188,13 +1188,13 @@ export default function ChatArea({
                         </div>
                       ) : (
                         /* RENDER COMPOSITE GROUP (MIXED / NON-MEDIA CARD) */
-                        <div className="p-3 rounded-2xl border border-borderColor bg-bgSecondary text-textPrimary shadow-sm max-w-[320px] flex flex-col gap-2 font-sans">
+                        <div className="p-3.5 rounded-2xl border border-black/10 bg-white text-textPrimary shadow-sm max-w-[300px] flex flex-col gap-2 font-sans">
                           {item.messages.map((msg, idx) => {
                             const msgType = String(msg.type || '').toUpperCase();
                             return (
-                              <div key={msg.id} className={`flex flex-col gap-1 ${idx > 0 ? 'pt-2 border-t border-borderColor/40' : ''}`}>
+                              <div key={msg.id} className={`flex flex-col gap-1 ${idx > 0 ? 'pt-2.5 border-t border-black/10' : ''}`}>
                                 {(msgType === 'TEXT' || !msgType) && (
-                                  <span className="text-sm whitespace-pre-wrap break-words text-textPrimary leading-relaxed">{msg.content}</span>
+                                  <span className="text-[14.5px] whitespace-pre-wrap break-words text-[#222222] leading-relaxed select-text font-normal">{msg.content}</span>
                                 )}
                                 {msgType === 'AUDIO' && (() => {
                                   const loadedDur = audioProgress[msg.id]?.duration;
@@ -1212,7 +1212,7 @@ export default function ChatArea({
                                       />
                                       <button 
                                         onClick={(e) => { e.stopPropagation(); handleToggleAudio(msg.id); }}
-                                        className="px-3 py-1.5 rounded-full bg-emerald-500 text-white flex items-center gap-1.5 shrink-0 shadow-sm hover:opacity-90 cursor-pointer font-semibold"
+                                        className="px-3.5 py-1.5 rounded-full bg-[#07C160] text-white flex items-center gap-1.5 shrink-0 shadow-sm hover:opacity-90 cursor-pointer font-medium text-xs"
                                       >
                                         <i className={`fa-solid ${audioPlayingId === msg.id ? 'fa-pause text-xs' : 'fa-play text-xs'}`}></i>
                                         <span>{totalDuration ? `${Math.round(totalDuration)}s` : '语音'}</span>
