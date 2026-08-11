@@ -1,12 +1,5 @@
 import React from 'react';
 
-const CATEGORY_MAP = {
-  'diary': '日记',
-  'transfer': '传输',
-  'work': '工作',
-  'privacy': '隐私'
-};
-
 export default function Sidebar({ 
   isOpen, 
   onClose,
@@ -39,33 +32,14 @@ export default function Sidebar({
       });
     }
   }, [currentProfile?.avatar, resolveAvatarUrl]);
-  // Scan categories to build message counts
-  const categoriesMap = {
-    'diary': 0,
-    'transfer': 0,
-    'work': 0,
-    'privacy': 0
-  };
 
-  messages.forEach(msg => {
-    if (Array.isArray(msg.categories)) {
-      msg.categories.forEach(cat => {
-        // Normalize
-        const catId = cat === '工作' ? 'work' : (cat === '日记' ? 'diary' : (cat === '传输' ? 'transfer' : (cat === '隐私' ? 'privacy' : cat)));
-        categoriesMap[catId] = (categoriesMap[catId] || 0) + 1;
-      });
-    }
-  });
-
-  const defaultIds = ['diary', 'transfer', 'work', 'privacy'];
-  const allCatIds = Object.keys(categoriesMap).sort((a, b) => {
-    const idxA = defaultIds.indexOf(a);
-    const idxB = defaultIds.indexOf(b);
-    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-    if (idxA !== -1) return -1;
-    if (idxB !== -1) return 1;
-    return a.localeCompare(b);
-  });
+  // Count diary messages
+  const diaryCount = React.useMemo(() => {
+    return messages.filter(msg => {
+      if (!Array.isArray(msg.categories)) return false;
+      return msg.categories.some(cat => cat === 'diary' || cat === '日记');
+    }).length;
+  }, [messages]);
 
   return (
     <>
@@ -109,58 +83,46 @@ export default function Sidebar({
           </div>
         </div>
 
-        {/* Categories List */}
+        {/* Main Section Navigation Items */}
         <div className="flex-1 overflow-y-auto py-2">
-          <div className="px-4 py-1 text-[10px] font-semibold text-textMuted uppercase tracking-widest">
-            Categories
-          </div>
-          <ul className="mt-1 flex flex-col">
+          <ul className="flex flex-col">
             {/* All Messages tab */}
             <li 
               onClick={() => { onSwitchCategory('all'); onClose(); }}
-              className={`flex items-center justify-between px-4 py-2 text-xs font-medium cursor-pointer transition-all ${
+              className={`flex items-center justify-between px-4 py-2.5 text-xs font-medium cursor-pointer transition-all ${
                 activeCategory === 'all' 
-                  ? 'bg-accentColor/10 text-accentColor border-l-2 border-accentColor' 
+                  ? 'bg-accentColor/10 text-accentColor border-l-2 border-accentColor font-semibold' 
                   : 'text-textSecondary hover:bg-white/5 border-l-2 border-transparent'
               }`}
             >
-              <span className="flex items-center gap-2">
+              <span className="flex items-center gap-2.5">
                 <i className="fa-solid fa-layer-group text-sm"></i> All Messages
               </span>
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                 activeCategory === 'all' ? 'bg-accentColor/20 text-accentColor' : 'bg-borderColor/50 text-textMuted'
               }`}>
                 {messages.length}
               </span>
             </li>
 
-            {/* Custom categories */}
-            {allCatIds.map(catId => {
-              const count = categoriesMap[catId];
-              const displayName = CATEGORY_MAP[catId] || catId;
-              const isSelected = activeCategory === catId;
-              return (
-                <li 
-                  key={catId}
-                  onClick={() => { onSwitchCategory(catId); onClose(); }}
-                  className={`flex items-center justify-between px-4 py-2 text-xs font-medium cursor-pointer transition-all ${
-                    isSelected 
-                      ? 'bg-accentColor/10 text-accentColor border-l-2 border-accentColor' 
-                      : 'text-textSecondary hover:bg-white/5 border-l-2 border-transparent'
-                  }`}
-                >
-                  <span className="flex items-center gap-2 truncate">
-                    <i className="fa-solid fa-hashtag text-sm text-textMuted"></i> 
-                    <span className="truncate">{displayName}</span>
-                  </span>
-                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                    isSelected ? 'bg-accentColor/20 text-accentColor' : 'bg-borderColor/50 text-textMuted'
-                  }`}>
-                    {count}
-                  </span>
-                </li>
-              );
-            })}
+            {/* 日记 (Diary) tab */}
+            <li 
+              onClick={() => { onSwitchCategory('diary'); onClose(); }}
+              className={`flex items-center justify-between px-4 py-2.5 text-xs font-medium cursor-pointer transition-all ${
+                activeCategory === 'diary' 
+                  ? 'bg-accentColor/10 text-accentColor border-l-2 border-accentColor font-semibold' 
+                  : 'text-textSecondary hover:bg-white/5 border-l-2 border-transparent'
+              }`}
+            >
+              <span className="flex items-center gap-2.5">
+                <i className="fa-solid fa-book-bookmark text-sm"></i> 日记
+              </span>
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                activeCategory === 'diary' ? 'bg-accentColor/20 text-accentColor' : 'bg-borderColor/50 text-textMuted'
+              }`}>
+                {diaryCount}
+              </span>
+            </li>
           </ul>
         </div>
 
