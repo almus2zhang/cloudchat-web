@@ -1118,7 +1118,7 @@ export default function ChatArea({
                 key={item.id} 
                 id={`msg-item-${item.id}`}
                 onContextMenu={handleRowContextMenu}
-                className="flex gap-3 min-w-0 group relative my-1 items-start justify-start transition-all duration-300 rounded-xl"
+                className="flex gap-3.5 min-w-0 group relative my-5 items-start justify-start transition-all duration-300 rounded-xl"
               >
                 {/* Selection Checkbox */}
                 {selectedMessageIds.size > 0 && (
