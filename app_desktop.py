@@ -19,9 +19,13 @@ if __name__ == '__main__':
     dist_dir = get_dist_path()
     index_file = os.path.join(dist_dir, 'index.html')
 
+    appdata = os.getenv('APPDATA', os.path.expanduser('~'))
+    storage_dir = os.path.join(appdata, 'CloudChatLight')
+    os.makedirs(storage_dir, exist_ok=True)
+
     # Create native WebView2 window with CORS disabled
     window = webview.create_window(
-        title='CloudChat Desktop (Lightweight)',
+        title='CloudChat Desktop',
         url=index_file,
         width=1380,
         height=820,
@@ -29,5 +33,10 @@ if __name__ == '__main__':
         min_size=(900, 600)
     )
 
-    # Start PyWebView using Edge Chromium / WebView2 engine
-    webview.start(gui='qt' if 'qt' in sys.argv else 'edgechromium', debug=False)
+    # Start PyWebView using Edge Chromium / WebView2 engine with persistent storage
+    webview.start(
+        gui='edgechromium',
+        debug=False,
+        private_mode=False,
+        storage_path=storage_dir
+    )

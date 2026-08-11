@@ -601,19 +601,43 @@ class WebDavStorageClient {
         if (this.type === 'WEBDAV') {
             const baseUrl = (this.config.webDavUrl || '').replace(/\/+$/, '');
             if (!baseUrl) throw new Error('WebDAV 服务器 URL 不能为空');
-            const response = await fetch(baseUrl, {
+            
+            const xmlBody = '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>';
+            let response = await fetch(baseUrl, {
                 method: 'PROPFIND',
                 headers: {
                     'Authorization': this.getAuthHeader(),
-                    'Depth': '0'
-                }
+                    'Depth': '1',
+                    'Content-Type': 'application/xml; charset=utf-8'
+                },
+                body: xmlBody
             });
-            if (response.ok || response.status === 207 || response.status === 405 || response.status === 200) {
-                return { ok: true, status: response.status, message: 'WebDAV 服务器连通成功，响应正常！' };
-            } else if (response.status === 401) {
-                throw new Error('认证失败：账号或密码错误 (HTTP 401)');
-            } else if (response.status === 404) {
-                throw new Error('服务器地址未找到 (HTTP 404)');
+
+            if (response.status === 404) {
+                // Try MKCOL if directory 404
+                try {
+                    await fetch(baseUrl, {
+                        method: 'MKCOL',
+                        headers: { 'Authorization': this.getAuthHeader() }
+                    });
+                    response = await fetch(baseUrl, {
+                        method: 'PROPFIND',
+                        headers: {
+                            'Authorization': this.getAuthHeader(),
+                            'Depth': '1',
+                            'Content-Type': 'application/xml; charset=utf-8'
+                        },
+                        body: xmlBody
+                    });
+                } catch (e) {}
+            }
+
+            const text = await response.text();
+            if (response.status === 207 || (response.status >= 200 && response.status < 300)) {
+                const count = (text.match(/<(?:\w+:)?response\b/gi) || []).length;
+                return { ok: true, status: response.status, message: `HTTP ${response.status} (已成功列出 ${count} 项)` };
+            } else if (response.status === 401 || response.status === 403) {
+                throw new Error(`HTTP ${response.status} (服务器可达，但认证失败，请检查用户名/密码或权限)`);
             } else {
                 throw new Error(`HTTP 状态码 ${response.status} (${response.statusText || '连接异常'})`);
             }

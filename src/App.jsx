@@ -418,6 +418,13 @@ export default function App() {
         }
         
         if (!needsMigration) {
+          setMessages(prev => {
+            const failedOnly = prev.filter(m => m.status === 'FAILED');
+            if (currentProfileRef.current) {
+              cacheFile(`history_array_${currentProfileRef.current.id}`, failedOnly);
+            }
+            return failedOnly;
+          });
           setStatusText('Connected (No history file)');
           setStatusDotClass('bg-green-500');
           setIsSyncing(false);
@@ -475,17 +482,11 @@ export default function App() {
 
           setMessages(prev => {
             let mergedMap = new Map();
-            prev.forEach(m => mergedMap.set(m.id, m));
-
-            downloadedMessages.forEach(m => {
-                const existing = mergedMap.get(m.id);
-                if (existing) {
-                    if ((m.lastModified || 0) >= (existing.lastModified || 0)) {
-                        mergedMap.set(m.id, m);
-                    }
-                } else {
-                    mergedMap.set(m.id, m);
-                }
+            // Server is source of truth: Start with downloaded cloud messages
+            downloadedMessages.forEach(m => mergedMap.set(m.id, m));
+            // Keep local FAILED messages that have not been uploaded
+            prev.filter(m => m.status === 'FAILED').forEach(m => {
+              if (!mergedMap.has(m.id)) mergedMap.set(m.id, m);
             });
 
             // Remove soft-deleted messages AFTER merge so remote deletes override local copies
