@@ -297,6 +297,9 @@ export default function ChatArea({
 
   const filteredMessages = React.useMemo(() => {
     return messages.filter(msg => {
+      // 0. Deleted filter
+      if (msg.isDeleted) return false;
+
       // 0. Folder filter
       if (currentFolderId) {
         if (msg.folderId !== currentFolderId) return false;

@@ -322,7 +322,8 @@ export default function App() {
     const sanitized = list.map((msg, idx) => {
       if (!msg || typeof msg !== 'object') return null;
       
-      // Ignore completely empty/corrupted ghost entries
+      // Ignore completely empty/corrupted ghost entries or soft-deleted messages
+      if (msg.isDeleted) return null;
       if (!msg.id && !msg.content && !msg.remoteUrl && !msg.url) return null;
 
       const safeId = (msg.id && typeof msg.id === 'string' && msg.id.trim()) 
