@@ -1,6 +1,15 @@
-import os
-import sys
+# Disable WebView2 CORS and Private Network Access restrictions
+os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = (
+    '--disable-web-security '
+    '--allow-file-access-from-files '
+    '--disable-features=BlockInsecurePrivateNetworkRequests,IsolateOrigins,site-per-process '
+    '--ignore-certificate-errors'
+)
+
 import webview
+
+webview.settings['IGNORE_SSL_ERRORS'] = True
+webview.settings['ALLOW_FILE_URLS'] = True
 
 def get_dist_path():
     if getattr(sys, 'frozen', False):
