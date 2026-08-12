@@ -30,7 +30,7 @@ export default function DiaryExportModal({
     setTitle(defaultName);
     setAuthor(currentProfile ? (currentProfile.username || 'CloudChat User') : 'CloudChat User');
     const clean = defaultName.replace(/[\\/:*?"<>|]/g, '_');
-    setCustomSubDir(`diary/${clean}`);
+    setCustomSubDir(clean);
     setResultUrl(null);
     setResultPath('');
     setErrorMsg('');
@@ -44,7 +44,7 @@ export default function DiaryExportModal({
     }
     let isMounted = true;
     const cleanDir = customSubDir.trim().replace(/^\/+|\/+$/g, '');
-    const indexPath = `${cleanDir}/index.html`;
+    const indexPath = cleanDir ? `${cleanDir}/index.html` : 'index.html';
 
     const checkIndex = async () => {
       try {
@@ -73,8 +73,8 @@ export default function DiaryExportModal({
   if (!isOpen) return null;
 
   const folderName = folderMsg ? (folderMsg.content || '文件夹') : '多选条目';
-  const targetDirClean = (customSubDir || 'diary/export').trim().replace(/^\/+|\/+$/g, '');
-  const targetSubPath = `${targetDirClean}/index.html`;
+  const targetDirClean = (customSubDir || 'export').trim().replace(/^\/+|\/+$/g, '');
+  const targetSubPath = targetDirClean ? `${targetDirClean}/index.html` : 'index.html';
 
   const templates = [
     {
@@ -327,7 +327,7 @@ export default function DiaryExportModal({
                   value={customSubDir}
                   onChange={(e) => setCustomSubDir(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-bgPrimary border border-borderColor rounded-xl text-cyan-300 font-mono focus:outline-none focus:border-cyan-500"
-                  placeholder="例如: diary/2026夏日随笔 或 diary/work_log"
+                  placeholder="例如: 2026夏日随笔 或 work_log"
                 />
               </div>
 
