@@ -461,17 +461,20 @@ class WebDavStorageClient {
         const parts = [];
         if (root) root.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
         if (userDirClean) userDirClean.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
-        parts.push('diary');
 
-        const diaryDirUrl = `${baseUrl}/${parts.join('/')}`;
-        const fallbackDiaryDirUrl = `${baseUrl}/${root ? encodeURIComponent(root) + '/' : ''}diary`;
+        const targetDirUrl = parts.length > 0 ? `${baseUrl}/${parts.join('/')}` : baseUrl;
+        const fallbackTargetDirUrl = `${baseUrl}/${root ? encodeURIComponent(root) : ''}`;
 
-        const diaryDirUrls = [diaryDirUrl, fallbackDiaryDirUrl];
+        const targetUrls = [targetDirUrl];
+        if (fallbackTargetDirUrl && fallbackTargetDirUrl !== targetDirUrl) {
+            targetUrls.push(fallbackTargetDirUrl);
+        }
+
         const items = [];
         const seenNames = new Set();
         const diaryBaseUrl = (this.config.diaryBaseUrl || '').trim().replace(/\/+$/, '');
 
-        for (const targetUrl of diaryDirUrls) {
+        for (const targetUrl of targetUrls) {
             try {
                 const response = await fetch(targetUrl, {
                     method: 'PROPFIND',
@@ -494,7 +497,7 @@ class WebDavStorageClient {
 
                     const cleanHref = href.replace(/\/+$/, '');
                     const cleanTarget = targetUrl.replace(/\/+$/, '');
-                    if (cleanHref.endsWith('/diary') || cleanHref.endsWith('/diary/') || cleanHref === cleanTarget) continue;
+                    if (cleanHref === cleanTarget || cleanHref.endsWith(cleanTarget)) continue;
 
                     const isCollection = node.querySelector('collection, d\\:collection') !== null;
                     const itemName = decodeURIComponent(cleanHref.split('/').pop());
@@ -508,12 +511,12 @@ class WebDavStorageClient {
                     const lastModified = lastModifiedStr ? new Date(lastModifiedStr).getTime() : Date.now();
 
                     if (isCollection) {
-                        // Subdirectory under diary/ (e.g. 2026-08-11_日记)
-                        // Check if it contains index.html
+                        // Level 1 subdirectory directly in configured directory (e.g. 2026-08-11_日记)
                         const subDirUrl = `${cleanTarget}/${encodeURIComponent(itemName)}`;
                         let indexFileName = 'index.html';
                         let subLastModified = lastModified;
                         let subSize = size;
+                        let foundIndex = false;
 
                         try {
                             const subRes = await fetch(subDirUrl, {
@@ -524,7 +527,6 @@ class WebDavStorageClient {
                                 const subXml = await subRes.text();
                                 const subDoc = parser.parseFromString(subXml, 'text/xml');
                                 const subNodes = subDoc.querySelectorAll('response, d\\:response');
-                                let foundIndex = false;
 
                                 subNodes.forEach(subNode => {
                                     const subHrefNode = subNode.querySelector('href, d\\:href');
@@ -539,41 +541,32 @@ class WebDavStorageClient {
                                         if (szNode && szNode.textContent) subSize = parseInt(szNode.textContent, 10);
                                     }
                                 });
-
-                                if (!foundIndex && subNodes.length <= 1) continue; // empty collection
                             }
                         } catch (e) {}
 
-                        seenNames.add(itemName);
-                        let webUrl = '';
-                        if (diaryBaseUrl) {
-                            if (diaryBaseUrl.endsWith('/diary')) {
+                        if (foundIndex) {
+                            seenNames.add(itemName);
+                            let webUrl = '';
+                            if (diaryBaseUrl) {
                                 webUrl = `${diaryBaseUrl}/${encodeURIComponent(itemName)}/${indexFileName}`;
                             } else {
-                                webUrl = `${diaryBaseUrl}/diary/${encodeURIComponent(itemName)}/${indexFileName}`;
+                                webUrl = `${subDirUrl}/${indexFileName}`;
                             }
-                        } else {
-                            webUrl = `${subDirUrl}/${indexFileName}`;
-                        }
 
-                        items.push({
-                            name: `${itemName}/${indexFileName}`,
-                            subDir: itemName,
-                            href,
-                            webUrl,
-                            size: subSize,
-                            lastModified: subLastModified
-                        });
-                    } else {
-                        // Direct file under diary/
+                            items.push({
+                                name: `${itemName}/${indexFileName}`,
+                                subDir: itemName,
+                                href,
+                                webUrl,
+                                size: subSize,
+                                lastModified: subLastModified
+                            });
+                        }
+                    } else if (itemName.toLowerCase().endsWith('.html') || itemName.toLowerCase().endsWith('.htm')) {
                         seenNames.add(itemName);
                         let webUrl = '';
                         if (diaryBaseUrl) {
-                            if (diaryBaseUrl.endsWith('/diary')) {
-                                webUrl = `${diaryBaseUrl}/${encodeURIComponent(itemName)}`;
-                            } else {
-                                webUrl = `${diaryBaseUrl}/diary/${encodeURIComponent(itemName)}`;
-                            }
+                            webUrl = `${diaryBaseUrl}/${encodeURIComponent(itemName)}`;
                         } else {
                             webUrl = href.startsWith('http') ? href : `${baseUrl}${href.startsWith('/') ? '' : '/'}${href}`;
                         }

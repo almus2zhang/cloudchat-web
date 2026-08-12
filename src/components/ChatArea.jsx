@@ -929,7 +929,7 @@ export default function ChatArea({
                     </span>
                   </h3>
                   <p className="text-[11px] text-textMuted">
-                    WebDAV 路径: <span className="font-mono text-cyan-400">{currentProfile?.serverPath || 'CloudChat'}/diary</span>
+                    WebDAV 路径: <span className="font-mono text-cyan-400">{[currentProfile?.serverPath, currentProfile?.saveDir].filter(Boolean).join('/') || 'CloudChat'}</span>
                     {currentProfile?.diaryBaseUrl ? ` | 映射地址: ${currentProfile.diaryBaseUrl}` : ''}
                   </p>
                 </div>
@@ -959,12 +959,12 @@ export default function ChatArea({
             {isLoadingDiary ? (
               <div className="py-8 flex items-center justify-center gap-2 text-textMuted text-xs">
                 <i className="fa-solid fa-spinner animate-spin text-cyan-400 text-sm"></i>
-                <span>正在读取 WebDAV diary 目录文件...</span>
+                <span>正在读取 WebDAV 设定目录下的子文件夹...</span>
               </div>
             ) : diaryFiles.length === 0 ? (
               <div className="py-6 text-center text-textMuted text-xs bg-bgPrimary/30 rounded-xl border border-dashed border-borderColor">
                 <i className="fa-solid fa-folder-open text-2xl text-textMuted/40 mb-2 block"></i>
-                <span>WebDAV `diary` 目录下暂无生成的日记页面</span>
+                <span>设定目录下暂无包含 index.html 的日记子文件夹</span>
                 <button
                   onClick={onOpenDiaryExport}
                   className="mt-2 block mx-auto text-xs text-cyan-400 underline hover:text-cyan-300"
