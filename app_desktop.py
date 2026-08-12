@@ -33,8 +33,13 @@ class DesktopApi:
                 self.window.minimize()
 
     def close(self):
-        if self.window:
-            self.window.destroy()
+        try:
+            if self.window:
+                self.window.destroy()
+        except Exception:
+            pass
+        finally:
+            os._exit(0)
 
 def get_dist_path():
     if getattr(sys, 'frozen', False):
