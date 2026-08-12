@@ -461,20 +461,17 @@ class WebDavStorageClient {
         const parts = [];
         if (root) root.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
         if (userDirClean) userDirClean.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
+        parts.push('diary');
 
-        const targetDirUrl = parts.length > 0 ? `${baseUrl}/${parts.join('/')}` : baseUrl;
-        const fallbackTargetDirUrl = `${baseUrl}/${root ? encodeURIComponent(root) : ''}`;
+        const diaryDirUrl = `${baseUrl}/${parts.join('/')}`;
+        const fallbackDiaryDirUrl = `${baseUrl}/${root ? encodeURIComponent(root) + '/' : ''}diary`;
 
-        const targetUrls = [targetDirUrl];
-        if (fallbackTargetDirUrl && fallbackTargetDirUrl !== targetDirUrl) {
-            targetUrls.push(fallbackTargetDirUrl);
-        }
-
+        const diaryDirUrls = [diaryDirUrl, fallbackDiaryDirUrl];
         const items = [];
         const seenNames = new Set();
         const diaryBaseUrl = (this.config.diaryBaseUrl || '').trim().replace(/\/+$/, '');
 
-        for (const targetUrl of targetUrls) {
+        for (const targetUrl of diaryDirUrls) {
             try {
                 const response = await fetch(targetUrl, {
                     method: 'PROPFIND',
@@ -497,7 +494,7 @@ class WebDavStorageClient {
 
                     const cleanHref = href.replace(/\/+$/, '');
                     const cleanTarget = targetUrl.replace(/\/+$/, '');
-                    if (cleanHref === cleanTarget || cleanHref.endsWith(cleanTarget)) continue;
+                    if (cleanHref.endsWith('/diary') || cleanHref.endsWith('/diary/') || cleanHref === cleanTarget) continue;
 
                     const isCollection = node.querySelector('collection, d\\:collection') !== null;
                     const itemName = decodeURIComponent(cleanHref.split('/').pop());
@@ -511,7 +508,7 @@ class WebDavStorageClient {
                     const lastModified = lastModifiedStr ? new Date(lastModifiedStr).getTime() : Date.now();
 
                     if (isCollection) {
-                        // Level 1 subdirectory directly in configured directory (e.g. 2026-08-11_日记)
+                        // Subdirectory under diary/ (e.g. 2026-08-11_日记)
                         const subDirUrl = `${cleanTarget}/${encodeURIComponent(itemName)}`;
                         let indexFileName = 'index.html';
                         let subLastModified = lastModified;
@@ -548,8 +545,10 @@ class WebDavStorageClient {
                             seenNames.add(itemName);
                             let webUrl = '';
                             if (diaryBaseUrl) {
+                                // If diaryBaseUrl is set, do not append diary/ since base URL is mapped directly to diary dir
                                 webUrl = `${diaryBaseUrl}/${encodeURIComponent(itemName)}/${indexFileName}`;
                             } else {
+                                // If diaryBaseUrl is empty, use WebDAV direct path (which includes /diary/)
                                 webUrl = `${subDirUrl}/${indexFileName}`;
                             }
 

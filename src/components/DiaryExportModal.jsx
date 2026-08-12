@@ -30,7 +30,7 @@ export default function DiaryExportModal({
     setTitle(defaultName);
     setAuthor(currentProfile ? (currentProfile.username || 'CloudChat User') : 'CloudChat User');
     const clean = defaultName.replace(/[\\/:*?"<>|]/g, '_');
-    setCustomSubDir(clean);
+    setCustomSubDir(`diary/${clean}`);
     setResultUrl(null);
     setResultPath('');
     setErrorMsg('');
@@ -44,7 +44,7 @@ export default function DiaryExportModal({
     }
     let isMounted = true;
     const cleanDir = customSubDir.trim().replace(/^\/+|\/+$/g, '');
-    const indexPath = cleanDir ? `${cleanDir}/index.html` : 'index.html';
+    const indexPath = `${cleanDir}/index.html`;
 
     const checkIndex = async () => {
       try {
@@ -54,7 +54,8 @@ export default function DiaryExportModal({
             let publicUrl = storageClient.getUrl(indexPath);
             if (currentProfile && currentProfile.diaryBaseUrl && currentProfile.diaryBaseUrl.trim()) {
               const base = currentProfile.diaryBaseUrl.trim().replace(/\/+$/, '');
-              publicUrl = `${base}/${indexPath}`;
+              const relativePath = indexPath.replace(/^diary\//i, '');
+              publicUrl = `${base}/${relativePath}`;
             }
             setExistingDiaryInfo({ url: publicUrl, path: indexPath });
           } else {
@@ -73,8 +74,8 @@ export default function DiaryExportModal({
   if (!isOpen) return null;
 
   const folderName = folderMsg ? (folderMsg.content || '文件夹') : '多选条目';
-  const targetDirClean = (customSubDir || 'export').trim().replace(/^\/+|\/+$/g, '');
-  const targetSubPath = targetDirClean ? `${targetDirClean}/index.html` : 'index.html';
+  const targetDirClean = (customSubDir || 'diary/export').trim().replace(/^\/+|\/+$/g, '');
+  const targetSubPath = `${targetDirClean}/index.html`;
 
   const templates = [
     {
@@ -170,7 +171,8 @@ export default function DiaryExportModal({
       let finalPublicUrl = uploadedUrl || storageClient.getUrl(targetSubPath);
       if (currentProfile && currentProfile.diaryBaseUrl && currentProfile.diaryBaseUrl.trim()) {
         const base = currentProfile.diaryBaseUrl.trim().replace(/\/+$/, '');
-        finalPublicUrl = `${base}/${targetSubPath}`;
+        const relativePath = targetSubPath.replace(/^diary\//i, '');
+        finalPublicUrl = `${base}/${relativePath}`;
       }
 
       setResultUrl(finalPublicUrl);
