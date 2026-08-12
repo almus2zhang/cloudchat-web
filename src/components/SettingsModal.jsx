@@ -153,33 +153,57 @@ export default function SettingsModal({
     }
   };
 
+  const convertAvatarToBlob = async (src) => {
+    if (src.startsWith('data:')) {
+      const res = await fetch(src);
+      return await res.blob();
+    }
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const MAX = 128;
+        const canvas = document.createElement('canvas');
+        canvas.width = MAX;
+        canvas.height = MAX;
+        const ctx = canvas.getContext('2d');
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, MAX, MAX);
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Canvas toBlob failed'));
+        }, 'image/jpeg', 0.85);
+      };
+      img.onerror = (e) => reject(e);
+      img.src = src;
+    });
+  };
+
   const handleSave = async () => {
     if (!editingProfile.name.trim()) return;
 
     let profileToSave = { ...editingProfile };
     delete profileToSave._avatarPendingUpload;
 
-    // If a new custom avatar was picked and storage client is connected, upload to WebDAV
-    if (editingProfile._avatarPendingUpload && editingProfile.avatar?.startsWith('data:') && storageClient) {
+    const rawAvatar = editingProfile.avatar || '';
+    const isRemoteFilename = rawAvatar.startsWith('avatar_') || rawAvatar.startsWith('avatar____');
+
+    if (!isRemoteFilename && rawAvatar && storageClient) {
       try {
         setIsUploadingAvatar(true);
-        const cleanName = (editingProfile.username || 'user').replace(/[^a-zA-Z0-9_-]/g, '_');
-        const avatarFileName = `avatar_${cleanName}_${Date.now()}.jpg`;
-        const res = await fetch(editingProfile.avatar);
-        const blob = await res.blob();
+        const avatarFileName = `avatar____${Date.now()}.jpg`;
+        const blob = await convertAvatarToBlob(rawAvatar);
         
-        // Upload to WebDAV server inside user's directory
-        await storageClient.uploadFile(blob, avatarFileName, 'image/jpeg');
-        // Cache blob in IndexedDB immediately for instant offline & F5 refresh availability
-        cacheFile(`avatar_${avatarFileName}`, blob);
-
-        // Instant memory blob URL caching
-        if (window.__cachedAvatarUrls) {
-          window.__cachedAvatarUrls[avatarFileName] = URL.createObjectURL(blob);
+        if (blob) {
+          await storageClient.uploadFile(blob, avatarFileName, 'image/jpeg');
+          cacheFile(`avatar_${avatarFileName}`, blob);
+          if (window.__cachedAvatarUrls) {
+            window.__cachedAvatarUrls[avatarFileName] = URL.createObjectURL(blob);
+          }
+          profileToSave.avatar = avatarFileName;
         }
-        
-        // Store ONLY the new filename (e.g. "avatar_Ken_1786432.jpg")
-        profileToSave.avatar = avatarFileName;
       } catch (err) {
         console.warn('Avatar upload to WebDAV warning:', err);
       } finally {
