@@ -39,7 +39,7 @@ if __name__ == '__main__':
         width=1380,
         height=820,
         resizable=True,
-        min_size=(900, 600)
+        min_size=(400, 500)
     )
 
     # Start PyWebView using Edge Chromium / WebView2 engine with persistent storage

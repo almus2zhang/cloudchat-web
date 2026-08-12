@@ -46,19 +46,19 @@ export default function Sidebar({
 
   return (
     <>
-      {/* Background Overlay on Mobile */}
+      {/* Background Overlay when sidebar is open in drawer mode */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 z-30 md:hidden"
+          className="fixed inset-0 bg-black/60 z-30 lg:hidden"
           onClick={onClose}
         />
       )}
 
       {/* Sidebar Drawer */}
       <aside 
-        className={`fixed top-0 bottom-0 left-0 w-72 bg-bgSecondary border-r border-borderColor flex flex-col z-40 md:z-10 md:static transform ${
+        className={`fixed top-0 bottom-0 left-0 w-72 bg-bgSecondary border-r border-borderColor flex flex-col z-40 lg:z-10 lg:static transform ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0 transition-transform duration-200 ease-out`}
+        } lg:translate-x-0 transition-transform duration-200 ease-out`}
       >
         {/* Header / Logo */}
         <div className="h-14 border-b border-borderColor flex items-center justify-between px-4">

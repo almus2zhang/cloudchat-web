@@ -764,7 +764,7 @@ export default function ChatArea({
         <div className="flex items-center gap-3 min-w-0">
           <button 
             onClick={onToggleSidebar}
-            className="md:hidden text-textSecondary hover:text-textPrimary transition-colors p-1"
+            className="lg:hidden text-textSecondary hover:text-textPrimary transition-colors p-1"
           >
             <i className="fa-solid fa-bars text-base"></i>
           </button>
