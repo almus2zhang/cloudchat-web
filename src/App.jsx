@@ -1337,14 +1337,54 @@ export default function App() {
       const a = document.createElement('a');
       a.href = url;
       a.download = current.content.replace(/^\d+_/, '');
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (e) {
       alert('Download failed.');
     }
   };
+
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  // Global Drag and Drop File Handler for Windows EXE & Web
+  useEffect(() => {
+    const handleDragOver = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+        setIsDraggingOver(true);
+      }
+    };
+
+    const handleDragLeave = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
+        setIsDraggingOver(false);
+      }
+    };
+
+    const handleDrop = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDraggingOver(false);
+
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const files = Array.from(e.dataTransfer.files);
+        for (const file of files) {
+          handleSendMessage(null, file);
+        }
+      }
+    };
+
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('dragleave', handleDragLeave);
+    window.addEventListener('drop', handleDrop);
+
+    return () => {
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('dragleave', handleDragLeave);
+      window.removeEventListener('drop', handleDrop);
+    };
+  }, [handleSendMessage]);
 
   const handleCloseMediaViewer = () => {
     setMediaViewerOpen(false);
@@ -1352,62 +1392,98 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-[100dvh] w-screen overflow-hidden bg-bgPrimary select-none">
+    <div className="flex flex-col h-[100dvh] w-screen overflow-hidden bg-bgPrimary select-none relative">
       
-      {/* Sidebar Component */}
-      <Sidebar 
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        profiles={profiles}
-        activeProfileId={activeProfileId}
-        currentProfile={currentProfile}
-        activeCategory={activeCategory}
-        onSwitchCategory={setActiveCategory}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onSync={() => syncHistory(true)}
-        isSyncing={isSyncing}
-        messages={messages.filter(m => !m.isDeleted)}
-        statusText={statusText}
-        statusDotClass={statusDotClass}
-        resolveAvatarUrl={resolveAvatarUrl}
-      />
+      {/* Dark Integrated Title Bar */}
+      <div className="h-9 bg-bgSecondary border-b border-borderColor flex items-center justify-between px-3 select-none pywebview-drag-region shrink-0 z-50">
+        <div className="flex items-center gap-2 text-xs font-semibold text-textSecondary pointer-events-none">
+          <i className="fa-solid fa-cloud-arrow-up text-cyan-400 text-sm"></i>
+          <span className="tracking-tight font-sans">CloudChat Desktop</span>
+        </div>
+        
+        {/* Native Window Controls for PyWebView Executable */}
+        <div className="flex items-center gap-1 -mr-1" style={{ WebkitAppRegion: 'no-drag' }}>
+          <button 
+            onClick={() => window.pywebview?.api?.minimize()} 
+            className="w-8 h-6 flex items-center justify-center text-textMuted hover:text-textPrimary hover:bg-white/10 rounded transition-colors"
+            title="最小化"
+          >
+            <i className="fa-solid fa-minus text-[10px]"></i>
+          </button>
+          <button 
+            onClick={() => window.pywebview?.api?.toggle_maximize()} 
+            className="w-8 h-6 flex items-center justify-center text-textMuted hover:text-textPrimary hover:bg-white/10 rounded transition-colors"
+            title="最大化 / 还原"
+          >
+            <i className="fa-regular fa-square text-[10px]"></i>
+          </button>
+          <button 
+            onClick={() => window.pywebview?.api?.close()} 
+            className="w-8 h-6 flex items-center justify-center text-textMuted hover:bg-red-500 hover:text-white rounded transition-colors"
+            title="关闭"
+          >
+            <i className="fa-solid fa-xmark text-xs"></i>
+          </button>
+        </div>
+      </div>
 
-      {/* Main Chat Area */}
-      <ChatArea 
-        currentProfile={currentProfile}
-        messages={messages.filter(m => !m.isDeleted)}
-        activeCategory={activeCategory}
-        selectedMessageIds={selectedMessageIds}
-        activeUploads={activeUploads}
-        onToggleMessageSelection={handleToggleMessageSelection}
-        onClearSelection={handleClearSelection}
-        onDeleteSelected={handleDeleteSelected}
-        onAddCategorySelected={() => { setCategoryTarget(null); setCategoryModalOpen(true); }}
-        onRemoveCategorySelected={handleRemoveCategorySelected}
-        onDeleteMessage={handleDeleteMessage}
-        onEditMessageCategories={handleEditMessageCategories}
-        onQuickAddCategory={handleQuickAddCategory}
-        onGroupSelected={handleGroupSelected}
-        onUngroupMessage={handleUngroupMessage}
-        onPackFolder={handlePackFolder}
-        onRemoveMessagesFromFolder={handleRemoveMessagesFromFolder}
-        onUnpackFolder={handleUnpackFolder}
-        onRenameFolder={handleRenameFolder}
-        onOpenDiaryExport={handleOpenDiaryExport}
-        isPrivacyMode={isPrivacyMode}
-        onEnterPrivacyMode={handleEnterPrivacyMode}
-        onExitPrivacyMode={handleExitPrivacyMode}
-        onChangePrivacyPin={handleChangePrivacyPin}
-        onToggleHideMessage={handleToggleHideMessage}
-        onEditTextMessage={handleEditTextMessage}
-        onUpdateCaption={handleUpdateCaption}
-        onSendMessage={handleSendMessage}
-        onRetryMessage={handleRetryMessage}
-        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-        storageClient={activeClientRef.current}
-        resolveAvatarUrl={resolveAvatarUrl}
-        isSyncing={isSyncing}
-      />
+      {/* Main Body */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Sidebar Component */}
+        <Sidebar 
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          profiles={profiles}
+          activeProfileId={activeProfileId}
+          currentProfile={currentProfile}
+          activeCategory={activeCategory}
+          onSwitchCategory={setActiveCategory}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onSync={() => syncHistory(true)}
+          isSyncing={isSyncing}
+          messages={messages.filter(m => !m.isDeleted)}
+          statusText={statusText}
+          statusDotClass={statusDotClass}
+          resolveAvatarUrl={resolveAvatarUrl}
+        />
+
+        {/* Main Chat Area */}
+        <ChatArea 
+          currentProfile={currentProfile}
+          messages={messages.filter(m => !m.isDeleted)}
+          activeCategory={activeCategory}
+          selectedMessageIds={selectedMessageIds}
+          activeUploads={activeUploads}
+          onToggleMessageSelection={handleToggleMessageSelection}
+          onClearSelection={handleClearSelection}
+          onDeleteSelected={handleDeleteSelected}
+          onAddCategorySelected={() => { setCategoryTarget(null); setCategoryModalOpen(true); }}
+          onRemoveCategorySelected={handleRemoveCategorySelected}
+          onDeleteMessage={handleDeleteMessage}
+          onEditMessageCategories={handleEditMessageCategories}
+          onQuickAddCategory={handleQuickAddCategory}
+          onGroupSelected={handleGroupSelected}
+          onUngroupMessage={handleUngroupMessage}
+          onPackFolder={handlePackFolder}
+          onRemoveMessagesFromFolder={handleRemoveMessagesFromFolder}
+          onUnpackFolder={handleUnpackFolder}
+          onRenameFolder={handleRenameFolder}
+          onOpenDiaryExport={handleOpenDiaryExport}
+          isPrivacyMode={isPrivacyMode}
+          onEnterPrivacyMode={handleEnterPrivacyMode}
+          onExitPrivacyMode={handleExitPrivacyMode}
+          onChangePrivacyPin={handleChangePrivacyPin}
+          onToggleHideMessage={handleToggleHideMessage}
+          onEditTextMessage={handleEditTextMessage}
+          onUpdateCaption={handleUpdateCaption}
+          onSendMessage={handleSendMessage}
+          onRetryMessage={handleRetryMessage}
+          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          storageClient={activeClientRef.current}
+          resolveAvatarUrl={resolveAvatarUrl}
+          isSyncing={isSyncing}
+        />
+      </div>
 
       {/* Settings Modal */}
       <SettingsModal 
@@ -1462,6 +1538,15 @@ export default function App() {
         currentProfile={currentProfile}
         storageClient={activeClientRef.current}
       />
+
+      {/* Drag & Drop Visual Drop Overlay */}
+      {isDraggingOver && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex flex-col items-center justify-center border-4 border-dashed border-cyan-500 rounded-3xl m-4 pointer-events-none animate-fade-in">
+          <i className="fa-solid fa-cloud-arrow-up text-6xl text-cyan-400 mb-4 animate-bounce"></i>
+          <p className="text-xl font-bold text-white tracking-wide">释放文件以立即发送至 CloudChat</p>
+          <p className="text-sm text-cyan-300 mt-2">支持多文件批量拖拽自动上传发送</p>
+        </div>
+      )}
 
     </div>
   );
