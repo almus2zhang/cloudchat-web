@@ -1067,8 +1067,8 @@ export default function ChatArea({
             return [names[0], { id: null, name: '…' }, names[names.length - 1]];
           })();
           return (
-            <div className="flex items-center justify-between p-2 mb-2 bg-bgSecondary/90 backdrop-blur border border-borderColor rounded-lg sticky top-0 z-10 shadow-sm w-full">
-              <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto">
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2 mb-2 bg-bgSecondary/90 backdrop-blur border border-borderColor rounded-lg sticky top-0 z-10 shadow-sm w-full">
+              <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto flex-1">
                 <button
                   className="flex items-center gap-1 text-cyan-400 hover:opacity-80 shrink-0"
                   onClick={() => setFolderStack(folderStack.slice(0, -1))}
@@ -1099,27 +1099,27 @@ export default function ChatArea({
                   </React.Fragment>
                 ))}
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
                 <button 
                   onClick={() => folderMsg && onOpenDiaryExport && onOpenDiaryExport(folderMsg)}
                   className="px-2.5 py-1 text-xs text-cyan-300 hover:text-white bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 border border-cyan-500/40 rounded-full transition-all flex items-center gap-1 font-semibold"
                   title="生成精美静态日记网页并存入服务器"
                 >
-                  <i className="fa-solid fa-book-bookmark text-[10px] text-cyan-400"></i> 生成静态日记
+                  <i className="fa-solid fa-book-bookmark text-[10px] text-cyan-400"></i> <span className="hidden sm:inline">生成静态日记</span>
                 </button>
                 <button 
                   onClick={() => folderMsg && onRenameFolder && onRenameFolder(folderMsg)}
                   className="px-2.5 py-1 text-xs text-textSecondary hover:text-textPrimary bg-bgPrimary border border-borderColor rounded-full transition-all flex items-center gap-1"
                   title="重命名文件夹"
                 >
-                  <i className="fa-solid fa-pen text-[10px] text-accentColor"></i> 重命名
+                  <i className="fa-solid fa-pen text-[10px] text-accentColor"></i> <span className="hidden sm:inline">重命名</span>
                 </button>
                 <button 
                   onClick={() => folderMsg && onUnpackFolder && onUnpackFolder(folderMsg)}
                   className="px-2.5 py-1 text-xs text-red-400 hover:bg-red-500/10 border border-red-500/20 rounded-full transition-all flex items-center gap-1 font-semibold"
                   title="解散文件夹"
                 >
-                  <i className="fa-solid fa-folder-minus text-[10px]"></i> 解散文件夹
+                  <i className="fa-solid fa-folder-minus text-[10px]"></i> <span className="hidden sm:inline">解散文件夹</span>
                 </button>
               </div>
             </div>
