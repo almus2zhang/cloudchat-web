@@ -102,10 +102,6 @@ export default function ChatArea({
     }
   };
 
-  // Submenu open states for category selection
-  const [showCategorySubmenu, setShowCategorySubmenu] = useState(false);
-  const [showBulkAddCatSubmenu, setShowBulkAddCatSubmenu] = useState(false);
-
   // Privacy Mode states
   const [viewHiddenOnly, setViewHiddenOnly] = useState(false);
   const sendLongPressRef = useRef(null);
@@ -941,12 +937,10 @@ export default function ChatArea({
                 <button
                   onClick={fetchDiaryFiles}
                   disabled={isLoadingDiary}
-                  className={`px-3 py-1.5 rounded-lg text-xs bg-bgPrimary border border-borderColor text-textSecondary hover:text-cyan-400 hover:border-cyan-500/40 transition-all flex items-center gap-1.5 ${
-                    isLoadingDiary ? 'animate-spin' : ''
-                  }`}
+                  className="px-3 py-1.5 rounded-lg text-xs bg-bgPrimary border border-borderColor text-textSecondary hover:text-cyan-400 hover:border-cyan-500/40 transition-all flex items-center gap-1.5"
                   title="刷新 WebDAV 日记文件列表"
                 >
-                  <i className="fa-solid fa-rotate-right text-xs"></i>
+                  <i className={`fa-solid fa-rotate-right text-xs ${isLoadingDiary ? 'animate-spin' : ''}`}></i>
                   <span>刷新</span>
                 </button>
                 <button
@@ -1792,62 +1786,6 @@ export default function ChatArea({
           }}
           className="bg-bgSecondary border border-borderColor rounded-lg shadow-2xl p-1 flex gap-1.5 items-center animate-fade-in"
         >
-          {/* 添加分类 with Dropdown Submenu */}
-          <div 
-            className="relative"
-            onMouseEnter={() => setShowBulkAddCatSubmenu(true)}
-            onMouseLeave={() => setShowBulkAddCatSubmenu(false)}
-          >
-            <button 
-              onClick={(e) => { 
-                e.stopPropagation(); 
-                setShowBulkAddCatSubmenu(!showBulkAddCatSubmenu); 
-              }}
-              className="px-2.5 py-1.5 text-xs font-semibold text-textPrimary hover:bg-white/5 rounded transition-all flex items-center gap-1.5 shrink-0"
-            >
-              <i className="fa-solid fa-tag text-accentColor"></i> 添加分类
-              <i className="fa-solid fa-chevron-down text-[9px] text-textMuted"></i>
-            </button>
-
-            {/* Bulk Add Category Dropdown Submenu with Bridge Zone */}
-            {showBulkAddCatSubmenu && (
-              <div 
-                className="absolute left-0 bottom-full mb-1 bg-bgSecondary border border-borderColor rounded-xl shadow-2xl py-1.5 min-w-[140px] animate-fade-in backdrop-blur-sm z-50 before:content-[''] before:absolute before:-bottom-3 before:left-0 before:right-0 before:h-4"
-              >
-                {Object.entries(CATEGORY_MAP).map(([catId, label]) => (
-                  <button
-                    key={catId}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onQuickAddCategory) onQuickAddCategory(catId, null);
-                      setShowBulkAddCatSubmenu(false);
-                    }}
-                    className="w-full px-3 py-1.5 text-xs text-textPrimary hover:bg-white/5 transition-colors flex items-center gap-2"
-                  >
-                    <i className={`text-xs ${
-                      catId === 'diary' ? 'fa-solid fa-book text-amber-400' :
-                      catId === 'transfer' ? 'fa-solid fa-right-left text-blue-400' :
-                      catId === 'work' ? 'fa-solid fa-briefcase text-purple-400' :
-                      'fa-solid fa-user-lock text-red-400'
-                    }`}></i>
-                    {label}
-                  </button>
-                ))}
-                <div className="my-1 border-t border-borderColor"></div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAddCategorySelected();
-                    setShowBulkAddCatSubmenu(false);
-                  }}
-                  className="w-full px-3 py-1.5 text-xs text-textMuted hover:bg-white/5 transition-colors flex items-center gap-2"
-                >
-                  <i className="fa-solid fa-ellipsis w-4 text-center"></i> 更多分类...
-                </button>
-              </div>
-            )}
-          </div>
-
           {/* Pack to Folder Option */}
           <button 
             onClick={(e) => { e.stopPropagation(); onPackFolder(currentFolderId); }}
@@ -1945,14 +1883,6 @@ export default function ChatArea({
             <i className="fa-solid fa-book-bookmark text-emerald-400"></i> 生成日记
           </button>
 
-          {activeCategory !== 'all' && (
-            <button 
-              onClick={(e) => { e.stopPropagation(); onRemoveCategorySelected(); }}
-              className="px-2.5 py-1.5 text-xs font-semibold text-textPrimary hover:bg-white/5 rounded transition-all flex items-center gap-1.5 shrink-0"
-            >
-              <i className="fa-solid fa-tags text-textMuted"></i> 移出分类
-            </button>
-          )}
           <button 
             onPointerDown={(e) => {
               e.stopPropagation();
@@ -2125,87 +2055,6 @@ export default function ChatArea({
               className="w-full px-4 py-2 text-xs text-amber-400 hover:bg-amber-500/10 transition-colors flex items-center gap-2.5"
             >
               <i className="fa-solid fa-object-ungroup w-4 text-center"></i> 拆散组合
-            </button>
-          )}
-
-          {/* Divider */}
-          <div className="my-1 border-t border-borderColor"></div>
-
-          {/* Add to Category with Seamless Flyout Secondary Submenu */}
-          <div 
-            className="relative"
-            onMouseEnter={() => setShowCategorySubmenu(true)}
-            onMouseLeave={() => setShowCategorySubmenu(false)}
-          >
-            <button
-              onClick={() => {
-                setShowCategorySubmenu(!showCategorySubmenu);
-              }}
-              className="w-full px-4 py-2 text-xs text-textPrimary hover:bg-white/5 transition-colors flex items-center justify-between gap-2.5"
-            >
-              <span className="flex items-center gap-2.5">
-                <i className="fa-solid fa-tag text-accentColor w-4 text-center"></i> 添加到分类
-              </span>
-              <i className="fa-solid fa-chevron-right text-[10px] text-textMuted"></i>
-            </button>
-
-            {/* Category Flyout Submenu with Bridge Zone */}
-            {showCategorySubmenu && (
-              <div 
-                className="absolute left-full top-0 -ml-1 bg-bgSecondary border border-borderColor rounded-xl shadow-2xl py-1.5 min-w-[140px] animate-fade-in backdrop-blur-sm z-50 before:content-[''] before:absolute before:-left-4 before:top-0 before:bottom-0 before:w-6"
-              >
-                {Object.entries(CATEGORY_MAP).map(([catId, label]) => {
-                  const hasCat = (contextMenu.msg.categories || []).includes(catId) || (contextMenu.msg.categories || []).includes(label);
-                  return (
-                    <button
-                      key={catId}
-                      onClick={() => {
-                        if (onQuickAddCategory) onQuickAddCategory(catId, contextMenu.msg);
-                        setContextMenu(null);
-                        setShowCategorySubmenu(false);
-                      }}
-                      className="w-full px-3 py-1.5 text-xs text-textPrimary hover:bg-white/5 transition-colors flex items-center justify-between gap-2"
-                    >
-                      <span className="flex items-center gap-2">
-                        <i className={`text-xs ${
-                          catId === 'diary' ? 'fa-solid fa-book text-amber-400' :
-                          catId === 'transfer' ? 'fa-solid fa-right-left text-blue-400' :
-                          catId === 'work' ? 'fa-solid fa-briefcase text-purple-400' :
-                          'fa-solid fa-user-lock text-red-400'
-                        }`}></i>
-                        {label}
-                      </span>
-                      {hasCat && <i className="fa-solid fa-check text-accentColor text-[10px]"></i>}
-                    </button>
-                  );
-                })}
-                <div className="my-1 border-t border-borderColor"></div>
-                <button
-                  onClick={() => {
-                    onEditMessageCategories(contextMenu.msg);
-                    setContextMenu(null);
-                    setShowCategorySubmenu(false);
-                  }}
-                  className="w-full px-3 py-1.5 text-xs text-textMuted hover:bg-white/5 transition-colors flex items-center gap-2"
-                >
-                  <i className="fa-solid fa-ellipsis w-4 text-center"></i> 更多分类...
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Remove from current category — only when viewing a specific category */}
-          {activeCategory !== 'all' && (contextMenu.msg.categories || []).includes(activeCategory) && (
-            <button
-              onClick={() => {
-                // Select just this message and call remove
-                onToggleMessageSelection(contextMenu.msg.id);
-                setTimeout(() => onRemoveCategorySelected(), 50);
-                setContextMenu(null);
-              }}
-              className="w-full px-4 py-2 text-xs text-textPrimary hover:bg-white/5 transition-colors flex items-center gap-2.5"
-            >
-              <i className="fa-solid fa-tags text-textMuted w-4 text-center"></i> 移出当前分类
             </button>
           )}
 
