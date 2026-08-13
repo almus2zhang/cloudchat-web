@@ -14,6 +14,25 @@ const PRESET_AVATARS = [
   'https://api.dicebear.com/7.x/bottts/png?seed=Orion'
 ];
 
+// 校验「设定的用户目录」合法性：目录各段只能包含数字、字母、下划线、连字符。
+// 返回 null 表示合法，否则返回错误提示文案。
+function validateUserDir(profile) {
+  if (!profile) return '配置为空';
+  const segs = [];
+  const root = (profile.serverPath || '').replace(/^\/+|\/+$/g, '');
+  const dir = (profile.saveDir || '').replace(/^\/+|\/+$/g, '');
+  if (root) root.split('/').filter(Boolean).forEach(s => segs.push(s));
+  if (dir) dir.split('/').filter(Boolean).forEach(s => segs.push(s));
+  if (segs.length === 0) return '存储目录不能为空，请填写目录名';
+  const valid = /^[a-zA-Z0-9_-]+$/;
+  for (const seg of segs) {
+    if (seg.length > 255) return `目录层级「${seg}」过长（最多 255 字符）`;
+    if (seg === '.' || seg === '..') return `目录层级不能为「${seg}」`;
+    if (!valid.test(seg)) return `目录层级「${seg}」含非法字符，只能使用数字、字母、下划线(_)、连字符(-)`;
+  }
+  return null;
+}
+
 export default function SettingsModal({ 
   isOpen, 
   profiles, 
@@ -183,6 +202,13 @@ export default function SettingsModal({
 
   const handleSave = async () => {
     if (!editingProfile.name.trim()) return;
+
+    // 校验「设定的用户目录」合法性：目录各段只能包含数字、字母、下划线、连字符
+    const dirError = validateUserDir(editingProfile);
+    if (dirError) {
+      setTestResult({ success: false, message: dirError });
+      return;
+    }
 
     let profileToSave = { ...editingProfile };
     delete profileToSave._avatarPendingUpload;
