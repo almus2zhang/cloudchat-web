@@ -145,6 +145,18 @@ export default function App() {
   }, [messages]);
 
   // 2. Profile Changed -> Reload messages and restart sync loop
+  // 刷新日记文件个数（从 WebDAV 读取真实日记文件列表）
+  const refreshDiaryCount = React.useCallback(async () => {
+    const client = activeClientRef.current;
+    if (!client || typeof client.listDiaryFiles !== 'function') return;
+    try {
+      const list = await client.listDiaryFiles();
+      setDiaryFileCount(Array.isArray(list) ? list.length : 0);
+    } catch (e) {
+      console.error('Failed to refresh diary count:', e);
+    }
+  }, []);
+
   useEffect(() => {
     if (syncTimerRef.current) {
       clearInterval(syncTimerRef.current);
@@ -214,18 +226,6 @@ export default function App() {
       }
     };
   }, [activeProfileId, refreshDiaryCount]);
-
-  // 刷新日记文件个数（从 WebDAV 读取真实日记文件列表）
-  const refreshDiaryCount = React.useCallback(async () => {
-    const client = activeClientRef.current;
-    if (!client || typeof client.listDiaryFiles !== 'function') return;
-    try {
-      const list = await client.listDiaryFiles();
-      setDiaryFileCount(Array.isArray(list) ? list.length : 0);
-    } catch (e) {
-      console.error('Failed to refresh diary count:', e);
-    }
-  }, []);
 
   const resolveMediaMessageUrl = async (msg) => {
     if (!msg.id || msg.url) return msg.url;
