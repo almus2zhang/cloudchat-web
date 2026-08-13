@@ -921,7 +921,7 @@ export default function ChatArea({
               className="w-8 h-8 flex items-center justify-center rounded-lg text-sky-400 hover:bg-sky-500/10 transition-all shrink-0"
               title="移入文件夹"
             >
-              <i className="fa-solid fa-folder-arrow-right text-sm"></i>
+              <i className="fa-solid fa-folder-open text-sm"></i>
             </button>
 
             {/* 移出文件夹 */}
@@ -1938,7 +1938,7 @@ export default function ChatArea({
                 onClick={() => { if (onMoveIntoFolder) onMoveIntoFolder(currentFolderId); setContextMenu(null); }}
                 className="w-full px-4 py-2 text-xs font-semibold text-sky-400 hover:bg-sky-500/10 transition-colors flex items-center gap-2.5"
               >
-                <i className="fa-solid fa-folder-arrow-right w-4 text-center"></i> 移入文件夹
+                <i className="fa-solid fa-folder-open w-4 text-center"></i> 移入文件夹
               </button>
 
               {currentFolderId && (
