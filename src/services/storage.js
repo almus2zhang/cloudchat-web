@@ -351,6 +351,32 @@ class WebDavStorageClient {
         }
     }
 
+    // 删除 diary 目录下的日记文件。fileName 可能为 "subDir/index.html" 或 "xxx.html"
+    async deleteDiaryFile(fileName) {
+        const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
+        const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
+        const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
+
+        const parts = [];
+        if (root) root.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
+        if (userDirClean) userDirClean.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
+        parts.push('diary');
+
+        // 子目录形式（如 "2026-08-11_日记/index.html"）删除整个子目录；否则删除单个文件
+        const segs = (fileName || '').split('/').filter(Boolean);
+        if (segs.length === 0) return;
+        parts.push(segs[0]);
+
+        const url = `${baseUrl}/${parts.join('/')}`;
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: { 'Authorization': this.getAuthHeader() }
+        });
+        if (!response.ok && response.status !== 404) {
+            throw new Error(`Delete diary failed: ${response.status}`);
+        }
+    }
+
     async recycleFile(fileName) {
         const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
