@@ -105,12 +105,39 @@ export default function ChatArea({
   // Privacy Mode states
   const [viewHiddenOnly, setViewHiddenOnly] = useState(false);
   const sendLongPressRef = useRef(null);
+
+  // Detect whether a precise pointer (mouse) is available
+  const [hasMouse, setHasMouse] = useState(false);
+  useEffect(() => {
+    const mqHover = window.matchMedia('(hover: hover) and (pointer: fine)');
+    const update = () => setHasMouse(mqHover.matches);
+    update();
+    const onPointerDown = (e) => {
+      if (e.pointerType === 'mouse') setHasMouse(true);
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    if (typeof mqHover.addEventListener === 'function') {
+      mqHover.addEventListener('change', update);
+    }
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      if (typeof mqHover.removeEventListener === 'function') {
+        mqHover.removeEventListener('change', update);
+      }
+    };
+  }, []);
   
   // Touch long press state ref
   const touchTimersRef = useRef({});
+  // Long-press timer for the delete button (long press = move to privacy)
+  const deleteLongPressRef = useRef(null);
+  const deleteLongPressFiredRef = useRef(false);
 
   const handleTouchStart = (e, msgId) => {
+    // Only allow left mouse button; touch devices handled by pointerType
     if (e.type === 'mousedown' && e.button !== 0) return;
+    // With a mouse, long-press should NOT enter multi-select (right-click menu is used instead)
+    if (e.pointerType === 'mouse') return;
     if (touchTimersRef.current[msgId]) clearTimeout(touchTimersRef.current[msgId]);
     
     const touch = e.type === 'touchstart' ? e.touches[0] : e;
@@ -127,9 +154,6 @@ export default function ChatArea({
       token.isLongPress = true;
       onToggleMessageSelection(msgId);
       touchTimersRef.current[`longpress_active_${msgId}`] = true;
-      
-      // Position selection menu top-right of cursor
-      setSelectionMenuCoords({ x: token.startX, y: token.startY });
     }, 600);
     
     touchTimersRef.current[`meta_${msgId}`] = token;
@@ -371,12 +395,8 @@ export default function ChatArea({
       sendLongPressRef.current = setTimeout(() => {
         const pin = match[1];
         if (onEnterPrivacyMode) {
-          const success = onEnterPrivacyMode(pin);
-          if (success) {
+          if (onEnterPrivacyMode(pin)) {
             setInputText('');
-            alert('🔓 已成功解密进入隐私模式！隐藏条目已取消掩盖。');
-          } else {
-            alert('❌ 密码错误，无法解锁隐私模式');
           }
         }
       }, 600);
@@ -879,14 +899,127 @@ export default function ChatArea({
 
         {/* Multi-Selection Toolbar */}
         {selectedMessageIds.size > 0 && (
-          <div className="absolute inset-0 bg-bgSecondary flex items-center px-4 justify-between animate-fade-in z-20">
-            <span className="text-xs font-semibold text-accentColor flex items-center gap-2">
+          <div className="absolute inset-0 bg-bgSecondary flex items-center px-2 sm:px-4 gap-1.5 sm:gap-2 animate-fade-in z-20 overflow-x-auto">
+            <span className="text-xs font-semibold text-accentColor flex items-center gap-1.5 shrink-0">
               <i className="fa-solid fa-square-check"></i> {selectedMessageIds.size} items selected
             </span>
-            <button 
+
+            <div className="flex-1"></div>
+
+            {/* 打包文件夹 */}
+            <button
+              onClick={() => onPackFolder(currentFolderId)}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-cyan-400 hover:bg-cyan-500/10 transition-all shrink-0"
+              title="打包文件夹"
+            >
+              <i className="fa-solid fa-folder-plus text-sm"></i>
+            </button>
+
+            {/* 移入文件夹 */}
+            <button
+              onClick={() => onMoveIntoFolder(currentFolderId)}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-sky-400 hover:bg-sky-500/10 transition-all shrink-0"
+              title="移入文件夹"
+            >
+              <i className="fa-solid fa-folder-arrow-right text-sm"></i>
+            </button>
+
+            {/* 移出文件夹 */}
+            {currentFolderId && (
+              <button
+                onClick={() => onRemoveMessagesFromFolder(messages.filter(m => selectedMessageIds.has(m.id)))}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-amber-400 hover:bg-amber-500/10 transition-all shrink-0"
+                title="移出文件夹"
+              >
+                <i className="fa-solid fa-folder-minus text-sm"></i>
+              </button>
+            )}
+
+            {/* 合并消息 */}
+            {(() => {
+              const nonFolderSelected = messages.filter(m => selectedMessageIds.has(m.id) && m.type !== 'FOLDER');
+              const existingGroupIds = new Set(nonFolderSelected.filter(m => m.groupId).map(m => m.groupId));
+              const totalTargetCount = messages.filter(
+                m => m.type !== 'FOLDER' && (selectedMessageIds.has(m.id) || (m.groupId && existingGroupIds.has(m.groupId)))
+              ).length;
+              return totalTargetCount >= 2 ? (
+                <button
+                  onClick={() => onGroupSelected()}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-purple-400 hover:bg-purple-500/10 transition-all shrink-0"
+                  title="合并消息"
+                >
+                  <i className="fa-solid fa-object-group text-sm"></i>
+                </button>
+              ) : null;
+            })()}
+
+            {/* 拆散组合 */}
+            {Array.from(selectedMessageIds).some(id => messages.find(m => m.id === id)?.groupId) && (
+              <button
+                onClick={() => onUngroupMessage(messages.filter(m => selectedMessageIds.has(m.id)))}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-amber-400 hover:bg-amber-500/10 transition-all shrink-0"
+                title="拆散组合"
+              >
+                <i className="fa-solid fa-object-ungroup text-sm"></i>
+              </button>
+            )}
+
+            {/* 移出隐私（仅隐私模式下显示，移入只能长按删除按钮触发） */}
+            {isPrivacyMode && (
+              <button
+                onClick={() => onToggleHideMessage(messages.filter(m => selectedMessageIds.has(m.id)))}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-purple-400 hover:bg-purple-500/10 transition-all shrink-0"
+                title="移出隐私空间"
+              >
+                <i className="fa-solid fa-lock-open text-sm"></i>
+              </button>
+            )}
+
+            {/* 生成日记 */}
+            <button
+              onClick={() => onOpenDiaryExport(messages.filter(m => selectedMessageIds.has(m.id)))}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-emerald-400 hover:bg-emerald-500/10 transition-all shrink-0"
+              title="生成日记"
+            >
+              <i className="fa-solid fa-book-bookmark text-sm"></i>
+            </button>
+
+            {/* 删除（短按删除，长按移入隐私） */}
+            <button
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                deleteLongPressFiredRef.current = false;
+                deleteLongPressRef.current = setTimeout(() => {
+                  deleteLongPressFiredRef.current = true;
+                  onToggleHideMessage(messages.filter(m => selectedMessageIds.has(m.id)));
+                }, 600);
+              }}
+              onPointerUp={() => {
+                if (deleteLongPressRef.current) {
+                  clearTimeout(deleteLongPressRef.current);
+                  deleteLongPressRef.current = null;
+                }
+              }}
+              onPointerLeave={() => {
+                if (deleteLongPressRef.current) {
+                  clearTimeout(deleteLongPressRef.current);
+                  deleteLongPressRef.current = null;
+                }
+              }}
+              onClick={(e) => {
+                if (deleteLongPressFiredRef.current) return;
+                onDeleteSelected();
+              }}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-500/10 transition-all shrink-0"
+              title="删除选中（长按移入隐私）"
+            >
+              <i className="fa-regular fa-trash-can text-sm"></i>
+            </button>
+
+            <button
               onClick={onClearSelection}
-              className="w-8 h-8 flex items-center justify-center text-textSecondary hover:text-textPrimary transition-all"
-              title="Clear Selection"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-textSecondary hover:text-textPrimary transition-all shrink-0"
+              title="取消多选"
             >
               <i className="fa-solid fa-xmark text-sm"></i>
             </button>
@@ -1850,7 +1983,7 @@ export default function ChatArea({
                   onClick={() => { if (onToggleHideMessage) onToggleHideMessage(messages.filter(m => selectedMessageIds.has(m.id))); setContextMenu(null); }}
                   className="w-full px-4 py-2 text-xs font-semibold text-purple-400 hover:bg-purple-500/10 transition-colors flex items-center gap-2.5"
                 >
-                  <i className="fa-solid fa-eye-slash w-4 text-center"></i> 隐藏/取消隐藏
+                  <i className="fa-solid fa-lock-open w-4 text-center"></i> 移出隐私
                 </button>
               )}
 
@@ -1987,7 +2120,7 @@ export default function ChatArea({
             </button>
           )}
 
-          {/* Hide / Unhide Option (Only in Privacy Mode) */}
+          {/* Move out of Privacy (only when in privacy mode) */}
           {selectedMessageIds.size <= 1 && isPrivacyMode && (
             <button
               onClick={() => {
@@ -1996,8 +2129,8 @@ export default function ChatArea({
               }}
               className="w-full px-4 py-2 text-xs text-purple-400 hover:bg-purple-500/10 transition-colors flex items-center gap-2.5"
             >
-              <i className={`fa-solid ${contextMenu.msg.isHidden ? 'fa-eye' : 'fa-eye-slash'} w-4 text-center`}></i>
-              {contextMenu.msg.isHidden ? '取消隐藏此消息' : '设为隐藏条目'}
+              <i className="fa-solid fa-lock-open w-4 text-center"></i>
+              移出隐私
             </button>
           )}
 
