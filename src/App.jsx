@@ -1047,21 +1047,24 @@ export default function App() {
 
   // --- Manual Message Grouping & Ungrouping Actions ---
   const handleGroupSelected = () => {
-    if (selectedMessageIds.size < 2) return;
+    // 过滤掉文件夹，文件夹不参与合并
+    const selectedMsgs = messages.filter(
+      m => selectedMessageIds.has(m.id) && m.type !== 'FOLDER'
+    );
+    if (selectedMsgs.length < 2) return;
 
     const newGroupId = `group_${Date.now()}`;
-    const selectedMsgs = messages.filter(m => selectedMessageIds.has(m.id));
 
     const existingGroupIds = new Set(
       selectedMsgs.map(m => m.groupId).filter(Boolean)
     );
 
     const membersOfExistingGroups = messages
-      .filter(m => m.groupId && existingGroupIds.has(m.groupId))
+      .filter(m => m.type !== 'FOLDER' && m.groupId && existingGroupIds.has(m.groupId))
       .map(m => m.id);
 
     const allTargetIds = new Set([
-      ...selectedMessageIds,
+      ...selectedMsgs.map(m => m.id),
       ...membersOfExistingGroups
     ]);
 
