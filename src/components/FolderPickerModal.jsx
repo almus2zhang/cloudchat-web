@@ -61,13 +61,11 @@ export default function FolderPickerModal({
 }) {
   const [selectedId, setSelectedId] = useState(null);
 
-  // directItems 模式：直接显示给定文件夹列表（用于选择父文件夹）；否则列出"本级"下的文件夹
-  const siblings = directItems != null
+  // directItems 模式：直接显示给定文件夹列表（用于选择父文件夹）；
+  // 否则从 home（根目录）列出完整文件夹树（顶层文件夹 folderId 为空）
+  const rootFolders = directItems != null
     ? directItems.filter(m => m.type === 'FOLDER' && !m.isDeleted)
-    : allMessages.filter(m =>
-        m.type === 'FOLDER' && !m.isDeleted &&
-        (m.folderId === currentFolderId || (currentFolderId == null && !m.folderId))
-      );
+    : allMessages.filter(m => m.type === 'FOLDER' && !m.isDeleted && !m.folderId);
 
   // 当弹窗打开时重置选中
   React.useEffect(() => {
@@ -84,10 +82,10 @@ export default function FolderPickerModal({
           {hint && <p className="text-textMuted text-xs mt-1">{hint}</p>}
         </div>
         <div className="p-3 max-h-80 overflow-y-auto">
-          {siblings.length === 0 ? (
-            <p className="text-textMuted text-sm text-center py-6">当前层级下没有可用的文件夹</p>
+          {rootFolders.length === 0 ? (
+            <p className="text-textMuted text-sm text-center py-6">还没有任何文件夹，请先打包创建文件夹</p>
           ) : (
-            siblings.map(folder => (
+            rootFolders.map(folder => (
               <FolderTreeNode
                 key={folder.id}
                 folder={folder}

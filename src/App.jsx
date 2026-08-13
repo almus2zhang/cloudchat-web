@@ -1223,6 +1223,22 @@ export default function App() {
     return { folderId, name, messages: msgs, children: subFolders };
   };
 
+  // 递归收集指定文件夹的所有后代文件夹 id（含自身），用于防循环禁用
+  const collectDescendantFolderIds = (rootId) => {
+    const result = new Set([rootId]);
+    const queue = [rootId];
+    const visited = new Set();
+    while (queue.length > 0) {
+      const cur = queue.shift();
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      messages.filter(m => m.type === 'FOLDER' && !m.isDeleted && m.folderId === cur).forEach(child => {
+        if (!result.has(child.id)) { result.add(child.id); queue.push(child.id); }
+      });
+    }
+    return result;
+  };
+
   const handleRemoveMessagesFromFolder = (msgOrMsgs) => {
     const msgsToRemove = Array.isArray(msgOrMsgs) ? msgOrMsgs : [msgOrMsgs];
     const targetIds = new Set(msgsToRemove.map(m => m.id));
@@ -1619,10 +1635,20 @@ export default function App() {
       <FolderPickerModal 
         isOpen={moveIntoFolderOpen}
         title="移入文件夹"
-        hint="选择目标文件夹，选中消息将移入其中"
+        hint="从主界面选择目标文件夹，选中消息将移入其中"
         allMessages={messages}
         currentFolderId={moveIntoFolderContextId}
-        excludeIds={new Set(selectedMessageIds)}
+        excludeIds={
+          Array.from(selectedMessageIds).reduce((acc, id) => {
+            const msg = messages.find(m => m.id === id);
+            if (msg && msg.type === 'FOLDER') {
+              collectDescendantFolderIds(id).forEach(d => acc.add(d));
+            } else {
+              acc.add(id);
+            }
+            return acc;
+          }, new Set())
+        }
         confirmText="移入"
         onConfirm={handleMoveIntoFolderConfirm}
         onCancel={() => setMoveIntoFolderOpen(false)}
