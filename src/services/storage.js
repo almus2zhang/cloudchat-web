@@ -371,6 +371,7 @@ class WebDavStorageClient {
     }
 
     // 删除 diary 目录下的日记文件。fileName 可能为 "subDir/index.html" 或 "xxx.html"
+    // 安全策略：永不物理删除，只移动到 recycle_bin 回收站（目录连同内容一并移入）。
     async deleteDiaryFile(fileName) {
         // 安全校验：拒绝空、路径穿越、绝对路径、非法字符
         if (!this.validateSafeName(fileName)) {
@@ -384,21 +385,49 @@ class WebDavStorageClient {
         const parts = [];
         if (root) root.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
         if (userDirClean) userDirClean.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
-        parts.push('diary');
+        const currentBaseUrl = `${baseUrl}/${parts.join('/')}/`.replace(/\/+$/, '/');
+        const recycleBinUrl = `${currentBaseUrl}recycle_bin`;
 
-        // 子目录形式（如 "2026-08-11_日记/index.html"）删除整个子目录；否则删除单个文件。
-        // 仅取第一段（已通过 validateSafeName 校验不含 ".." 等危险内容）
+        // 1. 确保 recycle_bin 存在
+        try {
+            const propRes = await fetch(recycleBinUrl, {
+                method: 'PROPFIND',
+                headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
+            });
+            if (!propRes.ok) {
+                await fetch(recycleBinUrl, {
+                    method: 'MKCOL',
+                    headers: { 'Authorization': this.getAuthHeader() }
+                });
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        // 2. 取第一段：子目录形式删除整个子目录，单文件形式删除单文件
         const segs = fileName.trim().split('/').filter(Boolean);
         if (segs.length === 0) return;
-        parts.push(encodeURIComponent(segs[0]));
+        const targetName = encodeURIComponent(segs[0]);
+        // 源 URL：diary/<targetName>（目录或文件）
+        const sourceUrl = `${currentBaseUrl}diary/${targetName}`;
+        const recycledName = `${Date.now()}_${segs[0]}`;
+        const destUrl = `${recycleBinUrl}/${encodeURIComponent(recycledName)}`;
 
-        const url = `${baseUrl}/${parts.join('/')}`;
-        const response = await fetch(url, {
-            method: 'DELETE',
-            headers: { 'Authorization': this.getAuthHeader() }
-        });
-        if (!response.ok && response.status !== 404) {
-            throw new Error(`Delete diary failed: ${response.status}`);
+        // 3. MOVE 到回收站（目录连同内容一并移动，不区分是否为空）
+        try {
+            const response = await fetch(sourceUrl, {
+                method: 'MOVE',
+                headers: {
+                    'Authorization': this.getAuthHeader(),
+                    'Destination': destUrl
+                }
+            });
+            if (!response.ok && response.status !== 404) {
+                throw new Error(`MOVE diary to recycle_bin failed: ${response.status}`);
+            }
+        } catch (e) {
+            console.error('WebDAV deleteDiaryFile MOVE failed:', e);
+            throw e;
         }
     }
 
