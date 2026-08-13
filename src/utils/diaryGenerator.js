@@ -170,7 +170,7 @@ self.addEventListener('fetch', (event) => {
 });
 `;
 
-export async function generateDiaryHtml({ folderName, author, avatar, templateId = 'wechat', password = '', messages = [], storageClient, targetDirClean = 'diary/export', exportMode = 'relative', onProgress }) {
+export async function generateDiaryHtml({ folderName, author, avatar, templateId = 'wechat', password = '', messages = [], folderTree = null, storageClient, targetDirClean = 'diary/export', exportMode = 'relative', onProgress }) {
   const isWeChat = templateId === 'wechat';
   const sortedMsgs = [...messages].sort((a, b) => isWeChat ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
 
@@ -398,8 +398,9 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
   };
 
   // Render WeChat Moments Feed Item
-  const renderWeChatMoments = () => {
-    return groupedItems.map((item) => {
+  const renderWeChatMoments = (list) => {
+    const items = groupMessagesForDiary(list.sort((a, b) => isWeChat ? b.timestamp - a.timestamp : a.timestamp - b.timestamp));
+    return items.map((item) => {
       const dateInfo = formatDate(item.timestamp);
       let contentBlock = '';
 
@@ -472,8 +473,9 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
     }).join('\n');
   };
 
-  const renderStandardTimeline = () => {
-    return groupedItems.map(item => {
+  const renderStandardTimeline = (list) => {
+    const items = groupMessagesForDiary(list.sort((a, b) => isWeChat ? b.timestamp - a.timestamp : a.timestamp - b.timestamp));
+    return items.map(item => {
       const dateInfo = formatDate(item.timestamp);
       
       if (item.isGroup) {
@@ -566,6 +568,32 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
     }).join('\n');
   };
 
+  // 递归渲染单个文件夹节点：先渲染直接消息，再对子文件夹用 details/summary 折叠包裹
+  const countNodeMessages = (node) => node.messages.length + (node.children || []).reduce((acc, c) => acc + countNodeMessages(c), 0);
+  const renderFolderNode = (node) => {
+    const directHtml = isWeChat ? renderWeChatMoments(node.messages) : renderStandardTimeline(node.messages);
+    const childrenHtml = (node.children || []).map(child => `
+      <details class="diary-folder">
+        <summary class="diary-folder-summary">📁 ${escapeHtml(child.name)}<span class="diary-folder-count">(${countNodeMessages(child)})</span></summary>
+        <div class="diary-folder-content">${renderFolderNode(child)}</div>
+      </details>`).join('\n');
+    return directHtml + childrenHtml;
+  };
+
+  // 有文件夹树时：顶层消息 + 子文件夹折叠；否则平铺渲染
+  const feedHtml = (() => {
+    if (folderTree) {
+      const topHtml = isWeChat ? renderWeChatMoments(folderTree.messages) : renderStandardTimeline(folderTree.messages);
+      const subFoldersHtml = (folderTree.children || []).map(child => `
+        <details class="diary-folder">
+          <summary class="diary-folder-summary">📁 ${escapeHtml(child.name)}<span class="diary-folder-count">(${countNodeMessages(child)})</span></summary>
+          <div class="diary-folder-content">${renderFolderNode(child)}</div>
+        </details>`).join('\n');
+      return topHtml + subFoldersHtml;
+    }
+    return isWeChat ? renderWeChatMoments(sortedMsgs) : renderStandardTimeline(sortedMsgs);
+  })();
+
   const cssStyles = getTemplateCss(templateId);
 
   return `<!DOCTYPE html>
@@ -622,7 +650,7 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
         <p>共收录 ${sortedMsgs.length} 条记录 (${groupedItems.length} 组动态)</p>
       </div>
       <div class="wechat-feed">
-        ${renderWeChatMoments()}
+        ${feedHtml}
       </div>
     </div>
   ` : `
@@ -635,7 +663,7 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
         </div>
       </header>
       <main class="timeline-container">
-        ${renderStandardTimeline()}
+        ${feedHtml}
       </main>
     </div>
   `}
@@ -784,6 +812,16 @@ function getTemplateCss(templateId) {
     .lightbox-modal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.9); align-items: center; justify-content: center; }
     .lightbox-content { max-width: 90%; max-height: 90%; border-radius: 4px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
     .lightbox-close { position: absolute; top: 20px; right: 35px; color: #fff; font-size: 40px; font-weight: bold; cursor: pointer; }
+
+    /* --- Folder folding (diary nested folders) --- */
+    .diary-folder { margin: 10px 0; border: 1px solid #e2e2e2; border-radius: 10px; overflow: hidden; background: #fafafa; }
+    .diary-folder-summary { cursor: pointer; padding: 10px 14px; font-weight: 700; font-size: 14px; color: #576b95; background: #f3f4f7; list-style: none; display: flex; align-items: center; gap: 6px; user-select: none; }
+    .diary-folder-summary::-webkit-details-marker { display: none; }
+    .diary-folder-summary::before { content: "▸"; transition: transform 0.2s; font-size: 12px; }
+    .diary-folder[open] > .diary-folder-summary::before { transform: rotate(90deg); }
+    .diary-folder-count { font-size: 11px; color: #999; font-weight: 400; margin-left: auto; }
+    .diary-folder-content { padding: 8px 10px; }
+    .diary-folder .diary-folder { margin: 6px 0; }
 
     /* --- Template 1: WeChat Moments (朋友圈风格 & 9宫格) --- */
     .theme-wechat { background: #ededed; }

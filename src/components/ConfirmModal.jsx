@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function ConfirmModal({ isOpen, title, message, onOk, onCancel, confirmText = 'Yes, Delete', cancelText = 'Cancel', isDanger = true }) {
+export default function ConfirmModal({ isOpen, title, message, onOk, onCancel, confirmText = 'Yes, Delete', cancelText = 'Cancel', isDanger = true, customActions = null }) {
   if (!isOpen) return null;
   
   return (
@@ -13,20 +13,40 @@ export default function ConfirmModal({ isOpen, title, message, onOk, onCancel, c
           <h3 className="text-textPrimary text-lg font-semibold mb-2">{title}</h3>
           <p className="text-textSecondary text-sm">{message}</p>
         </div>
-        <div className="flex border-t border-borderColor">
-          <button 
-            className="flex-1 py-3 text-sm font-medium text-textSecondary hover:bg-white/5 transition-colors border-r border-borderColor"
-            onClick={onCancel}
-          >
-            {cancelText}
-          </button>
-          <button 
-            className={`flex-1 py-3 text-sm font-semibold transition-colors hover:bg-white/5 ${isDanger ? 'text-red-500' : 'text-accentColor'}`}
-            onClick={onOk}
-          >
-            {confirmText}
-          </button>
-        </div>
+        {customActions && customActions.length > 0 ? (
+          <div className="flex flex-col gap-2 p-4 border-t border-borderColor">
+            {customActions.map((action, idx) => (
+              <button
+                key={idx}
+                className="py-3 text-sm font-semibold text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-lg hover:bg-cyan-500/20 transition-colors"
+                onClick={action.onClick}
+              >
+                {action.label}
+              </button>
+            ))}
+            <button
+              className="py-3 text-sm font-medium text-textSecondary hover:bg-white/5 transition-colors"
+              onClick={onCancel}
+            >
+              {cancelText}
+            </button>
+          </div>
+        ) : (
+          <div className="flex border-t border-borderColor">
+            <button 
+              className="flex-1 py-3 text-sm font-medium text-textSecondary hover:bg-white/5 transition-colors border-r border-borderColor"
+              onClick={onCancel}
+            >
+              {cancelText}
+            </button>
+            <button 
+              className={`flex-1 py-3 text-sm font-semibold transition-colors hover:bg-white/5 ${isDanger ? 'text-red-500' : 'text-accentColor'}`}
+              onClick={onOk}
+            >
+              {confirmText}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

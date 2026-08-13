@@ -1,6 +1,3 @@
-import os
-import sys
-
 # Disable WebView2 CORS and Private Network Access restrictions
 os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = (
     '--disable-web-security '
@@ -13,33 +10,6 @@ import webview
 
 webview.settings['IGNORE_SSL_ERRORS'] = True
 webview.settings['ALLOW_FILE_URLS'] = True
-
-class DesktopApi:
-    def __init__(self):
-        self.window = None
-
-    def set_window(self, win):
-        self.window = win
-
-    def minimize(self):
-        if self.window:
-            self.window.minimize()
-
-    def toggle_maximize(self):
-        if self.window:
-            try:
-                self.window.toggle_fullscreen()
-            except Exception:
-                self.window.minimize()
-
-    def close(self):
-        try:
-            if self.window:
-                self.window.destroy()
-        except Exception:
-            pass
-        finally:
-            os._exit(0)
 
 def get_dist_path():
     if getattr(sys, 'frozen', False):
@@ -62,21 +32,15 @@ if __name__ == '__main__':
     storage_dir = os.path.join(appdata, 'CloudChatLight')
     os.makedirs(storage_dir, exist_ok=True)
 
-    api = DesktopApi()
-
-    # Create native WebView2 window with CORS disabled and frameless dark style
+    # Create native WebView2 window with CORS disabled
     window = webview.create_window(
         title='CloudChat Desktop',
         url=index_file,
         width=1380,
         height=820,
         resizable=True,
-        frameless=True,
-        easy_drag=True,
-        min_size=(400, 500),
-        js_api=api
+        min_size=(400, 500)
     )
-    api.set_window(window)
 
     # Start PyWebView using Edge Chromium / WebView2 engine with persistent storage
     webview.start(

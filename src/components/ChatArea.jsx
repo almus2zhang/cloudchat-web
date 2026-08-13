@@ -29,6 +29,7 @@ export default function ChatArea({
   onRemoveMessagesFromFolder,
   onUnpackFolder,
   onRenameFolder,
+  onMoveIntoFolder,
   onOpenDiaryExport,
   isPrivacyMode = false,
   onEnterPrivacyMode,
@@ -196,8 +197,9 @@ export default function ChatArea({
   // Scroll lock preference state
   const [lockScroll, setLockScroll] = useState(false);
 
-  // Folder navigation state
-  const [currentFolderId, setCurrentFolderId] = useState(null);
+  // Folder navigation state (multi-level stack)
+  const [folderStack, setFolderStack] = useState([]);
+  const currentFolderId = folderStack.length > 0 ? folderStack[folderStack.length - 1] : null;
 
   // Pagination & Lazy Load States
   const [visibleCount, setVisibleCount] = useState(100);
@@ -1051,18 +1053,51 @@ export default function ChatArea({
             )}
           </div>
         )}
-        {currentFolderId && (() => {
+        {folderStack.length > 0 && (() => {
           const folderMsg = messages.find(m => m.id === currentFolderId);
-          const folderName = folderMsg ? (folderMsg.content || '文件夹') : '文件夹';
+          const breadcrumbItems = (() => {
+            const names = folderStack.map(id => {
+              const f = messages.find(m => m.id === id);
+              return { id, name: f ? (f.content || '文件夹') : '文件夹' };
+            });
+            if (names.length <= 4) return names;
+            // 过长折叠中间：保留首层 + ... + 末层
+            return [names[0], { id: null, name: '…' }, names[names.length - 1]];
+          })();
           return (
             <div className="flex items-center justify-between p-2 mb-2 bg-bgSecondary/90 backdrop-blur border border-borderColor rounded-lg sticky top-0 z-10 shadow-sm w-full">
-              <div className="flex items-center gap-2 cursor-pointer hover:opacity-80" onClick={() => setCurrentFolderId(null)}>
-                <i className="fa-solid fa-arrow-left text-cyan-400"></i>
-                <i className="fa-solid fa-folder text-cyan-500 text-base"></i>
-                <span className="font-semibold text-textPrimary text-sm truncate max-w-[200px]">{folderName}</span>
-                <span className="text-[10px] text-textMuted">(点击返回主界面)</span>
+              <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto">
+                <button
+                  className="flex items-center gap-1 text-cyan-400 hover:opacity-80 shrink-0"
+                  onClick={() => setFolderStack(folderStack.slice(0, -1))}
+                  title="返回上一级"
+                >
+                  <i className="fa-solid fa-arrow-left"></i>
+                </button>
+                <i className="fa-solid fa-folder text-cyan-500 text-base shrink-0"></i>
+                {breadcrumbItems.map((item, idx) => (
+                  <React.Fragment key={item.id || `sep-${idx}`}>
+                    {idx > 0 && <span className="text-textMuted text-xs">›</span>}
+                    {item.id === null ? (
+                      <span className="text-textMuted text-xs px-1">…</span>
+                    ) : (
+                      <button
+                        className={`font-semibold text-sm truncate max-w-[160px] px-1 rounded hover:bg-white/5 ${
+                          idx === breadcrumbItems.length - 1 ? 'text-cyan-400' : 'text-textPrimary'
+                        }`}
+                        onClick={() => {
+                          const targetIndex = folderStack.indexOf(item.id);
+                          if (targetIndex >= 0) setFolderStack(folderStack.slice(0, targetIndex + 1));
+                        }}
+                        title="点击跳转到此层级"
+                      >
+                        {item.name}
+                      </button>
+                    )}
+                  </React.Fragment>
+                ))}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button 
                   onClick={() => folderMsg && onOpenDiaryExport && onOpenDiaryExport(folderMsg)}
                   className="px-2.5 py-1 text-xs text-cyan-300 hover:text-white bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 border border-cyan-500/40 rounded-full transition-all flex items-center gap-1 font-semibold"
@@ -1571,7 +1606,7 @@ export default function ChatArea({
                             onClick={(e) => {
                               if (selectedMessageIds.size > 0) return;
                               e.stopPropagation();
-                              setCurrentFolderId(item.id);
+                              setFolderStack([...folderStack, item.id]);
                             }}
                           >
                             <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-500 text-lg shrink-0">
@@ -1813,11 +1848,20 @@ export default function ChatArea({
 
           {/* Pack to Folder Option */}
           <button 
-            onClick={(e) => { e.stopPropagation(); onPackFolder(); }}
+            onClick={(e) => { e.stopPropagation(); onPackFolder(currentFolderId); }}
             className="px-2.5 py-1.5 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/10 rounded transition-all flex items-center gap-1.5 shrink-0"
             title="将选中的消息打包合并到文件夹中"
           >
             <i className="fa-solid fa-folder-plus"></i> 打包文件夹
+          </button>
+
+          {/* Move into Folder Option */}
+          <button 
+            onClick={(e) => { e.stopPropagation(); if (onMoveIntoFolder) onMoveIntoFolder(currentFolderId); }}
+            className="px-2.5 py-1.5 text-xs font-semibold text-sky-400 hover:bg-sky-500/10 rounded transition-all flex items-center gap-1.5 shrink-0"
+            title="将选中的消息移入某个文件夹"
+          >
+            <i className="fa-solid fa-folder-arrow-right"></i> 移入文件夹
           </button>
 
           {/* Remove from Folder Option (only when inside a folder) */}

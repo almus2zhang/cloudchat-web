@@ -4,6 +4,7 @@ import ChatArea from './components/ChatArea';
 import SettingsModal from './components/SettingsModal';
 import CategoryModal from './components/CategoryModal';
 import ConfirmModal from './components/ConfirmModal';
+import FolderPickerModal from './components/FolderPickerModal';
 import MediaViewer from './components/MediaViewer';
 import DiaryExportModal from './components/DiaryExportModal';
 import { StorageClient } from './services/storage';
@@ -35,6 +36,12 @@ export default function App() {
   const [diaryExportOpen, setDiaryExportOpen] = useState(false);
   const [diaryExportFolder, setDiaryExportFolder] = useState(null);
   const [diaryExportSelectedMsgs, setDiaryExportSelectedMsgs] = useState(null);
+
+  // Folder nesting states: 移入文件夹 & 打包时选择父文件夹
+  const [moveIntoFolderOpen, setMoveIntoFolderOpen] = useState(false);
+  const [moveIntoFolderContextId, setMoveIntoFolderContextId] = useState(null);
+  const [chooseParentFolderOpen, setChooseParentFolderOpen] = useState(false);
+  const [chooseParentTargets, setChooseParentTargets] = useState([]); // 候选父文件夹消息数组
 
   const handleOpenDiaryExport = (folderMsgOrMsgs) => {
     if (!folderMsgOrMsgs) return;
@@ -1059,11 +1066,20 @@ export default function App() {
   };
 
   // --- Folder Action Handlers ---
-  const handlePackFolder = (folderName = '') => {
+  const handlePackFolder = (currentFolderId, folderName = '') => {
     if (selectedMessageIds.size === 0) return;
 
     const selectedMsgs = messages.filter(m => selectedMessageIds.has(m.id));
-    const targetFolder = selectedMsgs.find(m => m.type === 'FOLDER');
+    const folderMsgs = selectedMsgs.filter(m => m.type === 'FOLDER');
+
+    // 选中含 2 个及以上文件夹：弹出选择父文件夹
+    if (folderMsgs.length >= 2) {
+      setChooseParentTargets(folderMsgs);
+      setChooseParentFolderOpen(true);
+      return;
+    }
+
+    const targetFolder = folderMsgs[0] || null;
 
     if (targetFolder) {
       // Pack other selected items directly into the selected existing folder
@@ -1081,7 +1097,7 @@ export default function App() {
       setSelectedMessageIds(new Set());
       pushHistoryToCloud(updated);
     } else {
-      // Create new folder and pack selected items into it
+      // Create new folder and pack selected items into it（在文件夹内时挂到当前文件夹下）
       const name = folderName || prompt('请输入文件夹名称/注释：');
       if (name === null) return;
 
@@ -1096,6 +1112,7 @@ export default function App() {
         isOutgoing: true,
         status: 'SUCCESS',
         categories: activeCategory !== 'all' ? [activeCategory] : [],
+        folderId: currentFolderId || undefined,
         lastModified: Date.now()
       };
 
@@ -1111,6 +1128,82 @@ export default function App() {
       setSelectedMessageIds(new Set());
       pushHistoryToCloud(finalList);
     }
+  };
+
+  // 选择父文件夹确认：其余所有项（含其它文件夹）放入选中的父文件夹
+  const handleChooseParentFolderConfirm = (parentId) => {
+    setChooseParentFolderOpen(false);
+    const others = Array.from(selectedMessageIds).filter(id => id !== parentId);
+    if (others.length === 0) { setSelectedMessageIds(new Set()); return; }
+    const targetSet = new Set(others);
+    const updated = messages.map(m => {
+      if (targetSet.has(m.id)) {
+        return { ...m, folderId: parentId, lastModified: Date.now() };
+      }
+      return m;
+    });
+    setMessages(updated);
+    setSelectedMessageIds(new Set());
+    pushHistoryToCloud(updated);
+  };
+
+  // 移入文件夹：把选中消息（含文件夹）移动到目标文件夹（防循环）
+  const handleMoveIntoFolder = (currentFolderId = null) => {
+    if (selectedMessageIds.size === 0) return;
+    setMoveIntoFolderContextId(currentFolderId);
+    setMoveIntoFolderOpen(true);
+  };
+
+  const handleMoveIntoFolderConfirm = (targetFolderId) => {
+    setMoveIntoFolderOpen(false);
+    const targetSet = new Set(selectedMessageIds);
+    // 防循环：目标不能是选中文件夹中的某个或其祖先
+    const selectedFolderIds = new Set(
+      messages.filter(m => targetSet.has(m.id) && m.type === 'FOLDER').map(m => m.id)
+    );
+    if (selectedFolderIds.has(targetFolderId)) return;
+    // 目标祖先链中不能包含选中的文件夹
+    let cur = messages.find(m => m.id === targetFolderId);
+    while (cur && cur.folderId) {
+      if (selectedFolderIds.has(cur.folderId)) return;
+      cur = messages.find(m => m.id === cur.folderId);
+    }
+    const updated = messages.map(m => {
+      if (targetSet.has(m.id)) {
+        return { ...m, folderId: targetFolderId, lastModified: Date.now() };
+      }
+      return m;
+    });
+    setMessages(updated);
+    setSelectedMessageIds(new Set());
+    pushHistoryToCloud(updated);
+  };
+
+  // 递归收集指定文件夹下的所有消息（排除 FOLDER 本身与 isDeleted）
+  const collectFolderMessagesRecursive = (folderId) => {
+    const result = [];
+    const visited = new Set();
+    const queue = [folderId];
+    while (queue.length > 0) {
+      const cur = queue.shift();
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      messages.filter(m => !m.isDeleted && m.folderId === cur).forEach(child => {
+        if (child.type === 'FOLDER') queue.push(child.id);
+        else result.push(child);
+      });
+    }
+    return result;
+  };
+
+  // 构建文件夹树（用于日记折叠渲染）
+  const buildFolderTree = (folderId) => {
+    const folderMsg = messages.find(m => m.id === folderId);
+    const name = folderMsg ? (folderMsg.content || '文件夹') : '文件夹';
+    const children = messages.filter(m => !m.isDeleted && m.folderId === folderId);
+    const msgs = children.filter(m => m.type !== 'FOLDER');
+    const subFolders = children.filter(m => m.type === 'FOLDER').map(m => buildFolderTree(m.id));
+    return { folderId, name, messages: msgs, children: subFolders };
   };
 
   const handleRemoveMessagesFromFolder = (msgOrMsgs) => {
@@ -1132,27 +1225,51 @@ export default function App() {
 
   const handleUnpackFolder = (folderMsg) => {
     if (!folderMsg || folderMsg.type !== 'FOLDER') return;
+
+    // 递归收集所有后代文件夹 id
+    const collectDescendants = (rootId) => {
+      const result = new Set();
+      const queue = [rootId];
+      while (queue.length > 0) {
+        const cur = queue.shift();
+        const children = messages.filter(m => m.type === 'FOLDER' && !m.isDeleted && m.folderId === cur);
+        children.forEach(c => { if (!result.has(c.id)) { result.add(c.id); queue.push(c.id); } });
+      }
+      return result;
+    };
+
+    const doUnpack = (recursive) => {
+      setConfirmOpen(false);
+      const folderId = folderMsg.id;
+      const idsToDelete = recursive
+        ? new Set([folderId, ...collectDescendants(folderId)])
+        : new Set([folderId]);
+      const updated = messages.map(m => {
+        if (idsToDelete.has(m.folderId)) {
+          const copy = { ...m, lastModified: Date.now() };
+          delete copy.folderId;
+          return copy;
+        }
+        if (idsToDelete.has(m.id)) {
+          return { ...m, isDeleted: true, lastModified: Date.now() };
+        }
+        return m;
+      });
+      setMessages(updated);
+      setSelectedMessageIds(new Set());
+      pushHistoryToCloud(updated);
+    };
+
+    // 拆散方式选择：用自定义弹窗（两个按钮）
+    setMoveIntoFolderOpen(false);
+    setChooseParentFolderOpen(false);
     setConfirmConfig({
       title: '解散文件夹',
-      message: `确定要解散文件夹 "${folderMsg.content || '文件夹'}" 吗？文件夹内的消息将重新放回到聊天列表中。`,
-      onOk: () => {
-        setConfirmOpen(false);
-        const folderId = folderMsg.id;
-        const updated = messages.map(m => {
-          if (m.folderId === folderId) {
-            const copy = { ...m, lastModified: Date.now() };
-            delete copy.folderId;
-            return copy;
-          }
-          if (m.id === folderId) {
-            return { ...m, isDeleted: true, lastModified: Date.now() };
-          }
-          return m;
-        });
-        setMessages(updated);
-        setSelectedMessageIds(new Set());
-        pushHistoryToCloud(updated);
-      }
+      message: `确定要解散文件夹 "${folderMsg.content || '文件夹'}" 吗？请选择拆散方式。`,
+      customActions: [
+        { label: '只拆散一级', onClick: () => doUnpack(false) },
+        { label: '全部拆散', onClick: () => doUnpack(true) }
+      ]
     });
     setConfirmOpen(true);
   };
@@ -1337,6 +1454,10 @@ export default function App() {
       const a = document.createElement('a');
       a.href = url;
       a.download = current.content.replace(/^\d+_/, '');
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (e) {
       alert('Download failed.');
     }
@@ -1344,7 +1465,7 @@ export default function App() {
 
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
-  // Global Drag and Drop File Handler for Windows EXE & Web
+  // Global Drag and Drop File Handler
   useEffect(() => {
     const handleDragOver = (e) => {
       e.preventDefault();
@@ -1353,7 +1474,6 @@ export default function App() {
         setIsDraggingOver(true);
       }
     };
-
     const handleDragLeave = (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -1361,12 +1481,10 @@ export default function App() {
         setIsDraggingOver(false);
       }
     };
-
     const handleDrop = async (e) => {
       e.preventDefault();
       e.stopPropagation();
       setIsDraggingOver(false);
-
       if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         const files = Array.from(e.dataTransfer.files);
         for (const file of files) {
@@ -1374,11 +1492,9 @@ export default function App() {
         }
       }
     };
-
     window.addEventListener('dragover', handleDragOver);
     window.addEventListener('dragleave', handleDragLeave);
     window.addEventListener('drop', handleDrop);
-
     return () => {
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('dragleave', handleDragLeave);
@@ -1392,98 +1508,62 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-[100dvh] w-screen overflow-hidden bg-bgPrimary select-none relative">
-      
-      {/* Dark Integrated Title Bar */}
-      <div className="h-9 bg-bgSecondary border-b border-borderColor flex items-center justify-between px-3 select-none pywebview-drag-region shrink-0 z-50">
-        <div className="flex items-center gap-2 text-xs font-semibold text-textSecondary pointer-events-none">
-          <i className="fa-solid fa-cloud-arrow-up text-cyan-400 text-sm"></i>
-          <span className="tracking-tight font-sans">CloudChat Desktop</span>
-        </div>
-        
-        {/* Native Window Controls for PyWebView Executable */}
-        <div className="flex items-center gap-1 -mr-1" style={{ WebkitAppRegion: 'no-drag' }}>
-          <button 
-            onClick={() => window.pywebview?.api?.minimize()} 
-            className="w-8 h-6 flex items-center justify-center text-textMuted hover:text-textPrimary hover:bg-white/10 rounded transition-colors"
-            title="最小化"
-          >
-            <i className="fa-solid fa-minus text-[10px]"></i>
-          </button>
-          <button 
-            onClick={() => window.pywebview?.api?.toggle_maximize()} 
-            className="w-8 h-6 flex items-center justify-center text-textMuted hover:text-textPrimary hover:bg-white/10 rounded transition-colors"
-            title="最大化 / 还原"
-          >
-            <i className="fa-regular fa-square text-[10px]"></i>
-          </button>
-          <button 
-            onClick={() => window.pywebview?.api?.close()} 
-            className="w-8 h-6 flex items-center justify-center text-textMuted hover:bg-red-500 hover:text-white rounded transition-colors"
-            title="关闭"
-          >
-            <i className="fa-solid fa-xmark text-xs"></i>
-          </button>
-        </div>
-      </div>
-
-      {/* Main Body */}
-      <div className="flex-1 flex overflow-hidden relative">
+    <div className="flex h-[100dvh] w-screen overflow-hidden bg-bgPrimary select-none relative">
         {/* Sidebar Component */}
         <Sidebar 
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          profiles={profiles}
-          activeProfileId={activeProfileId}
-          currentProfile={currentProfile}
-          activeCategory={activeCategory}
-          onSwitchCategory={setActiveCategory}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onSync={() => syncHistory(true)}
-          isSyncing={isSyncing}
-          messages={messages.filter(m => !m.isDeleted)}
-          statusText={statusText}
-          statusDotClass={statusDotClass}
-          resolveAvatarUrl={resolveAvatarUrl}
-        />
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        profiles={profiles}
+        activeProfileId={activeProfileId}
+        currentProfile={currentProfile}
+        activeCategory={activeCategory}
+        onSwitchCategory={setActiveCategory}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onSync={() => syncHistory(true)}
+        isSyncing={isSyncing}
+        messages={messages.filter(m => !m.isDeleted)}
+        statusText={statusText}
+        statusDotClass={statusDotClass}
+        resolveAvatarUrl={resolveAvatarUrl}
+      />
 
-        {/* Main Chat Area */}
-        <ChatArea 
-          currentProfile={currentProfile}
-          messages={messages.filter(m => !m.isDeleted)}
-          activeCategory={activeCategory}
-          selectedMessageIds={selectedMessageIds}
-          activeUploads={activeUploads}
-          onToggleMessageSelection={handleToggleMessageSelection}
-          onClearSelection={handleClearSelection}
-          onDeleteSelected={handleDeleteSelected}
-          onAddCategorySelected={() => { setCategoryTarget(null); setCategoryModalOpen(true); }}
-          onRemoveCategorySelected={handleRemoveCategorySelected}
-          onDeleteMessage={handleDeleteMessage}
-          onEditMessageCategories={handleEditMessageCategories}
-          onQuickAddCategory={handleQuickAddCategory}
-          onGroupSelected={handleGroupSelected}
-          onUngroupMessage={handleUngroupMessage}
-          onPackFolder={handlePackFolder}
-          onRemoveMessagesFromFolder={handleRemoveMessagesFromFolder}
-          onUnpackFolder={handleUnpackFolder}
-          onRenameFolder={handleRenameFolder}
-          onOpenDiaryExport={handleOpenDiaryExport}
-          isPrivacyMode={isPrivacyMode}
-          onEnterPrivacyMode={handleEnterPrivacyMode}
-          onExitPrivacyMode={handleExitPrivacyMode}
-          onChangePrivacyPin={handleChangePrivacyPin}
-          onToggleHideMessage={handleToggleHideMessage}
-          onEditTextMessage={handleEditTextMessage}
-          onUpdateCaption={handleUpdateCaption}
-          onSendMessage={handleSendMessage}
-          onRetryMessage={handleRetryMessage}
-          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-          storageClient={activeClientRef.current}
-          resolveAvatarUrl={resolveAvatarUrl}
-          isSyncing={isSyncing}
-        />
-      </div>
+      {/* Main Chat Area */}
+      <ChatArea 
+        currentProfile={currentProfile}
+        messages={messages.filter(m => !m.isDeleted)}
+        activeCategory={activeCategory}
+        selectedMessageIds={selectedMessageIds}
+        activeUploads={activeUploads}
+        onToggleMessageSelection={handleToggleMessageSelection}
+        onClearSelection={handleClearSelection}
+        onDeleteSelected={handleDeleteSelected}
+        onAddCategorySelected={() => { setCategoryTarget(null); setCategoryModalOpen(true); }}
+        onRemoveCategorySelected={handleRemoveCategorySelected}
+        onDeleteMessage={handleDeleteMessage}
+        onEditMessageCategories={handleEditMessageCategories}
+        onQuickAddCategory={handleQuickAddCategory}
+        onGroupSelected={handleGroupSelected}
+        onUngroupMessage={handleUngroupMessage}
+        onPackFolder={handlePackFolder}
+        onRemoveMessagesFromFolder={handleRemoveMessagesFromFolder}
+        onUnpackFolder={handleUnpackFolder}
+        onRenameFolder={handleRenameFolder}
+        onMoveIntoFolder={handleMoveIntoFolder}
+        onOpenDiaryExport={handleOpenDiaryExport}
+        isPrivacyMode={isPrivacyMode}
+        onEnterPrivacyMode={handleEnterPrivacyMode}
+        onExitPrivacyMode={handleExitPrivacyMode}
+        onChangePrivacyPin={handleChangePrivacyPin}
+        onToggleHideMessage={handleToggleHideMessage}
+        onEditTextMessage={handleEditTextMessage}
+        onUpdateCaption={handleUpdateCaption}
+        onSendMessage={handleSendMessage}
+        onRetryMessage={handleRetryMessage}
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        storageClient={activeClientRef.current}
+        resolveAvatarUrl={resolveAvatarUrl}
+        isSyncing={isSyncing}
+      />
 
       {/* Settings Modal */}
       <SettingsModal 
@@ -1513,6 +1593,34 @@ export default function App() {
         message={confirmConfig.message}
         onOk={confirmConfig.onOk}
         onCancel={() => setConfirmOpen(false)}
+        customActions={confirmConfig.customActions}
+      />
+
+      {/* 移入文件夹选择器 */}
+      <FolderPickerModal 
+        isOpen={moveIntoFolderOpen}
+        title="移入文件夹"
+        hint="选择目标文件夹，选中消息将移入其中"
+        allMessages={messages}
+        currentFolderId={moveIntoFolderContextId}
+        excludeIds={new Set(selectedMessageIds)}
+        confirmText="移入"
+        onConfirm={handleMoveIntoFolderConfirm}
+        onCancel={() => setMoveIntoFolderOpen(false)}
+      />
+
+      {/* 打包时选择父文件夹 */}
+      <FolderPickerModal 
+        isOpen={chooseParentFolderOpen}
+        title="选择父文件夹"
+        hint="选中了多个文件夹，请选择其中一个作为父文件夹，其余所有条目将放入其中"
+        allMessages={[]}
+        directItems={chooseParentTargets}
+        currentFolderId={null}
+        excludeIds={new Set()}
+        confirmText="确定"
+        onConfirm={handleChooseParentFolderConfirm}
+        onCancel={() => setChooseParentFolderOpen(false)}
       />
 
       {/* Gallery Media Viewer Modal */}
@@ -1533,18 +1641,21 @@ export default function App() {
         folderMsg={diaryExportFolder}
         folderMessages={
           diaryExportSelectedMsgs ? diaryExportSelectedMsgs :
-          (diaryExportFolder ? messages.filter(m => !m.isDeleted && m.folderId === diaryExportFolder.id) : [])
+          (diaryExportFolder ? collectFolderMessagesRecursive(diaryExportFolder.id) : [])
         }
+        folderTree={diaryExportFolder ? buildFolderTree(diaryExportFolder.id) : null}
         currentProfile={currentProfile}
         storageClient={activeClientRef.current}
       />
 
-      {/* Drag & Drop Visual Drop Overlay */}
+      {/* Drag-and-drop overlay */}
       {isDraggingOver && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex flex-col items-center justify-center border-4 border-dashed border-cyan-500 rounded-3xl m-4 pointer-events-none animate-fade-in">
-          <i className="fa-solid fa-cloud-arrow-up text-6xl text-cyan-400 mb-4 animate-bounce"></i>
-          <p className="text-xl font-bold text-white tracking-wide">释放文件以立即发送至 CloudChat</p>
-          <p className="text-sm text-cyan-300 mt-2">支持多文件批量拖拽自动上传发送</p>
+        <div className="fixed inset-0 z-[100] bg-accentColor/20 border-2 border-dashed border-accentColor flex items-center justify-center pointer-events-none">
+          <div className="bg-bgSecondary/90 backdrop-blur-md rounded-xl px-8 py-6 text-center shadow-2xl border border-accentColor/30">
+            <i className="fa-solid fa-cloud-arrow-up text-accentColor text-4xl mb-3 block"></i>
+            <p className="text-textPrimary font-semibold text-lg">拖放文件到此处发送</p>
+            <p className="text-textMuted text-sm mt-1">支持图片、视频、音频、文档</p>
+          </div>
         </div>
       )}
 

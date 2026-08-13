@@ -6,6 +6,7 @@ export default function DiaryExportModal({
   onClose,
   folderMsg,
   folderMessages = [],
+  folderTree = null,
   currentProfile,
   storageClient
 }) {
@@ -144,6 +145,7 @@ export default function DiaryExportModal({
         templateId,
         password: enablePassword ? password : '',
         messages: folderMessages,
+        folderTree,
         storageClient,
         targetDirClean,
         exportMode,
