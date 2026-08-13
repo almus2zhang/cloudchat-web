@@ -1775,147 +1775,6 @@ export default function ChatArea({
         </div>
       </footer>
 
-      {/* Floating Contextual Multi-Selection Actions Bar */}
-      {selectedMessageIds.size > 0 && selectionMenuCoords && (
-        <div 
-          style={{ 
-            position: 'fixed',
-            left: Math.max(10, Math.min(selectionMenuCoords.x + 25, window.innerWidth - 300)),
-            top: Math.max(10, Math.min(selectionMenuCoords.y - 25, window.innerHeight - 60)),
-            zIndex: 9999
-          }}
-          className="bg-bgSecondary border border-borderColor rounded-lg shadow-2xl p-1 flex gap-1.5 items-center animate-fade-in"
-        >
-          {/* Pack to Folder Option */}
-          <button 
-            onClick={(e) => { e.stopPropagation(); onPackFolder(currentFolderId); }}
-            className="px-2.5 py-1.5 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/10 rounded transition-all flex items-center gap-1.5 shrink-0"
-            title="将选中的消息打包合并到文件夹中"
-          >
-            <i className="fa-solid fa-folder-plus"></i> 打包文件夹
-          </button>
-
-          {/* Move into Folder Option */}
-          <button 
-            onClick={(e) => { e.stopPropagation(); if (onMoveIntoFolder) onMoveIntoFolder(currentFolderId); }}
-            className="px-2.5 py-1.5 text-xs font-semibold text-sky-400 hover:bg-sky-500/10 rounded transition-all flex items-center gap-1.5 shrink-0"
-            title="将选中的消息移入某个文件夹"
-          >
-            <i className="fa-solid fa-folder-arrow-right"></i> 移入文件夹
-          </button>
-
-          {/* Remove from Folder Option (only when inside a folder) */}
-          {currentFolderId && (
-            <button 
-              onClick={(e) => { 
-                e.stopPropagation(); 
-                if (onRemoveMessagesFromFolder) {
-                  onRemoveMessagesFromFolder(messages.filter(m => selectedMessageIds.has(m.id))); 
-                }
-              }}
-              className="px-2.5 py-1.5 text-xs font-semibold text-amber-400 hover:bg-amber-500/10 rounded transition-all flex items-center gap-1.5 shrink-0"
-              title="将选中的消息移出当前文件夹"
-            >
-              <i className="fa-solid fa-folder-minus"></i> 移出文件夹
-            </button>
-          )}
-
-          {/* Merge Selected Messages Option */}
-          {(() => {
-            const nonFolderSelected = messages.filter(m => selectedMessageIds.has(m.id) && m.type !== 'FOLDER');
-            const existingGroupIds = new Set(
-              nonFolderSelected.filter(m => m.groupId).map(m => m.groupId)
-            );
-            const totalTargetCount = messages.filter(
-              m => m.type !== 'FOLDER' && (selectedMessageIds.has(m.id) || (m.groupId && existingGroupIds.has(m.groupId)))
-            ).length;
-            return totalTargetCount >= 2 ? (
-              <button 
-                onClick={(e) => { e.stopPropagation(); onGroupSelected(); }}
-                className="px-2.5 py-1.5 text-xs font-semibold text-purple-400 hover:bg-purple-500/10 rounded transition-all flex items-center gap-1.5 shrink-0"
-                title="将选中的非文件夹消息合并为一个组合"
-              >
-                <i className="fa-solid fa-object-group"></i> 合并消息
-              </button>
-            ) : null;
-          })()}
-
-          {/* Ungroup Selected Messages Option */}
-          {Array.from(selectedMessageIds).some(id => messages.find(m => m.id === id)?.groupId) && (
-            <button 
-              onClick={(e) => { 
-                e.stopPropagation(); 
-                onUngroupMessage(messages.filter(m => selectedMessageIds.has(m.id))); 
-              }}
-              className="px-2.5 py-1.5 text-xs font-semibold text-amber-400 hover:bg-amber-500/10 rounded transition-all flex items-center gap-1.5 shrink-0"
-              title="将选中的消息从所在组合中拆散出来"
-            >
-              <i className="fa-solid fa-object-ungroup"></i> 拆散选中消息
-            </button>
-          )}
-
-          {/* Privacy Hide/Unhide Selected Messages */}
-          {isPrivacyMode && (
-            <button 
-              onClick={(e) => { 
-                e.stopPropagation(); 
-                if (onToggleHideMessage) {
-                  onToggleHideMessage(messages.filter(m => selectedMessageIds.has(m.id))); 
-                }
-              }}
-              className="px-2.5 py-1.5 text-xs font-semibold text-purple-400 hover:bg-purple-500/10 rounded transition-all flex items-center gap-1.5 shrink-0"
-              title="切换选中条目的隐藏/展示状态"
-            >
-              <i className="fa-solid fa-eye-slash"></i> 隐藏/取消隐藏
-            </button>
-          )}
-
-          {/* Generate Diary from Selected Messages */}
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              const selectedMsgs = messages.filter(m => selectedMessageIds.has(m.id));
-              if (onOpenDiaryExport) onOpenDiaryExport(selectedMsgs);
-            }}
-            className="px-2.5 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/10 border border-emerald-500/30 rounded transition-all flex items-center gap-1.5 shrink-0"
-            title="将选中的消息直接生成精美 HTML 静态日记网页"
-          >
-            <i className="fa-solid fa-book-bookmark text-emerald-400"></i> 生成日记
-          </button>
-
-          <button 
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              window.deleteBtnTimer = setTimeout(() => {
-                window.deleteBtnTimer = null;
-                if (navigator.vibrate) navigator.vibrate(50);
-                const msgsToHide = messages.filter(m => selectedMessageIds.has(m.id));
-                onToggleHideMessage(msgsToHide);
-                onClearSelection();
-              }, 2000);
-            }}
-            onPointerUp={(e) => {
-              e.stopPropagation();
-              if (window.deleteBtnTimer) {
-                clearTimeout(window.deleteBtnTimer);
-                window.deleteBtnTimer = null;
-                onDeleteSelected();
-              }
-            }}
-            onPointerLeave={(e) => {
-              if (window.deleteBtnTimer) {
-                clearTimeout(window.deleteBtnTimer);
-                window.deleteBtnTimer = null;
-              }
-            }}
-            onContextMenu={(e) => e.preventDefault()}
-            className="px-2.5 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-500/10 rounded transition-all flex items-center gap-1.5 shrink-0"
-          >
-            <i className="fa-regular fa-trash-can"></i> 删除
-          </button>
-        </div>
-      )}
-
       {/* Right-Click Context Menu */}
       {contextMenu && (
         <div
@@ -1928,8 +1787,104 @@ export default function ChatArea({
           }}
           className="bg-bgSecondary border border-borderColor rounded-xl shadow-2xl py-1.5 min-w-[170px] animate-fade-in backdrop-blur-sm"
         >
-          {/* Copy Text — only for text messages */}
-          {contextMenu.msg.type === 'TEXT' && (
+          {/* 多选状态：显示所有多选操作（替代单条操作） */}
+          {selectedMessageIds.size > 1 && (
+            <>
+              <div className="px-3 py-1.5 text-[10px] text-textMuted border-b border-borderColor/60 flex items-center gap-1.5">
+                <i className="fa-regular fa-square-check"></i> 已选中 {selectedMessageIds.size} 条
+              </div>
+
+              <button
+                onClick={() => { onPackFolder(currentFolderId); setContextMenu(null); }}
+                className="w-full px-4 py-2 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/10 transition-colors flex items-center gap-2.5"
+              >
+                <i className="fa-solid fa-folder-plus w-4 text-center"></i> 打包文件夹
+              </button>
+
+              <button
+                onClick={() => { if (onMoveIntoFolder) onMoveIntoFolder(currentFolderId); setContextMenu(null); }}
+                className="w-full px-4 py-2 text-xs font-semibold text-sky-400 hover:bg-sky-500/10 transition-colors flex items-center gap-2.5"
+              >
+                <i className="fa-solid fa-folder-arrow-right w-4 text-center"></i> 移入文件夹
+              </button>
+
+              {currentFolderId && (
+                <button
+                  onClick={() => {
+                    if (onRemoveMessagesFromFolder) onRemoveMessagesFromFolder(messages.filter(m => selectedMessageIds.has(m.id)));
+                    setContextMenu(null);
+                  }}
+                  className="w-full px-4 py-2 text-xs font-semibold text-amber-400 hover:bg-amber-500/10 transition-colors flex items-center gap-2.5"
+                >
+                  <i className="fa-solid fa-folder-minus w-4 text-center"></i> 移出文件夹
+                </button>
+              )}
+
+              {(() => {
+                const nonFolderSelected = messages.filter(m => selectedMessageIds.has(m.id) && m.type !== 'FOLDER');
+                const existingGroupIds = new Set(nonFolderSelected.filter(m => m.groupId).map(m => m.groupId));
+                const totalTargetCount = messages.filter(
+                  m => m.type !== 'FOLDER' && (selectedMessageIds.has(m.id) || (m.groupId && existingGroupIds.has(m.groupId)))
+                ).length;
+                return totalTargetCount >= 2 ? (
+                  <button
+                    onClick={() => { onGroupSelected(); setContextMenu(null); }}
+                    className="w-full px-4 py-2 text-xs font-semibold text-purple-400 hover:bg-purple-500/10 transition-colors flex items-center gap-2.5"
+                  >
+                    <i className="fa-solid fa-object-group w-4 text-center"></i> 合并消息
+                  </button>
+                ) : null;
+              })()}
+
+              {Array.from(selectedMessageIds).some(id => messages.find(m => m.id === id)?.groupId) && (
+                <button
+                  onClick={() => { onUngroupMessage(messages.filter(m => selectedMessageIds.has(m.id))); setContextMenu(null); }}
+                  className="w-full px-4 py-2 text-xs font-semibold text-amber-400 hover:bg-amber-500/10 transition-colors flex items-center gap-2.5"
+                >
+                  <i className="fa-solid fa-object-ungroup w-4 text-center"></i> 拆散选中消息
+                </button>
+              )}
+
+              {isPrivacyMode && (
+                <button
+                  onClick={() => { if (onToggleHideMessage) onToggleHideMessage(messages.filter(m => selectedMessageIds.has(m.id))); setContextMenu(null); }}
+                  className="w-full px-4 py-2 text-xs font-semibold text-purple-400 hover:bg-purple-500/10 transition-colors flex items-center gap-2.5"
+                >
+                  <i className="fa-solid fa-eye-slash w-4 text-center"></i> 隐藏/取消隐藏
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  const selectedMsgs = messages.filter(m => selectedMessageIds.has(m.id));
+                  if (onOpenDiaryExport) onOpenDiaryExport(selectedMsgs);
+                  setContextMenu(null);
+                }}
+                className="w-full px-4 py-2 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/10 transition-colors flex items-center gap-2.5"
+              >
+                <i className="fa-solid fa-book-bookmark w-4 text-center"></i> 生成日记
+              </button>
+
+              <div className="my-1 border-t border-borderColor"></div>
+
+              <button
+                onClick={() => { onDeleteSelected(); setContextMenu(null); }}
+                className="w-full px-4 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
+              >
+                <i className="fa-regular fa-trash-can w-4 text-center"></i> 删除选中 ({selectedMessageIds.size})
+              </button>
+
+              <button
+                onClick={() => { onClearSelection(); setContextMenu(null); }}
+                className="w-full px-4 py-2 text-xs text-textMuted hover:bg-white/5 transition-colors flex items-center gap-2.5"
+              >
+                <i className="fa-solid fa-xmark w-4 text-center"></i> 取消多选
+              </button>
+            </>
+          )}
+
+          {/* Copy Text — only for text messages (single-select) */}
+          {selectedMessageIds.size <= 1 && contextMenu.msg.type === 'TEXT' && (
             <>
               <button
                 onClick={() => {
@@ -1957,7 +1912,7 @@ export default function ChatArea({
           )}
 
           {/* Folder Specific Actions */}
-          {contextMenu.msg.type === 'FOLDER' && (
+          {selectedMessageIds.size <= 1 && contextMenu.msg.type === 'FOLDER' && (
             <>
               <button
                 onClick={() => {
@@ -1990,7 +1945,7 @@ export default function ChatArea({
           )}
 
           {/* Remove from Folder Action (when inside a folder) */}
-          {currentFolderId && contextMenu.msg.type !== 'FOLDER' && (
+          {selectedMessageIds.size <= 1 && currentFolderId && contextMenu.msg.type !== 'FOLDER' && (
             <button
               onClick={() => {
                 if (onRemoveMessagesFromFolder) onRemoveMessagesFromFolder(contextMenu.msgs);
@@ -2003,7 +1958,7 @@ export default function ChatArea({
           )}
 
           {/* Add/Edit Caption — for non-text & non-folder messages */}
-          {contextMenu.msg.type !== 'TEXT' && contextMenu.msg.type !== 'FOLDER' && (
+          {selectedMessageIds.size <= 1 && contextMenu.msg.type !== 'TEXT' && contextMenu.msg.type !== 'FOLDER' && (
             <button
               onClick={() => {
                 const newCap = prompt('为该非文本条目添加/修改注释（方便搜索）：', contextMenu.msg.caption || '');
@@ -2019,20 +1974,21 @@ export default function ChatArea({
           )}
 
           {/* Select — enter multi-select mode */}
-          <button
-            onClick={() => {
-              const ids = contextMenu.msgs.map(m => m.id);
-              ids.forEach(id => onToggleMessageSelection(id));
-              setSelectionMenuCoords({ x: contextMenu.x, y: contextMenu.y });
-              setContextMenu(null);
-            }}
-            className="w-full px-4 py-2 text-xs text-textPrimary hover:bg-white/5 transition-colors flex items-center gap-2.5"
-          >
-            <i className="fa-regular fa-square-check text-textMuted w-4 text-center"></i> 多选
-          </button>
+          {selectedMessageIds.size <= 1 && (
+            <button
+              onClick={() => {
+                const ids = contextMenu.msgs.map(m => m.id);
+                ids.forEach(id => onToggleMessageSelection(id));
+                setContextMenu(null);
+              }}
+              className="w-full px-4 py-2 text-xs text-textPrimary hover:bg-white/5 transition-colors flex items-center gap-2.5"
+            >
+              <i className="fa-regular fa-square-check text-textMuted w-4 text-center"></i> 多选
+            </button>
+          )}
 
           {/* Hide / Unhide Option (Only in Privacy Mode) */}
-          {isPrivacyMode && (
+          {selectedMessageIds.size <= 1 && isPrivacyMode && (
             <button
               onClick={() => {
                 if (onToggleHideMessage) onToggleHideMessage(contextMenu.msgs);
@@ -2046,7 +2002,7 @@ export default function ChatArea({
           )}
 
           {/* Ungroup option if right clicking a grouped card */}
-          {(contextMenu.msg.groupId || contextMenu.msgs.length > 1) && (
+          {selectedMessageIds.size <= 1 && (contextMenu.msg.groupId || contextMenu.msgs.length > 1) && (
             <button
               onClick={() => {
                 onUngroupMessage(contextMenu.msgs);
@@ -2061,16 +2017,18 @@ export default function ChatArea({
           {/* Divider */}
           <div className="my-1 border-t border-borderColor"></div>
 
-          {/* Delete */}
-          <button
-            onClick={() => {
-              onDeleteMessage(contextMenu.msg);
-              setContextMenu(null);
-            }}
-            className="w-full px-4 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
-          >
-            <i className="fa-regular fa-trash-can w-4 text-center"></i> 删除消息
-          </button>
+          {/* Delete (single) */}
+          {selectedMessageIds.size <= 1 && (
+            <button
+              onClick={() => {
+                onDeleteMessage(contextMenu.msg);
+                setContextMenu(null);
+              }}
+              className="w-full px-4 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
+            >
+              <i className="fa-regular fa-trash-can w-4 text-center"></i> 删除消息
+            </button>
+          )}
         </div>
       )}
 
