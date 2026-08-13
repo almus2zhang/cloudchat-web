@@ -12,6 +12,7 @@ export default function Sidebar({
   onSync,
   isSyncing,
   messages,
+  diaryCount = 0,
   statusText,
   statusDotClass,
   resolveAvatarUrl
@@ -32,17 +33,6 @@ export default function Sidebar({
       });
     }
   }, [currentProfile?.avatar, resolveAvatarUrl]);
-
-  // Count diary messages and folders
-  const diaryCount = React.useMemo(() => {
-    return messages.filter(msg => {
-      if (msg.isDeleted) return false;
-      let cats = [];
-      if (Array.isArray(msg.categories)) cats = msg.categories;
-      else if (typeof msg.categories === 'string') cats = [msg.categories];
-      return cats.some(c => c === 'diary' || c === '日记');
-    }).length;
-  }, [messages]);
 
   return (
     <>

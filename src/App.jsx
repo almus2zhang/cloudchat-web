@@ -70,6 +70,8 @@ export default function App() {
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
   const [privacyPin, setPrivacyPin] = useState('1234');
 
+  // 日记文件个数（真实 WebDAV 日记文件数，用于 Sidebar 显示）
+  const [diaryFileCount, setDiaryFileCount] = useState(0);
   const activeClientRef = useRef(null);
   const syncTimerRef = useRef(null);
   const lastKnownCloudIndexTimeRef = useRef(0);
@@ -198,6 +200,9 @@ export default function App() {
       // Initial sync
       syncHistory();
       
+      // 读取真实日记文件个数
+      refreshDiaryCount();
+      
       // Periodically sync
       const interval = Math.max(currentProfile.syncInterval || 5, 2) * 1000;
       syncTimerRef.current = setInterval(syncHistory, interval);
@@ -208,7 +213,19 @@ export default function App() {
         clearInterval(syncTimerRef.current);
       }
     };
-  }, [activeProfileId]);
+  }, [activeProfileId, refreshDiaryCount]);
+
+  // 刷新日记文件个数（从 WebDAV 读取真实日记文件列表）
+  const refreshDiaryCount = React.useCallback(async () => {
+    const client = activeClientRef.current;
+    if (!client || typeof client.listDiaryFiles !== 'function') return;
+    try {
+      const list = await client.listDiaryFiles();
+      setDiaryFileCount(Array.isArray(list) ? list.length : 0);
+    } catch (e) {
+      console.error('Failed to refresh diary count:', e);
+    }
+  }, []);
 
   const resolveMediaMessageUrl = async (msg) => {
     if (!msg.id || msg.url) return msg.url;
@@ -1522,6 +1539,7 @@ export default function App() {
         onSync={() => syncHistory(true)}
         isSyncing={isSyncing}
         messages={messages.filter(m => !m.isDeleted)}
+        diaryCount={diaryFileCount}
         statusText={statusText}
         statusDotClass={statusDotClass}
         resolveAvatarUrl={resolveAvatarUrl}
@@ -1550,6 +1568,7 @@ export default function App() {
         onRenameFolder={handleRenameFolder}
         onMoveIntoFolder={handleMoveIntoFolder}
         onOpenDiaryExport={handleOpenDiaryExport}
+        onDiaryChanged={refreshDiaryCount}
         isPrivacyMode={isPrivacyMode}
         onEnterPrivacyMode={handleEnterPrivacyMode}
         onExitPrivacyMode={handleExitPrivacyMode}
@@ -1646,6 +1665,7 @@ export default function App() {
         folderTree={diaryExportFolder ? buildFolderTree(diaryExportFolder.id) : null}
         currentProfile={currentProfile}
         storageClient={activeClientRef.current}
+        onGenerated={refreshDiaryCount}
       />
 
       {/* Drag-and-drop overlay */}

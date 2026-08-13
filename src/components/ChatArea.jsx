@@ -31,6 +31,7 @@ export default function ChatArea({
   onRenameFolder,
   onMoveIntoFolder,
   onOpenDiaryExport,
+  onDiaryChanged,
   isPrivacyMode = false,
   onEnterPrivacyMode,
   onExitPrivacyMode,
@@ -1036,6 +1037,7 @@ export default function ChatArea({
                             try {
                               await storageClient.deleteDiaryFile(file.name);
                               fetchDiaryFiles();
+                              if (onDiaryChanged) onDiaryChanged();
                             } catch (e) {
                               alert(`删除失败: ${e.message}`);
                             }

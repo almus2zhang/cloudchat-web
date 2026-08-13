@@ -8,7 +8,8 @@ export default function DiaryExportModal({
   folderMessages = [],
   folderTree = null,
   currentProfile,
-  storageClient
+  storageClient,
+  onGenerated
 }) {
   const [exportMode, setExportMode] = useState('relative'); // 'relative' or 'single'
   const [templateId, setTemplateId] = useState('wechat');
@@ -179,6 +180,7 @@ export default function DiaryExportModal({
 
       setResultUrl(finalPublicUrl);
       setResultPath(targetSubPath);
+      if (onGenerated) onGenerated();
     } catch (err) {
       console.error('Export diary error:', err);
       setErrorMsg('生成日记失败: ' + (err.message || '网络通信异常'));
