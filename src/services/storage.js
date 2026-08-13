@@ -355,7 +355,24 @@ class WebDavStorageClient {
         return true;
     }
 
+    // 校验「设定的用户目录」（serverPath 各段 + saveDir 各段）是否安全：
+    // 仅允许数字、字母、下划线、连字符，不能有其他字符。
+    isValidUserDir() {
+        const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
+        const userDir = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
+        const segs = [];
+        if (root) root.split('/').filter(Boolean).forEach(s => segs.push(s));
+        if (userDir) userDir.split('/').filter(Boolean).forEach(s => segs.push(s));
+        if (segs.length === 0) return false;
+        const valid = /^[a-zA-Z0-9_-]+$/;
+        return segs.every(s => s.length <= 255 && valid.test(s) && s !== '.' && s !== '..');
+    }
+
     async deleteFile(fileName) {
+        if (!this.isValidUserDir()) {
+            console.error('WebDAV deleteFile: refusing, user directory is invalid (must be alphanumeric/_- only)');
+            return;
+        }
         if (!this.validateSafeName(fileName)) {
             console.error('WebDAV deleteFile: refusing unsafe fileName:', fileName);
             return;
@@ -373,6 +390,11 @@ class WebDavStorageClient {
     // 删除 diary 目录下的日记文件。fileName 可能为 "subDir/index.html" 或 "xxx.html"
     // 安全策略：永不物理删除，只移动到 recycle_bin 回收站（目录连同内容一并移入）。
     async deleteDiaryFile(fileName) {
+        // 移动/删除仅限设定的用户目录内
+        if (!this.isValidUserDir()) {
+            console.error('WebDAV deleteDiaryFile: refusing, user directory is invalid (must be alphanumeric/_- only)');
+            throw new Error('非法的用户目录名');
+        }
         // 安全校验：拒绝空、路径穿越、绝对路径、非法字符
         if (!this.validateSafeName(fileName)) {
             console.error('WebDAV deleteDiaryFile: refusing unsafe fileName:', fileName);
@@ -432,6 +454,10 @@ class WebDavStorageClient {
     }
 
     async recycleFile(fileName) {
+        if (!this.isValidUserDir()) {
+            console.error('WebDAV recycleFile: refusing, user directory is invalid (must be alphanumeric/_- only)');
+            return;
+        }
         if (!this.validateSafeName(fileName)) {
             console.error('WebDAV recycleFile: refusing unsafe fileName:', fileName);
             return;
@@ -899,7 +925,22 @@ class S3StorageClient {
         return true;
     }
 
+    isValidUserDir() {
+        const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
+        const userDir = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
+        const segs = [];
+        if (root) root.split('/').filter(Boolean).forEach(s => segs.push(s));
+        if (userDir) userDir.split('/').filter(Boolean).forEach(s => segs.push(s));
+        if (segs.length === 0) return false;
+        const valid = /^[a-zA-Z0-9_-]+$/;
+        return segs.every(s => s.length <= 255 && valid.test(s) && s !== '.' && s !== '..');
+    }
+
     async deleteFile(fileName) {
+        if (!this.isValidUserDir()) {
+            console.error('S3 deleteFile: refusing, user directory is invalid (must be alphanumeric/_- only)');
+            return;
+        }
         if (!this.validateSafeName(fileName)) {
             console.error('S3 deleteFile: refusing unsafe fileName:', fileName);
             return;
