@@ -340,7 +340,26 @@ class WebDavStorageClient {
         return await readResponseWithProgress(response, onProgress, dlState);
     }
 
+    // 校验文件名安全：拒绝空、绝对路径、路径穿越(..)、保留名及非法字符。
+    // 允许单层子路径（如 "subDir/index.html"），但每段都必须是合法单段名。
+    validateSafeName(name) {
+        if (!name || typeof name !== 'string') return false;
+        const trimmed = name.trim();
+        if (!trimmed || trimmed.length > 255) return false;
+        if (trimmed.startsWith('/') || trimmed.startsWith('\\')) return false;
+        const segs = trimmed.split('/');
+        for (const seg of segs) {
+            if (seg === '' || seg === '.' || seg === '..') return false;
+            if (/[\\?#%\u0000]/.test(seg)) return false;
+        }
+        return true;
+    }
+
     async deleteFile(fileName) {
+        if (!this.validateSafeName(fileName)) {
+            console.error('WebDAV deleteFile: refusing unsafe fileName:', fileName);
+            return;
+        }
         const url = this.getUrl(fileName);
         const response = await fetch(url, {
             method: 'DELETE',
@@ -353,6 +372,11 @@ class WebDavStorageClient {
 
     // 删除 diary 目录下的日记文件。fileName 可能为 "subDir/index.html" 或 "xxx.html"
     async deleteDiaryFile(fileName) {
+        // 安全校验：拒绝空、路径穿越、绝对路径、非法字符
+        if (!this.validateSafeName(fileName)) {
+            console.error('WebDAV deleteDiaryFile: refusing unsafe fileName:', fileName);
+            throw new Error('非法的日记文件名');
+        }
         const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
@@ -362,10 +386,11 @@ class WebDavStorageClient {
         if (userDirClean) userDirClean.split('/').filter(Boolean).forEach(p => parts.push(encodeURIComponent(p)));
         parts.push('diary');
 
-        // 子目录形式（如 "2026-08-11_日记/index.html"）删除整个子目录；否则删除单个文件
-        const segs = (fileName || '').split('/').filter(Boolean);
+        // 子目录形式（如 "2026-08-11_日记/index.html"）删除整个子目录；否则删除单个文件。
+        // 仅取第一段（已通过 validateSafeName 校验不含 ".." 等危险内容）
+        const segs = fileName.trim().split('/').filter(Boolean);
         if (segs.length === 0) return;
-        parts.push(segs[0]);
+        parts.push(encodeURIComponent(segs[0]));
 
         const url = `${baseUrl}/${parts.join('/')}`;
         const response = await fetch(url, {
@@ -378,6 +403,10 @@ class WebDavStorageClient {
     }
 
     async recycleFile(fileName) {
+        if (!this.validateSafeName(fileName)) {
+            console.error('WebDAV recycleFile: refusing unsafe fileName:', fileName);
+            return;
+        }
         const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
@@ -828,7 +857,24 @@ class S3StorageClient {
         return await readResponseWithProgress(response, onProgress, dlState);
     }
 
+    validateSafeName(name) {
+        if (!name || typeof name !== 'string') return false;
+        const trimmed = name.trim();
+        if (!trimmed || trimmed.length > 255) return false;
+        if (trimmed.startsWith('/') || trimmed.startsWith('\\')) return false;
+        const segs = trimmed.split('/');
+        for (const seg of segs) {
+            if (seg === '' || seg === '.' || seg === '..') return false;
+            if (/[\\?#%\u0000]/.test(seg)) return false;
+        }
+        return true;
+    }
+
     async deleteFile(fileName) {
+        if (!this.validateSafeName(fileName)) {
+            console.error('S3 deleteFile: refusing unsafe fileName:', fileName);
+            return;
+        }
         const url = this.getUrl(fileName);
         const headers = {};
         signS3Request('DELETE', url, this.config, headers);
