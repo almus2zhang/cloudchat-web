@@ -133,6 +133,59 @@ export default function ChatArea({
   const deleteLongPressRef = useRef(null);
   const deleteLongPressFiredRef = useRef(false);
 
+  // —— 范围选择（Shift 模式）——
+  // 激活后，点击任意条目会把「当前已选中的第一条」到「点击的条目」之间全选
+  const [rangeSelectActive, setRangeSelectActive] = useState(false);
+  const rangeAnchorRef = useRef(null);
+
+  const handleToggleRangeSelect = () => {
+    if (rangeSelectActive) {
+      setRangeSelectActive(false);
+      rangeAnchorRef.current = null;
+      return;
+    }
+    if (selectedMessageIds.size === 0) return;
+    // 锚点 = 当前已选条目中，在列表里索引最小的一条
+    const selectedIndices = filteredMessages
+      .map((m, i) => selectedMessageIds.has(m.id) ? i : -1)
+      .filter(i => i >= 0);
+    if (selectedIndices.length === 0) return;
+    const anchorIndex = Math.min(...selectedIndices);
+    rangeAnchorRef.current = filteredMessages[anchorIndex]?.id ?? null;
+    setRangeSelectActive(true);
+  };
+
+  // 范围选择：选中 anchor 与 target 之间（含两端）的所有条目
+  const selectRangeTo = (targetMsgId) => {
+    const anchorId = rangeAnchorRef.current;
+    if (!anchorId) {
+      setRangeSelectActive(false);
+      onToggleMessageSelection(targetMsgId);
+      return;
+    }
+    const anchorIdx = filteredMessages.findIndex(m => m.id === anchorId);
+    const targetIdx = filteredMessages.findIndex(m => m.id === targetMsgId);
+    if (anchorIdx === -1 || targetIdx === -1) {
+      setRangeSelectActive(false);
+      rangeAnchorRef.current = null;
+      return;
+    }
+    const lo = Math.min(anchorIdx, targetIdx);
+    const hi = Math.max(anchorIdx, targetIdx);
+    const rangeIds = filteredMessages.slice(lo, hi + 1).map(m => m.id);
+    onToggleMessageSelection(rangeIds);
+    setRangeSelectActive(false);
+    rangeAnchorRef.current = null;
+  };
+
+  // 清理：取消多选时退出范围模式
+  useEffect(() => {
+    if (selectedMessageIds.size === 0 && rangeSelectActive) {
+      setRangeSelectActive(false);
+      rangeAnchorRef.current = null;
+    }
+  }, [selectedMessageIds.size, rangeSelectActive]);
+
   const handleTouchStart = (e, msgId) => {
     // Only allow left mouse button; touch devices handled by pointerType
     if (e.type === 'mousedown' && e.button !== 0) return;
@@ -194,9 +247,13 @@ export default function ChatArea({
     if (selectedMessageIds.size > 0) {
       e.preventDefault();
       e.stopPropagation();
-      onToggleMessageSelection(msgId);
-      // Position menu near the click
-      setSelectionMenuCoords({ x: e.clientX, y: e.clientY });
+      if (rangeSelectActive) {
+        selectRangeTo(msgId);
+      } else {
+        onToggleMessageSelection(msgId);
+        // Position menu near the click
+        setSelectionMenuCoords({ x: e.clientX, y: e.clientY });
+      }
       return;
     }
     
@@ -984,6 +1041,17 @@ export default function ChatArea({
               <i className="fa-solid fa-book-bookmark text-sm"></i>
             </button>
 
+            {/* 范围选择（Shift 模式）：选中第一条到最后一条中间全部 */}
+            <button
+              onClick={handleToggleRangeSelect}
+              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all shrink-0 ${
+                rangeSelectActive ? 'bg-accentColor/20 text-accentColor ring-1 ring-accentColor' : 'text-sky-400 hover:bg-sky-500/10'
+              }`}
+              title={rangeSelectActive ? '范围选择已激活，点击目标条目完成全选（再点取消）' : '范围选择（选中第一条到最后一条中间全部）'}
+            >
+              <i className="fa-solid fa-check-double text-sm"></i>
+            </button>
+
             {/* 删除（短按删除，长按移入隐私） */}
             <button
               onPointerDown={(e) => {
@@ -1289,8 +1357,12 @@ export default function ChatArea({
                   <div 
                     onClick={(e) => {
                       e.stopPropagation();
-                      onToggleMessageSelection(msgIdOrIds);
-                      setSelectionMenuCoords({ x: e.clientX, y: e.clientY });
+                      if (rangeSelectActive) {
+                        selectRangeTo(Array.isArray(msgIdOrIds) ? msgIdOrIds[0] : msgIdOrIds);
+                      } else {
+                        onToggleMessageSelection(msgIdOrIds);
+                        setSelectionMenuCoords({ x: e.clientX, y: e.clientY });
+                      }
                     }}
                     className="flex items-center justify-center cursor-pointer px-1 shrink-0 select-none animate-fade-in checkbox-container self-center"
                   >
@@ -1427,8 +1499,12 @@ export default function ChatArea({
                             const handleSubItemClick = (e) => {
                               if (selectedMessageIds.size > 0) {
                                 e.stopPropagation();
-                                onToggleMessageSelection(msg.id);
-                                setSelectionMenuCoords({ x: e.clientX, y: e.clientY });
+                                if (rangeSelectActive) {
+                                  selectRangeTo(msg.id);
+                                } else {
+                                  onToggleMessageSelection(msg.id);
+                                  setSelectionMenuCoords({ x: e.clientX, y: e.clientY });
+                                }
                               }
                             };
 
