@@ -47,7 +47,8 @@ export default function App() {
     if (!folderMsgOrMsgs) return;
     if (Array.isArray(folderMsgOrMsgs)) {
       setDiaryExportFolder(null);
-      setDiaryExportSelectedMsgs(folderMsgOrMsgs);
+      // 过滤掉隐私条目，隐私条目不打入日记
+      setDiaryExportSelectedMsgs(folderMsgOrMsgs.filter(m => !m.isDeleted && !m.isHidden));
       setDiaryExportOpen(true);
     } else {
       setDiaryExportFolder(folderMsgOrMsgs);
@@ -1199,7 +1200,7 @@ export default function App() {
     pushHistoryToCloud(updated);
   };
 
-  // 递归收集指定文件夹下的所有消息（排除 FOLDER 本身与 isDeleted）
+  // 递归收集指定文件夹下的所有消息（排除 FOLDER 本身、isDeleted 与隐私条目）
   const collectFolderMessagesRecursive = (folderId) => {
     const result = [];
     const visited = new Set();
@@ -1208,7 +1209,7 @@ export default function App() {
       const cur = queue.shift();
       if (visited.has(cur)) continue;
       visited.add(cur);
-      messages.filter(m => !m.isDeleted && m.folderId === cur).forEach(child => {
+      messages.filter(m => !m.isDeleted && !m.isHidden && m.folderId === cur).forEach(child => {
         if (child.type === 'FOLDER') queue.push(child.id);
         else result.push(child);
       });
@@ -1216,11 +1217,11 @@ export default function App() {
     return result;
   };
 
-  // 构建文件夹树（用于日记折叠渲染）
+  // 构建文件夹树（用于日记折叠渲染，排除隐私条目）
   const buildFolderTree = (folderId) => {
     const folderMsg = messages.find(m => m.id === folderId);
     const name = folderMsg ? (folderMsg.content || '文件夹') : '文件夹';
-    const children = messages.filter(m => !m.isDeleted && m.folderId === folderId);
+    const children = messages.filter(m => !m.isDeleted && !m.isHidden && m.folderId === folderId);
     const msgs = children.filter(m => m.type !== 'FOLDER');
     const subFolders = children.filter(m => m.type === 'FOLDER').map(m => buildFolderTree(m.id));
     return { folderId, name, messages: msgs, children: subFolders };
