@@ -1,16 +1,58 @@
 import os
 import sys
+import json
+import webview
 
-# Minimal WebView2 flags — only what's strictly needed for a file:// loaded app.
-# NO frameless (uses normal window with CSS-styled title bar for stability).
+# Minimal WebView2 flags
 os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = (
     '--disable-web-security --ignore-certificate-errors'
 )
 
-import webview
-
 webview.settings['IGNORE_SSL_ERRORS'] = True
 webview.settings['ALLOW_FILE_URLS'] = True
+
+appdata = os.getenv('APPDATA', os.path.expanduser('~'))
+storage_dir = os.path.join(appdata, 'CloudChatLight')
+os.makedirs(storage_dir, exist_ok=True)
+config_file = os.path.join(storage_dir, 'window_state.json')
+
+
+def load_window_state():
+    defaults = {'width': 1380, 'height': 820, 'x': None, 'y': None}
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    w = data.get('width', 1380)
+                    h = data.get('height', 820)
+                    x = data.get('x')
+                    y = data.get('y')
+                    if isinstance(w, int) and w >= 400:
+                        defaults['width'] = w
+                    if isinstance(h, int) and h >= 500:
+                        defaults['height'] = h
+                    if isinstance(x, int) and x >= 0:
+                        defaults['x'] = x
+                    if isinstance(y, int) and y >= 0:
+                        defaults['y'] = y
+        except Exception:
+            pass
+    return defaults
+
+
+def save_window_state(win):
+    try:
+        if win and hasattr(win, 'width') and hasattr(win, 'height'):
+            w = win.width
+            h = win.height
+            x = getattr(win, 'x', None)
+            y = getattr(win, 'y', None)
+            state = {'width': w, 'height': h, 'x': x, 'y': y}
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(state, f)
+    except Exception:
+        pass
 
 
 class DesktopApi:
@@ -34,6 +76,7 @@ class DesktopApi:
     def close(self):
         try:
             if self.window:
+                save_window_state(self.window)
                 self.window.destroy()
         except Exception:
             pass
@@ -57,19 +100,38 @@ if __name__ == '__main__':
     dist_dir = get_dist_path()
     index_file = os.path.join(dist_dir, 'index.html')
 
-    appdata = os.getenv('APPDATA', os.path.expanduser('~'))
-    storage_dir = os.path.join(appdata, 'CloudChatLight')
-    os.makedirs(storage_dir, exist_ok=True)
+    state = load_window_state()
 
-    # Normal framed window — stable, no renderer hangs.
-    window = webview.create_window(
-        title='CloudChat Desktop',
-        url=index_file,
-        width=1380,
-        height=820,
-        resizable=True,
-        min_size=(400, 500)
-    )
+    kwargs = {
+        'title': 'CloudChat Desktop',
+        'url': index_file,
+        'width': state['width'],
+        'height': state['height'],
+        'resizable': True,
+        'min_size': (400, 500)
+    }
+
+    if state['x'] is not None and state['y'] is not None:
+        kwargs['x'] = state['x']
+        kwargs['y'] = state['y']
+
+    window = webview.create_window(**kwargs)
+
+    def on_resized():
+        save_window_state(window)
+
+    def on_moved():
+        save_window_state(window)
+
+    def on_closing():
+        save_window_state(window)
+
+    window.events.resized += on_resized
+    window.events.moved += on_moved
+    window.events.closing += on_closing
+
+    api = DesktopApi()
+    api.set_window(window)
 
     webview.start(
         gui='edgechromium',
