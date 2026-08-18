@@ -505,7 +505,32 @@ export default function App() {
         
         if (!needsMigration) {
           addDebugLog(`[Sync] 确认云端没有任何历史索引文件 (chat_index.json / chat_history.json)`);
-          setStatusText('Connected (No history file)');
+          
+          // 若当前无消息（如修改存储路径/前缀丢弃本地缓存后），服务器无记录时创建 dummy 记录并上传初始化
+          setMessages(prev => {
+            if (prev.length === 0) {
+              addDebugLog(`[Sync] 本地记录为空且云端无记录，自动创建 dummy 初始化记录...`);
+              const dummyMsg = {
+                id: 'msg_dummy_' + Date.now(),
+                sender: currentProfileRef.current?.username || 'system',
+                senderName: currentProfileRef.current?.username || 'system',
+                senderAvatar: currentProfileRef.current?.avatar || '',
+                content: '存储路径初始化成功',
+                timestamp: Date.now(),
+                type: 'TEXT',
+                isOutgoing: false,
+                status: 'SUCCESS',
+                categories: [],
+                lastModified: Date.now()
+              };
+              cacheFile(`history_array_${currentProfileRef.current.id}`, [dummyMsg]);
+              setTimeout(() => pushHistoryToCloud([dummyMsg]), 10);
+              return [dummyMsg];
+            }
+            return prev;
+          });
+
+          setStatusText('Connected (Initialized)');
           setStatusDotClass('bg-green-500');
           setIsSyncing(false);
           return;
@@ -1528,12 +1553,14 @@ export default function App() {
   // --- Profile Settings Actions ---
   const handleSaveProfile = (profile) => {
     const oldProfile = currentProfile;
+    // 修改服务器地址(webDavUrl/endpoint)、用户名(webDavUser)、密码(webDavPassword)不算改变存储路径，保留本地缓存
+    // 仅当用户存储路径(saveDir)或服务器前缀(serverPath)更改时，才算更改配置（丢弃本地缓存并从云端重新拉取）
     const isLocationChanged = !oldProfile || 
-      oldProfile.webDavUrl !== profile.webDavUrl ||
+      oldProfile.id !== profile.id ||
+      oldProfile.type !== profile.type ||
       oldProfile.serverPath !== profile.serverPath ||
       oldProfile.saveDir !== profile.saveDir ||
-      oldProfile.bucket !== profile.bucket ||
-      oldProfile.endpoint !== profile.endpoint;
+      oldProfile.bucket !== profile.bucket;
 
     const exists = profiles.some(p => p.id === profile.id);
     let updated;
