@@ -1,9 +1,10 @@
-# Disable WebView2 CORS and Private Network Access restrictions
+import os
+import sys
+
+# Minimal WebView2 flags — only what's strictly needed for a file:// loaded app.
+# NO frameless (uses normal window with CSS-styled title bar for stability).
 os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = (
-    '--disable-web-security '
-    '--allow-file-access-from-files '
-    '--disable-features=BlockInsecurePrivateNetworkRequests,IsolateOrigins,site-per-process '
-    '--ignore-certificate-errors'
+    '--disable-web-security --ignore-certificate-errors'
 )
 
 import webview
@@ -11,18 +12,46 @@ import webview
 webview.settings['IGNORE_SSL_ERRORS'] = True
 webview.settings['ALLOW_FILE_URLS'] = True
 
+
+class DesktopApi:
+    def __init__(self):
+        self.window = None
+
+    def set_window(self, win):
+        self.window = win
+
+    def minimize(self):
+        if self.window:
+            self.window.minimize()
+
+    def toggle_maximize(self):
+        if self.window:
+            try:
+                self.window.toggle_fullscreen()
+            except Exception:
+                self.window.minimize()
+
+    def close(self):
+        try:
+            if self.window:
+                self.window.destroy()
+        except Exception:
+            pass
+        finally:
+            os._exit(0)
+
+
 def get_dist_path():
     if getattr(sys, 'frozen', False):
-        # Running as PyInstaller executable
         base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(sys.argv[0])))
         dist_dir = os.path.join(base_dir, 'dist')
         if os.path.exists(dist_dir):
             return dist_dir
         return base_dir
     else:
-        # Running as python script
         base_dir = os.path.dirname(os.path.abspath(__file__))
         return os.path.join(base_dir, 'dist')
+
 
 if __name__ == '__main__':
     dist_dir = get_dist_path()
@@ -32,7 +61,7 @@ if __name__ == '__main__':
     storage_dir = os.path.join(appdata, 'CloudChatLight')
     os.makedirs(storage_dir, exist_ok=True)
 
-    # Create native WebView2 window with CORS disabled
+    # Normal framed window — stable, no renderer hangs.
     window = webview.create_window(
         title='CloudChat Desktop',
         url=index_file,
@@ -42,7 +71,6 @@ if __name__ == '__main__':
         min_size=(400, 500)
     )
 
-    # Start PyWebView using Edge Chromium / WebView2 engine with persistent storage
     webview.start(
         gui='edgechromium',
         debug=False,

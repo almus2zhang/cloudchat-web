@@ -1122,15 +1122,17 @@ export default function App() {
       const name = folderName || prompt('请输入文件夹名称/注释：');
       if (name === null) return;
 
+      const firstMsg = selectedMsgs.find(m => m.type !== 'FOLDER') || selectedMsgs[0];
       const newFolderId = 'folder_' + Date.now();
       const newFolderMsg = {
         id: newFolderId,
-        sender: currentProfile.username,
-        senderName: currentProfile.username,
+        sender: firstMsg?.sender || currentProfile.username,
+        senderName: firstMsg?.senderName || firstMsg?.sender || currentProfile.username,
+        senderAvatar: firstMsg?.senderAvatar || currentProfile.avatar || '',
         content: (name && name.trim()) ? name.trim() : '文件夹',
         timestamp: Date.now(),
         type: 'FOLDER',
-        isOutgoing: true,
+        isOutgoing: firstMsg ? firstMsg.isOutgoing : true,
         status: 'SUCCESS',
         categories: activeCategory !== 'all' ? [activeCategory] : [],
         folderId: currentFolderId || undefined,

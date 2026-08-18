@@ -124,9 +124,13 @@ async function getBase64MediaUrl(msg, storageClient) {
   return msg.remoteUrl || msg.url || '';
 }
 
+// 无头像时的固定占位（内联 SVG 灰色头像），不再用随机头像
+const DEFAULT_AVATAR = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="#d9d9d9"/><circle cx="100" cy="80" r="40" fill="#a8a8a8"/><path d="M40 200c0-40 27-60 60-60s60 20 60 60z" fill="#a8a8a8"/></svg>'
+);
+
 async function getBase64AvatarUrl(avatar, authorName, storageClient) {
-  const fallback = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(authorName || 'User')}`;
-  if (!avatar || !avatar.trim()) return fallback;
+  if (!avatar || !avatar.trim()) return DEFAULT_AVATAR;
   if (avatar.startsWith('data:') || avatar.startsWith('https://') || avatar.startsWith('http://')) {
     return avatar;
   }
@@ -141,7 +145,7 @@ async function getBase64AvatarUrl(avatar, authorName, storageClient) {
     const dataUrl = await blobToDataUrl(compressed);
     if (dataUrl) return dataUrl;
   }
-  return fallback;
+  return DEFAULT_AVATAR;
 }
 
 const generateServiceWorkerJs = () => `
@@ -192,7 +196,7 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
   }
 
   // 2. Resolve & copy Author Avatar
-  let authorAvatarStr = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(authorStr)}`;
+  let authorAvatarStr = DEFAULT_AVATAR;
   if (isSingleFile) {
     authorAvatarStr = await getBase64AvatarUrl(avatar, authorStr, storageClient);
   } else if (avatar && avatar.trim()) {
@@ -278,6 +282,28 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
   const resolveItemAvatar = (item) => {
     if (item.senderAvatar && avatarUrlMap[item.senderAvatar]) return avatarUrlMap[item.senderAvatar];
     return authorAvatarStr;
+  };
+
+  // 解析某条消息的头像（无 senderAvatar 时回退到 authorAvatarStr）
+  const resolveMsgAvatar = (msg) => {
+    if (msg && msg.senderAvatar && avatarUrlMap[msg.senderAvatar]) return avatarUrlMap[msg.senderAvatar];
+    return authorAvatarStr;
+  };
+
+  // 收集文件夹节点及其所有子文件夹的全部消息
+  const collectNodeMessages = (node) => {
+    const list = [...(node.messages || [])];
+    (node.children || []).forEach((c) => list.push(...collectNodeMessages(c)));
+    return list;
+  };
+
+  // 文件夹头像：取该文件夹内「时间最早」的那条消息的头像
+  const resolveFolderAvatar = (node) => {
+    const all = collectNodeMessages(node);
+    if (all.length === 0) return authorAvatarStr;
+    // 时间最早（timestamp 最小）
+    const earliest = all.reduce((a, b) => ((a.timestamp || 0) <= (b.timestamp || 0) ? a : b));
+    return resolveMsgAvatar(earliest);
   };
 
   // Helper to resolve media URL for template renderers
@@ -570,11 +596,15 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
 
   // 递归渲染单个文件夹节点：先渲染直接消息，再对子文件夹用 details/summary 折叠包裹
   const countNodeMessages = (node) => node.messages.length + (node.children || []).reduce((acc, c) => acc + countNodeMessages(c), 0);
+  const renderFolderSummary = (node) => {
+    const avatar = resolveFolderAvatar(node);
+    return `<img class="diary-folder-avatar" src="${avatar}" alt=""/>📁 ${escapeHtml(node.name)}<span class="diary-folder-count">(${countNodeMessages(node)})</span>`;
+  };
   const renderFolderNode = (node) => {
     const directHtml = isWeChat ? renderWeChatMoments(node.messages) : renderStandardTimeline(node.messages);
     const childrenHtml = (node.children || []).map(child => `
       <details class="diary-folder">
-        <summary class="diary-folder-summary">📁 ${escapeHtml(child.name)}<span class="diary-folder-count">(${countNodeMessages(child)})</span></summary>
+        <summary class="diary-folder-summary">${renderFolderSummary(child)}</summary>
         <div class="diary-folder-content">${renderFolderNode(child)}</div>
       </details>`).join('\n');
     return directHtml + childrenHtml;
@@ -586,7 +616,7 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
       const topHtml = isWeChat ? renderWeChatMoments(folderTree.messages) : renderStandardTimeline(folderTree.messages);
       const subFoldersHtml = (folderTree.children || []).map(child => `
         <details class="diary-folder">
-          <summary class="diary-folder-summary">📁 ${escapeHtml(child.name)}<span class="diary-folder-count">(${countNodeMessages(child)})</span></summary>
+          <summary class="diary-folder-summary">${renderFolderSummary(child)}</summary>
           <div class="diary-folder-content">${renderFolderNode(child)}</div>
         </details>`).join('\n');
       return topHtml + subFoldersHtml;
@@ -816,6 +846,7 @@ function getTemplateCss(templateId) {
     /* --- Folder folding (diary nested folders) --- */
     .diary-folder { margin: 10px 0; border: 1px solid #e2e2e2; border-radius: 10px; overflow: hidden; background: #fafafa; }
     .diary-folder-summary { cursor: pointer; padding: 10px 14px; font-weight: 700; font-size: 14px; color: #576b95; background: #f3f4f7; list-style: none; display: flex; align-items: center; gap: 6px; user-select: none; }
+    .diary-folder-avatar { width: 26px; height: 26px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: #fff; }
     .diary-folder-summary::-webkit-details-marker { display: none; }
     .diary-folder-summary::before { content: "▸"; transition: transform 0.2s; font-size: 12px; }
     .diary-folder[open] > .diary-folder-summary::before { transform: rotate(90deg); }

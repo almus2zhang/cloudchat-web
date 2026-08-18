@@ -9,10 +9,16 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "electron:build": "vite build && electron-builder"
+    "electron:build": "vite build && electron-builder",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.3",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/cli": "^2.11.4",
+    "@tauri-apps/plugin-store": "^2.4.4",
     "crypto-js": "^4.2.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
