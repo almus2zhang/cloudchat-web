@@ -357,6 +357,15 @@ class WebDavStorageClient {
         return await response.blob();
     }
 
+    async downloadText(fileName) {
+        const url = this.getUrl(fileName);
+        const response = await fetchWithTimeout(url, {
+            headers: { 'Authorization': this.getAuthHeader() }
+        }, 20000);
+        if (!response.ok) throw new Error(`Download text failed: ${response.status}`);
+        return await response.text();
+    }
+
     async downloadFileWithProgress(fileName, onProgress, dlState) {
         const url = this.getUrl(fileName);
         const response = await fetchWithTimeout(url, {
@@ -928,9 +937,19 @@ class S3StorageClient {
         const headers = {};
         signS3Request('GET', url, this.config, headers);
 
-        const response = await fetch(url, { headers });
+        const response = await fetchWithTimeout(url, { headers }, 20000);
         if (!response.ok) throw new Error(`S3 download failed: ${response.status}`);
         return await response.blob();
+    }
+
+    async downloadText(fileName) {
+        const url = this.getUrl(fileName);
+        const headers = {};
+        signS3Request('GET', url, this.config, headers);
+
+        const response = await fetchWithTimeout(url, { headers }, 20000);
+        if (!response.ok) throw new Error(`S3 download text failed: ${response.status}`);
+        return await response.text();
     }
 
     async downloadFileWithProgress(fileName, onProgress, dlState) {

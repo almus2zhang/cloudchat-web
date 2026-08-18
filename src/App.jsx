@@ -476,16 +476,14 @@ export default function App() {
         let repairedTotal = 0;
 
         if (needsMigration) {
-            const blob = await client.downloadFile('chat_history.json');
-            const text = await blob.text();
+            const text = typeof client.downloadText === 'function' ? await client.downloadText('chat_history.json') : await (await client.downloadFile('chat_history.json')).text();
             const rawCloudMessages = JSON.parse(text);
             const { sanitized, repairedCount } = sanitizeMessages(rawCloudMessages);
             downloadedMessages = sanitized;
             repairedTotal = repairedCount;
             anyShardChanged = true;
         } else {
-            const indexBlob = await client.downloadFile('chat_index.json');
-            const indexText = await indexBlob.text();
+            const indexText = typeof client.downloadText === 'function' ? await client.downloadText('chat_index.json') : await (await client.downloadFile('chat_index.json')).text();
             let parsedData = JSON.parse(indexText);
             const isArrayFormat = Array.isArray(parsedData);
             const shardList = isArrayFormat ? parsedData : Object.keys(parsedData);
@@ -500,8 +498,7 @@ export default function App() {
 
                 if (timestamp > (shardTimestampsRef.current[shardName] || 0)) {
                     try {
-                        const shardBlob = await client.downloadFile(shardName);
-                        const shardText = await shardBlob.text();
+                        const shardText = typeof client.downloadText === 'function' ? await client.downloadText(shardName) : await (await client.downloadFile(shardName)).text();
                         const rawMsgs = JSON.parse(shardText);
                         const { sanitized, repairedCount } = sanitizeMessages(rawMsgs);
                         downloadedMessages = [...downloadedMessages, ...sanitized];
@@ -520,14 +517,16 @@ export default function App() {
 
           setMessages(prev => {
             let mergedMap = new Map();
-            // Server is source of truth: Start with downloaded cloud messages
+            // Start with downloaded cloud messages
             downloadedMessages.forEach(m => mergedMap.set(m.id, m));
-            // Keep local FAILED messages that have not been uploaded
-            prev.filter(m => m.status === 'FAILED').forEach(m => {
-              if (!mergedMap.has(m.id)) mergedMap.set(m.id, m);
+            // Keep local messages (SENDING, FAILED, or newly created local messages)
+            prev.forEach(m => {
+              if (!mergedMap.has(m.id)) {
+                mergedMap.set(m.id, m);
+              }
             });
 
-            // Remove soft-deleted messages AFTER merge so remote deletes override local copies
+            // Remove soft-deleted messages AFTER merge
             const merged = Array.from(mergedMap.values());
             const alive = merged.filter(m => !m.isDeleted);
             alive.sort((a, b) => a.timestamp - b.timestamp);
