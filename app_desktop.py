@@ -220,12 +220,22 @@ if __name__ == '__main__':
     api.set_window(window)
 
     def on_closing():
-        save_window_state(window)
+        try:
+            save_window_state(window)
+        except Exception:
+            pass
 
     window.events.closing += on_closing
 
-    webview.start(
-        gui='edgechromium',
-        debug=False,
-        private_mode=False
-    )
+    try:
+        webview.start(
+            gui='edgechromium',
+            debug=False,
+            private_mode=False
+        )
+    finally:
+        try:
+            save_window_state(window)
+        except Exception:
+            pass
+        os._exit(0)
