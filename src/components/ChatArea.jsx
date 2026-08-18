@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { createDownloadState } from '../services/storage';
 import { getCachedFile, cacheFile } from '../services/db';
 import CalendarModal from './CalendarModal';
@@ -52,6 +53,7 @@ export default function ChatArea({
   const [inputText, setInputText] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
+  const lastSavedFilePathRef = useRef('');
   // Cache of resolved avatar blob URLs keyed by raw avatar value (filename or data: URL)
   const [avatarBlobUrls, setAvatarBlobUrls] = useState({});
 
@@ -666,9 +668,46 @@ export default function ChatArea({
 
         const previewableExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'mp3', 'wav', 'ogg', 'm4a', 'mp4', 'webm', 'pdf', 'txt', 'json', 'xml', 'html', 'htm', 'js', 'css', 'md', 'log'];
         const isPreviewable = previewableExtensions.includes(ext);
+        const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
 
-        // 桌面 PyInstaller Webview 适配
-        if (window.pywebview && window.pywebview.api) {
+        if (isTauri) {
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            const base64 = reader.result.split(',')[1];
+            if (openInBrowser) {
+              if (isPreviewable) {
+                const mimeType = MIME_MAP[ext] || blob.type || 'application/octet-stream';
+                const typedBlob = new Blob([blob], { type: mimeType });
+                const url = URL.createObjectURL(typedBlob);
+                window.open(url, '_blank');
+                setTimeout(() => URL.revokeObjectURL(url), 10000);
+              } else {
+                // 点击二进制文件卡片直接在桌面保存并调用系统关联程序打开
+                try {
+                  const savedPath = await invoke('save_file_to_downloads', { suggestedName: displayName, base64Content: base64 });
+                  if (savedPath) {
+                    lastSavedFilePathRef.current = savedPath;
+                    await invoke('open_file', { path: savedPath });
+                  }
+                } catch (e) {
+                  console.error('Tauri save/open file error:', e);
+                }
+              }
+            } else {
+              // 点击下载按钮，自动保存至系统 Downloads 目录并打开 Explorer 高亮显示
+              try {
+                const savedPath = await invoke('save_file_to_downloads', { suggestedName: displayName, base64Content: base64 });
+                if (savedPath) {
+                  lastSavedFilePathRef.current = savedPath;
+                  await invoke('open_folder', { path: savedPath });
+                }
+              } catch (e) {
+                console.error('Tauri save file error:', e);
+              }
+            }
+          };
+          reader.readAsDataURL(blob);
+        } else if (window.pywebview && window.pywebview.api) {
           const reader = new FileReader();
           reader.onloadend = async () => {
             const base64 = reader.result.split(',')[1];
@@ -839,8 +878,15 @@ export default function ChatArea({
     }
   };
 
-  const handleOpenDownloadsFolder = () => {
-    if (window.pywebview && window.pywebview.api && window.pywebview.api.open_downloads_folder) {
+  const handleOpenDownloadsFolder = async () => {
+    const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+    if (isTauri) {
+      try {
+        await invoke('open_folder', { path: lastSavedFilePathRef.current || '' });
+      } catch (e) {
+        console.error('Tauri open folder error:', e);
+      }
+    } else if (window.pywebview && window.pywebview.api && window.pywebview.api.open_downloads_folder) {
       window.pywebview.api.open_downloads_folder();
     } else {
       alert('下载文件已保存至您系统的 Downloads (下载) 目录。');
