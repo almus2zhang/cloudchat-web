@@ -5,7 +5,9 @@ import webview
 
 # Minimal WebView2 flags
 os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = (
-    '--disable-web-security --ignore-certificate-errors'
+    '--disable-web-security --ignore-certificate-errors '
+    '--disable-features=Translate,OptimizationHints,MediaRouter '
+    '--disable-background-networking --disable-sync'
 )
 
 webview.settings['IGNORE_SSL_ERRORS'] = True

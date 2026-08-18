@@ -1,4 +1,5 @@
 import React from 'react';
+import { getInitialAvatar } from '../utils/avatar';
 
 export default function Sidebar({ 
   isOpen, 
@@ -123,7 +124,7 @@ export default function Sidebar({
         <div className="p-3 border-t border-borderColor flex items-center justify-between gap-3 bg-bgPrimary/10">
           <div className="flex items-center gap-2 min-w-0">
             <img 
-              src={avatarUrl || `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(currentProfile?.username || 'User')}`} 
+              src={avatarUrl || getInitialAvatar(currentProfile?.username || 'User')} 
               alt="Avatar"
               className="w-9 h-9 rounded-xl object-cover border border-borderColor bg-bgPrimary shrink-0 shadow-sm"
             />

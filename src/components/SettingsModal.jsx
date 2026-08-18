@@ -1,18 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { cacheFile } from '../services/db';
-
-const PRESET_AVATARS = [
-  'https://api.dicebear.com/7.x/bottts/png?seed=Felix',
-  'https://api.dicebear.com/7.x/bottts/png?seed=Aria',
-  'https://api.dicebear.com/7.x/bottts/png?seed=Zack',
-  'https://api.dicebear.com/7.x/bottts/png?seed=Luna',
-  'https://api.dicebear.com/7.x/bottts/png?seed=Leo',
-  'https://api.dicebear.com/7.x/bottts/png?seed=Maya',
-  'https://api.dicebear.com/7.x/bottts/png?seed=Milo',
-  'https://api.dicebear.com/7.x/bottts/png?seed=Nova',
-  'https://api.dicebear.com/7.x/bottts/png?seed=Kira',
-  'https://api.dicebear.com/7.x/bottts/png?seed=Orion'
-];
+import { PRESET_AVATARS, getInitialAvatar } from '../utils/avatar';
 
 // 校验「设定的用户目录」合法性：目录各段只能包含数字、字母、下划线、连字符。
 // 返回 null 表示合法，否则返回错误提示文案。
@@ -588,7 +576,7 @@ export default function SettingsModal({
                     <img 
                       src={
                         previewUrl || 
-                        `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(editingProfile.username || 'User')}`
+                        getInitialAvatar(editingProfile.username || 'User')
                       } 
                       alt="Avatar Preview"
                       className="w-14 h-14 rounded-2xl object-cover border-2 border-accentColor/40 bg-bgPrimary shadow-md"

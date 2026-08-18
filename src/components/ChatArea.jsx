@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createDownloadState } from '../services/storage';
 import { getCachedFile, cacheFile } from '../services/db';
 import CalendarModal from './CalendarModal';
+import { getInitialAvatar } from '../utils/avatar';
 
 const CATEGORY_MAP = {
   'diary': '日记',
@@ -1380,11 +1381,11 @@ export default function ChatArea({
                 <div className="shrink-0 mt-0.5 select-none">
                   {(() => {
                     const senderName = item.senderName || item.sender || (item.isOutgoing ? (currentProfile?.username || 'Me') : 'User');
-                    const fallback = `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(senderName)}`;
+                    const fallback = getInitialAvatar(senderName);
                     const matchesCurrentProfile = currentProfile?.username && 
                       (item.sender === currentProfile.username || item.senderName === currentProfile.username);
                     const rawAvatar = item.senderAvatar || (matchesCurrentProfile ? currentProfile?.avatar : null);
-                    const isSafe = (u) => u && (u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('https://api.dicebear.com'));
+                    const isSafe = (u) => u && (u.startsWith('data:') || u.startsWith('blob:'));
                     const resolvedBlob = rawAvatar && avatarBlobUrls[rawAvatar];
                     const avatarSrc = resolvedBlob || (isSafe(rawAvatar) ? rawAvatar : fallback);
                     const firstLetter = (senderName || 'U').charAt(0).toUpperCase();
