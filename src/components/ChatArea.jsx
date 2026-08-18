@@ -668,13 +668,22 @@ export default function ChatArea({
         const typedBlob = new Blob([blob], { type: mimeType });
         const url = URL.createObjectURL(typedBlob);
         
-        const previewableExtensions = Object.keys(MIME_MAP);
+        const previewableExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'mp3', 'wav', 'ogg', 'm4a', 'mp4', 'webm', 'pdf', 'txt', 'json', 'xml', 'html', 'htm', 'js', 'css', 'md', 'log'];
         
         if (openInBrowser && previewableExtensions.includes(ext)) {
-          // Open natively supported previewable files in a new tab
-          window.open(url, '_blank');
+          // 仅图片、视频、音频、PDF、纯文本在网页新标签打开预览
+          const win = window.open(url, '_blank');
+          if (!win) {
+            // 被浏览器弹窗拦截时退回到下载
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = displayName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }
         } else {
-          // Fall back to forced file downloads for binary files
+          // 其他非直接预览文件（如 ZIP、DOCX、XLSX、EXE、APK 等），避免调用 window.open 报“无法打开blob连接应用”错误
           const a = document.createElement('a');
           a.href = url;
           a.download = displayName;
@@ -745,6 +754,66 @@ export default function ChatArea({
         delete c[msgId];
         return c;
       });
+    }
+  };
+
+  // --- Save As & Open Downloads Folder ---
+  const handleSaveAs = async (msg) => {
+    try {
+      const displayName = msg.content.replace(/^\d+_/, '');
+      let blob = await getCachedFile(msg.id);
+      if (!blob && storageClient) {
+        blob = await storageClient.downloadFile(msg.content);
+        if (blob) cacheFile(msg.id, blob);
+      }
+      if (!blob) {
+        alert('文件尚未下载，请先点击下载按钮下载');
+        return;
+      }
+
+      // 桌面 PyInstaller Webview Bridge
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.save_file_dialog) {
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const base64 = reader.result.split(',')[1];
+          await window.pywebview.api.save_file_dialog(displayName, base64);
+        };
+        reader.readAsDataURL(blob);
+        return;
+      }
+
+      // File System Access API (支持的 Chrome / Edge 浏览器弹框选择文件保存路径)
+      if (window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({ suggestedName: displayName });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          return;
+        } catch (e) {
+          if (e.name === 'AbortError') return;
+        }
+      }
+
+      // 退回到标准下载
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = displayName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      console.error('Save as error:', err);
+    }
+  };
+
+  const handleOpenDownloadsFolder = () => {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.open_downloads_folder) {
+      window.pywebview.api.open_downloads_folder();
+    } else {
+      alert('下载文件已保存至您系统的 Downloads (下载) 目录。');
     }
   };
 
@@ -1872,11 +1941,19 @@ export default function ChatArea({
                               </div>
                             </div>
                             <div className="flex gap-1.5 shrink-0 z-10" onClick={(e) => e.stopPropagation()}>
+                              <button 
+                                onClick={() => handleOpenDownloadsFolder()}
+                                className="w-7 h-7 rounded-full bg-black/5 hover:bg-amber-500/20 flex items-center justify-center text-xs text-amber-400"
+                                title="打开下载文件夹"
+                              >
+                                <i className="fa-solid fa-folder-open"></i>
+                              </button>
+
                               {!downloads[item.id] && (
                                 <button 
                                   onClick={() => handleStartDownload(item, false)}
                                   className="w-7 h-7 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center text-xs"
-                                  title="Download"
+                                  title="下载文件"
                                 >
                                   <i className="fa-solid fa-download"></i>
                                 </button>
@@ -2311,27 +2388,50 @@ export default function ChatArea({
 
           {/* Add/Edit Caption — for non-text & non-folder messages */}
           {selectedMessageIds.size <= 1 && contextMenu.msg.type !== 'TEXT' && contextMenu.msg.type !== 'FOLDER' && (
-            <button
-              onClick={() => {
-                const targetMsg = contextMenu.msg;
-                setContextMenu(null);
-                setInputModalConfig({
-                  isOpen: true,
-                  title: targetMsg.caption ? '修改注释' : '添加注释',
-                  hint: '给该条目添加便于搜索与检索的关联描述：',
-                  defaultValue: targetMsg.caption || '',
-                  placeholder: '请输入注释文字...',
-                  confirmText: '保存注释',
-                  onConfirm: (newCap) => {
-                    setInputModalConfig(prev => ({ ...prev, isOpen: false }));
-                    if (onUpdateCaption) onUpdateCaption(targetMsg.id, newCap);
-                  }
-                });
-              }}
-              className="w-full px-4 py-2 text-xs text-amber-400 hover:bg-amber-500/10 transition-colors flex items-center gap-2.5"
-            >
-              <i className="fa-solid fa-note-sticky w-4 text-center"></i> {contextMenu.msg.caption ? '修改注释' : '添加注释'}
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  const targetMsg = contextMenu.msg;
+                  setContextMenu(null);
+                  handleSaveAs(targetMsg);
+                }}
+                className="w-full px-4 py-2 text-xs text-cyan-400 hover:bg-cyan-500/10 transition-colors flex items-center gap-2.5 font-semibold"
+              >
+                <i className="fa-solid fa-floppy-disk text-cyan-400 w-4 text-center"></i> 另存为...
+              </button>
+
+              <button
+                onClick={() => {
+                  setContextMenu(null);
+                  handleOpenDownloadsFolder();
+                }}
+                className="w-full px-4 py-2 text-xs text-amber-400 hover:bg-amber-500/10 transition-colors flex items-center gap-2.5"
+              >
+                <i className="fa-solid fa-folder-open text-amber-400 w-4 text-center"></i> 打开下载文件夹
+              </button>
+
+              <button
+                onClick={() => {
+                  const targetMsg = contextMenu.msg;
+                  setContextMenu(null);
+                  setInputModalConfig({
+                    isOpen: true,
+                    title: targetMsg.caption ? '修改注释' : '添加注释',
+                    hint: '给该条目添加便于搜索与检索的关联描述：',
+                    defaultValue: targetMsg.caption || '',
+                    placeholder: '请输入注释文字...',
+                    confirmText: '保存注释',
+                    onConfirm: (newCap) => {
+                      setInputModalConfig(prev => ({ ...prev, isOpen: false }));
+                      if (onUpdateCaption) onUpdateCaption(targetMsg.id, newCap);
+                    }
+                  });
+                }}
+                className="w-full px-4 py-2 text-xs text-amber-400 hover:bg-amber-500/10 transition-colors flex items-center gap-2.5"
+              >
+                <i className="fa-solid fa-note-sticky w-4 text-center"></i> {contextMenu.msg.caption ? '修改注释' : '添加注释'}
+              </button>
+            </>
           )}
 
           {/* Select — enter multi-select mode */}

@@ -57,6 +57,10 @@ def save_window_state(win):
         pass
 
 
+import base64
+import subprocess
+import platform
+
 class DesktopApi:
     def __init__(self):
         self.window = None
@@ -85,6 +89,52 @@ class DesktopApi:
         finally:
             os._exit(0)
 
+    def open_downloads_folder(self):
+        try:
+            downloads_dir = os.path.join(os.path.expanduser('~'), 'Downloads')
+            os.makedirs(downloads_dir, exist_ok=True)
+            if sys.platform == 'win32':
+                os.startfile(downloads_dir)
+            elif sys.platform == 'darwin':
+                subprocess.Popen(['open', downloads_dir])
+            else:
+                subprocess.Popen(['xdg-open', downloads_dir])
+            return True
+        except Exception as e:
+            return False
+
+    def open_file(self, file_path):
+        try:
+            if os.path.exists(file_path):
+                if sys.platform == 'win32':
+                    os.startfile(file_path)
+                elif sys.platform == 'darwin':
+                    subprocess.Popen(['open', file_path])
+                else:
+                    subprocess.Popen(['xdg-open', file_path])
+                return True
+        except Exception:
+            pass
+        return False
+
+    def save_file_dialog(self, suggested_name, base64_content):
+        try:
+            if not self.window:
+                return False
+            result = self.window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename=suggested_name
+            )
+            if result:
+                save_path = result if isinstance(result, str) else result[0]
+                data = base64.b64decode(base64_content)
+                with open(save_path, 'wb') as f:
+                    f.write(data)
+                return True
+        except Exception:
+            pass
+        return False
+
 
 def get_dist_path():
     if getattr(sys, 'frozen', False):
@@ -103,6 +153,7 @@ if __name__ == '__main__':
     index_file = os.path.join(dist_dir, 'index.html')
 
     state = load_window_state()
+    api = DesktopApi()
 
     kwargs = {
         'title': 'CloudChat Desktop',
@@ -110,7 +161,8 @@ if __name__ == '__main__':
         'width': state['width'],
         'height': state['height'],
         'resizable': True,
-        'min_size': (400, 500)
+        'min_size': (400, 500),
+        'js_api': api
     }
 
     if state['x'] is not None and state['y'] is not None:
@@ -118,6 +170,7 @@ if __name__ == '__main__':
         kwargs['y'] = state['y']
 
     window = webview.create_window(**kwargs)
+    api.set_window(window)
 
     def on_resized():
         save_window_state(window)
@@ -131,9 +184,6 @@ if __name__ == '__main__':
     window.events.resized += on_resized
     window.events.moved += on_moved
     window.events.closing += on_closing
-
-    api = DesktopApi()
-    api.set_window(window)
 
     webview.start(
         gui='edgechromium',
