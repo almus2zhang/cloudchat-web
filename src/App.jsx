@@ -8,6 +8,7 @@ import FolderPickerModal from './components/FolderPickerModal';
 import MediaViewer from './components/MediaViewer';
 import DiaryExportModal from './components/DiaryExportModal';
 import InputModal from './components/InputModal';
+import DebugLogsModal from './components/DebugLogsModal';
 import { StorageClient } from './services/storage';
 import { initDB, cacheFile, getCachedFile } from './services/db';
 
@@ -26,6 +27,21 @@ export default function App() {
   const [activeUploads, setActiveUploads] = useState({});
   const [activeCategory, setActiveCategory] = useState('all');
   const [selectedMessageIds, setSelectedMessageIds] = useState(new Set());
+  
+  // Debug Log States
+  const [debugLogs, setDebugLogs] = useState([]);
+  const [debugModalOpen, setDebugModalOpen] = useState(false);
+
+  const addDebugLog = (msg) => {
+    const timeStr = new Date().toLocaleTimeString();
+    const logLine = `[${timeStr}] ${msg}`;
+    console.log(`[CloudChat Debug] ${logLine}`);
+    setDebugLogs(prev => [...prev.slice(-300), logLine]);
+  };
+
+  if (typeof window !== 'undefined') {
+    window.__addDebugLog = addDebugLog;
+  }
   
   // Sidebar and Modal States
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -434,46 +450,61 @@ export default function App() {
     if (isSyncing || !currentProfileRef.current || !activeClientRef.current) return;
     setIsSyncing(true);
 
+    addDebugLog(`=== 开始同步历史记录 (force=${force}) ===`);
+    addDebugLog(`当前账号: ${currentProfileRef.current.name} (${currentProfileRef.current.saveDir}), 类型: ${currentProfileRef.current.serverType}`);
+
     try {
       const client = activeClientRef.current;
       
       if (typeof client.ensureDirectoriesExist === 'function') {
+        addDebugLog(`[Sync] 检查并初始化必要子目录...`);
         await client.ensureDirectoriesExist();
       }
 
+      addDebugLog(`[Sync] 获取 chat_index.json 修改时间...`);
       let cloudIndexTime = await client.getLastModified('chat_index.json');
+      addDebugLog(`[Sync] chat_index.json 修改时间结果: ${cloudIndexTime}`);
       let indexData = {};
       let needsMigration = false;
 
       if (cloudIndexTime === 0) {
+        addDebugLog(`[Sync] chat_index.json 修改时间为 0，尝试直接试读下载 chat_index.json...`);
         try {
           const indexText = typeof client.downloadText === 'function' ? await client.downloadText('chat_index.json') : await (await client.downloadFile('chat_index.json')).text();
+          addDebugLog(`[Sync] 试读 chat_index.json 成功, 文本长度: ${indexText?.length}, 前100字: ${indexText?.slice(0, 100)}`);
           if (indexText && (indexText.trim().startsWith('{') || indexText.trim().startsWith('['))) {
             cloudIndexTime = Date.now();
           }
-        } catch (e) {}
+        } catch (e) {
+          addDebugLog(`[Sync] 试读 chat_index.json 失败: ${e.message || e}`);
+        }
       }
 
       if (cloudIndexTime === 0) {
+        addDebugLog(`[Sync] 试读 index 仍为 0，检查旧版单文件 chat_history.json...`);
         if (!legacyHistoryMissingRef.current) {
           const oldTime = await client.getLastModified('chat_history.json');
+          addDebugLog(`[Sync] chat_history.json 修改时间: ${oldTime}`);
           if (oldTime > 0) {
             needsMigration = true;
           } else {
             try {
               const legacyText = typeof client.downloadText === 'function' ? await client.downloadText('chat_history.json') : await (await client.downloadFile('chat_history.json')).text();
+              addDebugLog(`[Sync] 试读 legacy chat_history.json 成功: ${legacyText?.slice(0, 100)}`);
               if (legacyText && legacyText.trim().startsWith('[')) {
                 needsMigration = true;
               } else {
                 legacyHistoryMissingRef.current = true;
               }
             } catch (e) {
+              addDebugLog(`[Sync] 试读 legacy chat_history.json 失败: ${e.message || e}`);
               legacyHistoryMissingRef.current = true;
             }
           }
         }
         
         if (!needsMigration) {
+          addDebugLog(`[Sync] 确认云端没有任何历史索引文件 (chat_index.json / chat_history.json)`);
           setStatusText('Connected (No history file)');
           setStatusDotClass('bg-green-500');
           setIsSyncing(false);
@@ -481,23 +512,28 @@ export default function App() {
         }
       }
 
+      addDebugLog(`[Sync] 比对结果: force=${force}, cloudTime=${cloudIndexTime}, lastKnown=${lastKnownCloudIndexTimeRef.current}, needsMigration=${needsMigration}`);
       if (force || cloudIndexTime > lastKnownCloudIndexTimeRef.current || needsMigration) {
         let downloadedMessages = [];
         let anyShardChanged = false;
         let repairedTotal = 0;
 
         if (needsMigration) {
+            addDebugLog(`[Sync] 正在迁移旧版 chat_history.json...`);
             const text = typeof client.downloadText === 'function' ? await client.downloadText('chat_history.json') : await (await client.downloadFile('chat_history.json')).text();
             const rawCloudMessages = JSON.parse(text);
             const { sanitized, repairedCount } = sanitizeMessages(rawCloudMessages);
             downloadedMessages = sanitized;
             repairedTotal = repairedCount;
             anyShardChanged = true;
+            addDebugLog(`[Sync] 迁移成功，解出 ${sanitized.length} 条消息`);
         } else {
+            addDebugLog(`[Sync] 正在下载并解析 chat_index.json...`);
             const indexText = typeof client.downloadText === 'function' ? await client.downloadText('chat_index.json') : await (await client.downloadFile('chat_index.json')).text();
             let parsedData = JSON.parse(indexText);
             const isArrayFormat = Array.isArray(parsedData);
             const shardList = isArrayFormat ? parsedData : Object.keys(parsedData);
+            addDebugLog(`[Sync] chat_index.json 包含 ${shardList.length} 个分片: ${JSON.stringify(shardList)}`);
 
             for (const shardName of shardList) {
                 let timestamp = 0;
@@ -507,8 +543,10 @@ export default function App() {
                     timestamp = await client.getLastModified(shardName);
                 }
 
-                if (timestamp > (shardTimestampsRef.current[shardName] || 0)) {
+                addDebugLog(`[Sync] 检查分片 ${shardName}, 云端时间: ${timestamp}, 本地记录时间: ${shardTimestampsRef.current[shardName] || 0}`);
+                if (force || timestamp > (shardTimestampsRef.current[shardName] || 0)) {
                     try {
+                        addDebugLog(`[Sync] 正在下载分片文件 ${shardName}...`);
                         const shardText = typeof client.downloadText === 'function' ? await client.downloadText(shardName) : await (await client.downloadFile(shardName)).text();
                         const rawMsgs = JSON.parse(shardText);
                         const { sanitized, repairedCount } = sanitizeMessages(rawMsgs);
@@ -516,28 +554,27 @@ export default function App() {
                         shardTimestampsRef.current[shardName] = timestamp;
                         anyShardChanged = true;
                         repairedTotal += repairedCount;
+                        addDebugLog(`[Sync] 分片 ${shardName} 下载完成，包含 ${sanitized.length} 条有效消息`);
                     } catch (e) {
-                        console.error("Failed to fetch shard", shardName, e);
+                        addDebugLog(`[Sync ERR] 下载/解析分片 ${shardName} 失败: ${e.message || e}`);
                     }
                 }
             }
         }
 
+        addDebugLog(`[Sync] 本轮云端读取到总计 ${downloadedMessages.length} 条消息`);
         if (anyShardChanged) {
           lastKnownCloudIndexTimeRef.current = cloudIndexTime;
 
           setMessages(prev => {
             let mergedMap = new Map();
-            // Start with downloaded cloud messages
             downloadedMessages.forEach(m => mergedMap.set(m.id, m));
-            // Keep local messages (SENDING, FAILED, or newly created local messages)
             prev.forEach(m => {
               if (!mergedMap.has(m.id)) {
                 mergedMap.set(m.id, m);
               }
             });
 
-            // Remove soft-deleted messages AFTER merge
             const merged = Array.from(mergedMap.values());
             const alive = merged.filter(m => !m.isDeleted);
             alive.sort((a, b) => a.timestamp - b.timestamp);
@@ -549,6 +586,7 @@ export default function App() {
               pushHistoryToCloud(merged);
             }
 
+            addDebugLog(`[Sync] 最终刷新界面显示 ${alive.length} 条有效消息`);
             return alive;
           });
 
@@ -556,15 +594,17 @@ export default function App() {
           setStatusDotClass('bg-green-500');
           setTimeout(() => scrollToBottom(), 150);
         } else {
+          addDebugLog(`[Sync] 分片无更新`);
           setStatusText('Synchronized');
           setStatusDotClass('bg-green-500');
         }
       } else {
+        addDebugLog(`[Sync] 云端索引无变化`);
         setStatusText('Synchronized');
         setStatusDotClass('bg-green-500');
       }
     } catch (e) {
-      console.error('Cloud sync error:', e);
+      addDebugLog(`[Sync ERR] 同步失败: ${e.stack || e.message || e}`);
       setStatusText(`Sync failed: ${e.message || e}`);
       setStatusDotClass('bg-red-500');
     } finally {
@@ -1627,6 +1667,7 @@ export default function App() {
         statusText={statusText}
         statusDotClass={statusDotClass}
         resolveAvatarUrl={resolveAvatarUrl}
+        onOpenDebugLogs={() => setDebugModalOpen(true)}
       />
 
       {/* Main Chat Area */}
@@ -1666,6 +1707,7 @@ export default function App() {
         storageClient={activeClientRef.current}
         resolveAvatarUrl={resolveAvatarUrl}
         isSyncing={isSyncing}
+        onOpenDebugLogs={() => setDebugModalOpen(true)}
       />
 
       {/* Settings Modal */}
@@ -1784,6 +1826,15 @@ export default function App() {
         confirmText={inputModalConfig.confirmText || '确定'}
         onConfirm={inputModalConfig.onConfirm}
         onCancel={() => setInputModalConfig(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Debug Logs Modal */}
+      <DebugLogsModal
+        isOpen={debugModalOpen}
+        onClose={() => setDebugModalOpen(false)}
+        logs={debugLogs}
+        onClear={() => setDebugLogs([])}
+        onForceSync={() => syncHistory(true)}
       />
 
     </div>

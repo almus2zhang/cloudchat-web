@@ -16,7 +16,8 @@ export default function Sidebar({
   diaryCount = 0,
   statusText,
   statusDotClass,
-  resolveAvatarUrl
+  resolveAvatarUrl,
+  onOpenDebugLogs
 }) {
   const [avatarUrl, setAvatarUrl] = React.useState(null);
 
@@ -67,14 +68,26 @@ export default function Sidebar({
         </div>
 
         {/* Sync Status Info */}
-        <div className="p-3 border-b border-borderColor bg-bgPrimary/20 flex items-center gap-2.5">
-          <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotClass || 'bg-red-500'}`} />
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] text-textMuted font-medium uppercase tracking-wider truncate">
-              {currentProfile ? currentProfile.name : '未选择配置方案'}
-            </p>
-            <p className="text-xs text-textSecondary truncate">{statusText || '未连接'}</p>
+        <div className="p-3 border-b border-borderColor bg-bgPrimary/20 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotClass || 'bg-red-500'}`} />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] text-textMuted font-medium uppercase tracking-wider truncate">
+                {currentProfile ? currentProfile.name : '未选择配置方案'}
+              </p>
+              <p className="text-xs text-textSecondary truncate">{statusText || '未连接'}</p>
+            </div>
           </div>
+          {onOpenDebugLogs && (
+            <button
+              onClick={onOpenDebugLogs}
+              className="px-2 py-1 text-[11px] font-semibold bg-accentColor/10 text-accentColor border border-accentColor/30 hover:bg-accentColor/20 rounded-md transition-all shrink-0 flex items-center gap-1 cursor-pointer"
+              title="查看同步与网络调试日志"
+            >
+              <i className="fa-solid fa-bug text-[10px]"></i>
+              <span>日志</span>
+            </button>
+          )}
         </div>
 
         {/* Main Section Navigation Items */}

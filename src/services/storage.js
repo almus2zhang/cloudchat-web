@@ -1,6 +1,12 @@
 import CryptoJS from 'crypto-js';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 
+function logDebug(msg) {
+    if (typeof window !== 'undefined' && window.__addDebugLog) {
+        window.__addDebugLog(msg);
+    }
+}
+
 // Safe fetch wrapper with timeout (uses native Rust HTTP fetch when running under Tauri to bypass CORS)
 export async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
     const controller = new AbortController();
@@ -10,12 +16,18 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
     const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
     const fetchImpl = isTauri ? tauriFetch : window.fetch.bind(window);
 
+    const method = options.method || 'GET';
+    const fileName = url.split('?')[0].split('/').pop();
+    logDebug(`[HTTP] ${method} ${fileName}`);
+
     try {
         const response = await fetchImpl(url, { ...options, signal: combinedSignal });
         clearTimeout(timeoutId);
+        logDebug(`[HTTP] ${method} ${fileName} -> Status ${response.status} (${response.statusText || 'OK'})`);
         return response;
     } catch (err) {
         clearTimeout(timeoutId);
+        logDebug(`[HTTP FAIL] ${method} ${fileName} -> ${err.message || err}`);
         if (err.name === 'AbortError') {
             throw new Error(`网络请求超时 (${Math.round(timeoutMs / 1000)}秒)`);
         }
