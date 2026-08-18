@@ -684,9 +684,15 @@ export default function ChatArea({
           'webm': 'video/webm'
         };
 
-        const previewableExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'mp3', 'wav', 'ogg', 'm4a', 'mp4', 'webm', 'pdf', 'txt', 'json', 'xml', 'html', 'htm', 'js', 'css', 'md', 'log'];
-        const isPreviewable = previewableExtensions.includes(ext);
         const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+        const isPyWebView = typeof window !== 'undefined' && window.pywebview && window.pywebview.api;
+        const isDesktopApp = isTauri || isPyWebView;
+
+        // 在桌面客户端模式下，只有图片/音视频在内建播放器查看，PDF 及所有文档走原生关联程序打开
+        const previewableExtensions = isDesktopApp 
+          ? ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'mp3', 'wav', 'ogg', 'm4a', 'mp4', 'webm']
+          : ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'mp3', 'wav', 'ogg', 'm4a', 'mp4', 'webm', 'pdf', 'txt', 'json', 'xml', 'html', 'htm', 'js', 'css', 'md', 'log'];
+        const isPreviewable = previewableExtensions.includes(ext);
 
         if (isTauri) {
           logDebug(`[Tauri File Action] file: ${displayName}, openInBrowser: ${openInBrowser}, isPreviewable: ${isPreviewable}`);
@@ -695,14 +701,14 @@ export default function ChatArea({
             const base64 = reader.result.split(',')[1];
             if (openInBrowser) {
               if (isPreviewable) {
-                logDebug(`[Tauri Preview] Opening previewable file in browser tab: ${displayName}`);
+                logDebug(`[Tauri Media View] Opening media file: ${displayName}`);
                 const mimeType = MIME_MAP[ext] || blob.type || 'application/octet-stream';
                 const typedBlob = new Blob([blob], { type: mimeType });
                 const url = URL.createObjectURL(typedBlob);
                 window.open(url, '_blank');
                 setTimeout(() => URL.revokeObjectURL(url), 10000);
               } else {
-                // 点击二进制文件卡片直接在桌面保存并调用系统关联程序打开
+                // 点击 PDF/文档/二进制文件卡片，保存至 Downloads 并启动 Windows 默认关联软件打开
                 try {
                   logDebug(`[Tauri Open File] Saving to downloads: ${displayName}...`);
                   const savedPath = await invokeTauri('save_file_to_downloads', {
