@@ -239,9 +239,9 @@ export default function SettingsModal({
       <div className="bg-bgSecondary border border-borderColor rounded-xl w-full max-w-lg max-w-[calc(100vw-16px)] shadow-2xl scale-in my-auto max-h-[92vh] flex flex-col">
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-borderColor flex justify-between items-center">
+        <div className="px-6 py-4 border-b border-borderColor flex justify-between items-center bg-white/5">
           <h2 className="text-textPrimary font-semibold text-lg flex items-center gap-2">
-            <i className="fa-solid fa-server text-accentColor"></i> Storage Settings
+            <i className="fa-solid fa-server text-accentColor"></i> 存储与服务配置
           </h2>
           <button onClick={onClose} className="text-textMuted hover:text-textPrimary transition-colors">
             <i className="fa-solid fa-xmark text-lg"></i>
@@ -249,11 +249,11 @@ export default function SettingsModal({
         </div>
 
         {/* Body */}
-        <div className="p-6 max-h-[70vh] overflow-y-auto flex flex-col gap-5">
+        <div className="p-6 max-h-[75vh] overflow-y-auto flex flex-col gap-5">
           
           {/* Profile Switcher */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-textSecondary uppercase tracking-wider">Active Profile</label>
+            <label className="text-xs font-semibold text-textSecondary uppercase tracking-wider">当前配置方案</label>
             <div className="flex gap-2">
               <select 
                 value={activeProfileId || ''} 
@@ -263,13 +263,13 @@ export default function SettingsModal({
                 {profiles.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
-                {profiles.length === 0 && <option value="">No Profiles - Click New Profile</option>}
+                {profiles.length === 0 && <option value="">暂无配置 - 请点击新建配置</option>}
               </select>
               {profiles.length > 0 && (
                 <button 
                   onClick={handleDelete}
                   className="px-3.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 rounded-lg transition-all"
-                  title="Delete Profile"
+                  title="删除当前配置"
                 >
                   <i className="fa-regular fa-trash-can"></i>
                 </button>
@@ -278,7 +278,7 @@ export default function SettingsModal({
                 onClick={handleInitNewProfile}
                 className="px-3 py-2 bg-accentColor hover:bg-accentHover text-white font-medium rounded-lg text-sm transition-all flex items-center gap-1"
               >
-                <i className="fa-solid fa-plus"></i> New
+                <i className="fa-solid fa-plus"></i> 新建配置
               </button>
             </div>
           </div>
@@ -290,17 +290,17 @@ export default function SettingsModal({
               {/* Form Nickname & Storage Type */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">Profile Nickname</label>
+                  <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">配置方案名称</label>
                   <input 
                     type="text" 
                     value={editingProfile.name || ''}
                     onChange={(e) => handleFieldChange('name', e.target.value)}
-                    placeholder="e.g. My Synology WebDAV"
+                    placeholder="例如: 坚果云 WebDAV / 我的 NAS"
                     className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor transition-colors w-full"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">Storage Engine</label>
+                  <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">存储引擎 / 服务类型</label>
                   <select 
                     value={editingProfile.preset === 'jianguoyun' ? 'JIANGUOYUN' : (editingProfile.type || 'WEBDAV')}
                     onChange={(e) => {
@@ -311,7 +311,9 @@ export default function SettingsModal({
                           type: 'WEBDAV',
                           preset: 'jianguoyun',
                           webDavUrl: 'https://dav.jianguoyun.com/dav/',
-                          serverPath: 'CloudChat'
+                          serverPath: 'CloudChat',
+                          webDavFallbackUrl: '',
+                          diaryBaseUrl: ''
                         }));
                       } else {
                         setEditingProfile(prev => ({
@@ -323,9 +325,9 @@ export default function SettingsModal({
                     }}
                     className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor transition-colors w-full"
                   >
-                    <option value="JIANGUOYUN">坚果云 WebDAV (Jianguoyun Preset)</option>
-                    <option value="WEBDAV">WebDAV (Nextcloud, NAS, etc.)</option>
-                    <option value="S3">Amazon S3 / MinIO / Object Storage</option>
+                    <option value="JIANGUOYUN">坚果云 WebDAV (快捷预设)</option>
+                    <option value="WEBDAV">WebDAV (Nextcloud, NAS, 极空间等)</option>
+                    <option value="S3">Amazon S3 / MinIO / 兼容对象存储</option>
                   </select>
                 </div>
               </div>
@@ -334,7 +336,7 @@ export default function SettingsModal({
               {editingProfile.type === 'WEBDAV' && (
                 <div className="flex flex-col gap-4 animate-fade-in">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">WebDAV Server URL</label>
+                    <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">WebDAV 服务器 URL 地址</label>
                     <input 
                       type="url" 
                       value={editingProfile.webDavUrl || ''}
@@ -346,10 +348,19 @@ export default function SettingsModal({
                       }`}
                     />
                   </div>
+
+                  {/* 坚果云应用密码获取步骤提示 */}
+                  {editingProfile.preset === 'jianguoyun' && (
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs leading-relaxed flex items-start gap-2">
+                      <i className="fa-solid fa-circle-info text-amber-400 mt-0.5 shrink-0 text-sm"></i>
+                      <span>请按照此步骤获取应用密码：① 下载并安装坚果客户端；② 登录后前往 “设置” → “第三方应用管理” 进行关联获取密码。</span>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">
-                        {editingProfile.preset === 'jianguoyun' ? '坚果云账号 (邮箱)' : 'Username'}
+                        {editingProfile.preset === 'jianguoyun' ? '坚果云账号 (邮箱)' : 'WebDAV 用户名'}
                       </label>
                       <input 
                         type="text" 
@@ -361,7 +372,7 @@ export default function SettingsModal({
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">
-                        {editingProfile.preset === 'jianguoyun' ? '坚果云应用密码' : 'Password'}
+                        {editingProfile.preset === 'jianguoyun' ? '坚果云应用密码' : 'WebDAV 密码'}
                       </label>
                       <input 
                         type="password" 
@@ -374,7 +385,7 @@ export default function SettingsModal({
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">Chunk Size (MB)</label>
+                      <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">文件分块传输大小 (MB)</label>
                       <input 
                         type="number" 
                         value={editingProfile.webDavChunkSize !== undefined ? (editingProfile.webDavChunkSize / (1024 * 1024)) : 64}
@@ -383,16 +394,19 @@ export default function SettingsModal({
                         min="0"
                         className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor transition-colors w-full"
                       />
-                      <span className="text-[10px] text-textMuted mt-0.5">Set to 0 to disable chunking.</span>
+                      <span className="text-[10px] text-textMuted mt-0.5">设为 0 表示禁用大文件分块传输。</span>
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">Fallback URL (Optional)</label>
+                      <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">WebDAV 局域网/回退地址 (可选)</label>
                       <input 
                         type="url" 
                         value={editingProfile.webDavFallbackUrl || ''}
                         onChange={(e) => handleFieldChange('webDavFallbackUrl', e.target.value)}
-                        placeholder="http://192.168.1.100:5005/dav"
-                        className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor transition-colors w-full"
+                        disabled={editingProfile.preset === 'jianguoyun'}
+                        placeholder={editingProfile.preset === 'jianguoyun' ? '坚果云模式不可用' : 'http://192.168.1.100:5005/dav'}
+                        className={`bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor transition-colors w-full ${
+                          editingProfile.preset === 'jianguoyun' ? 'opacity-60 cursor-not-allowed' : ''
+                        }`}
                       />
                     </div>
                   </div>
@@ -436,7 +450,7 @@ export default function SettingsModal({
               {editingProfile.type === 'S3' && (
                 <div className="flex flex-col gap-4 animate-fade-in">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">S3 Endpoint URL</label>
+                    <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">S3 Endpoint 服务地址</label>
                     <input 
                       type="url" 
                       value={editingProfile.endpoint || ''}
@@ -447,7 +461,7 @@ export default function SettingsModal({
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">Bucket Name</label>
+                      <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">S3 存储桶名称 (Bucket Name)</label>
                       <input 
                         type="text" 
                         value={editingProfile.bucket || ''}
@@ -457,7 +471,7 @@ export default function SettingsModal({
                       />
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">Region (Optional)</label>
+                      <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">存储区域 (Region, 可选)</label>
                       <input 
                         type="text" 
                         value={editingProfile.region || ''}
@@ -495,7 +509,7 @@ export default function SettingsModal({
               {/* Path prefixes */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">Server Path Prefix</label>
+                  <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">服务器根路径前缀</label>
                   <input 
                     type="text" 
                     value={editingProfile.serverPath || ''}
@@ -507,11 +521,11 @@ export default function SettingsModal({
                     }`}
                   />
                   <span className="text-[10px] text-textMuted mt-0.5">
-                    {editingProfile.preset === 'jianguoyun' ? 'Solidified to CloudChat' : 'Subfolder on server root.'}
+                    {editingProfile.preset === 'jianguoyun' ? '坚果云固定锁定为 CloudChat' : '服务器根目录下的子文件夹名称'}
                   </span>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">User Directory</label>
+                  <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">用户隔离存储目录</label>
                   <input 
                     type="text" 
                     value={editingProfile.saveDir || ''}
@@ -519,7 +533,7 @@ export default function SettingsModal({
                     placeholder="user_default"
                     className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor transition-colors w-full"
                   />
-                  <span className="text-[10px] text-textMuted mt-0.5">Isolated directory for this profile.</span>
+                  <span className="text-[10px] text-textMuted mt-0.5">区分多账号的独立子目录。</span>
                 </div>
               </div>
 
@@ -532,8 +546,11 @@ export default function SettingsModal({
                   type="url" 
                   value={editingProfile.diaryBaseUrl || ''}
                   onChange={(e) => handleFieldChange('diaryBaseUrl', e.target.value)}
-                  placeholder="例如: https://diary.example.com 或 https://mywebdav.com/chat/save/"
-                  className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-cyan-500 transition-colors w-full"
+                  disabled={editingProfile.preset === 'jianguoyun'}
+                  placeholder={editingProfile.preset === 'jianguoyun' ? '坚果云模式不可用' : '例如: https://diary.example.com 或 https://mywebdav.com/chat/save/'}
+                  className={`bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-cyan-500 transition-colors w-full ${
+                    editingProfile.preset === 'jianguoyun' ? 'opacity-60 cursor-not-allowed' : ''
+                  }`}
                 />
                 <span className="text-[10px] text-textMuted mt-0.5">
                   配置 WebDAV/S3 映射的 Web 访问绝对根域名。日记生成后自动拼接公开访问链接（留空时默认使用服务器文件原始 URL）。
@@ -543,17 +560,17 @@ export default function SettingsModal({
               {/* Username & Sync interval */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">Your Nickname in Chat</label>
+                  <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">聊天昵称</label>
                   <input 
                     type="text" 
                     value={editingProfile.username || ''}
                     onChange={(e) => handleFieldChange('username', e.target.value)}
-                    placeholder="Me"
+                    placeholder="我"
                     className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor transition-colors w-full"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">Sync Interval (seconds)</label>
+                  <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">自动同步间隔 (秒)</label>
                   <input 
                     type="number" 
                     value={editingProfile.syncInterval || 5}
@@ -568,7 +585,7 @@ export default function SettingsModal({
               {/* Avatar Setting Section */}
               <div className="flex flex-col gap-2.5 border-t border-borderColor/40 pt-3">
                 <label className="text-xs font-semibold text-textSecondary uppercase tracking-wider flex items-center gap-1.5">
-                  <i className="fa-solid fa-user-gear text-accentColor"></i> 个人头像设置 (User Avatar)
+                  <i className="fa-solid fa-user-gear text-accentColor"></i> 个人头像设置
                 </label>
 
                 <div className="flex items-center gap-4 py-1">
@@ -624,16 +641,16 @@ export default function SettingsModal({
         {/* Footer */}
         <div className="px-6 py-4 bg-bgPrimary/30 border-t border-borderColor flex justify-end gap-3">
           <button 
-            className="px-4 py-2 text-sm font-medium text-textSecondary hover:bg-white/5 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-textSecondary hover:bg-white/5 rounded-lg transition-colors border border-borderColor"
             onClick={onClose}
           >
-            Cancel
+            取消
           </button>
           <button 
             className="px-5 py-2 text-sm font-semibold text-white bg-accentColor hover:bg-accentHover rounded-lg transition-colors shadow-lg shadow-accentColor/10"
             onClick={handleSave}
           >
-            Save & Apply
+            保存配置方案
           </button>
         </div>
 

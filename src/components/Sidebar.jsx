@@ -71,9 +71,9 @@ export default function Sidebar({
           <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotClass || 'bg-red-500'}`} />
           <div className="min-w-0 flex-1">
             <p className="text-[11px] text-textMuted font-medium uppercase tracking-wider truncate">
-              {currentProfile ? currentProfile.name : 'No Profile'}
+              {currentProfile ? currentProfile.name : '未选择配置方案'}
             </p>
-            <p className="text-xs text-textSecondary truncate">{statusText || 'Disconnected'}</p>
+            <p className="text-xs text-textSecondary truncate">{statusText || '未连接'}</p>
           </div>
         </div>
 
@@ -90,7 +90,7 @@ export default function Sidebar({
               }`}
             >
               <span className="flex items-center gap-2.5">
-                <i className="fa-solid fa-layer-group text-sm"></i> All Messages
+                <i className="fa-solid fa-layer-group text-sm"></i> 全部消息
               </span>
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                 activeCategory === 'all' ? 'bg-accentColor/20 text-accentColor' : 'bg-borderColor/50 text-textMuted'
@@ -130,9 +130,9 @@ export default function Sidebar({
             />
             <div className="min-w-0">
               <p className="text-xs font-semibold text-textPrimary truncate">
-                {currentProfile ? currentProfile.username : 'Guest User'}
+                {currentProfile ? currentProfile.username : '访客'}
               </p>
-              <p className="text-[10px] text-textMuted truncate">Server Owner</p>
+              <p className="text-[10px] text-textMuted truncate">当前用户</p>
             </div>
           </div>
           <button 
@@ -141,7 +141,7 @@ export default function Sidebar({
             className={`w-8 h-8 rounded border border-borderColor flex items-center justify-center text-textSecondary hover:text-accentColor hover:border-accentColor/30 transition-all ${
               isSyncing ? 'animate-spin' : ''
             }`}
-            title="Sync Now"
+            title="立即手动同步"
           >
             <i className="fa-solid fa-rotate text-sm"></i>
           </button>
