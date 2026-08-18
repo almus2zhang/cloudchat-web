@@ -10,7 +10,7 @@ import DiaryExportModal from './components/DiaryExportModal';
 import InputModal from './components/InputModal';
 import DebugLogsModal from './components/DebugLogsModal';
 import { StorageClient } from './services/storage';
-import { initDB, cacheFile, getCachedFile } from './services/db';
+import { initDB, cacheFile, getCachedFile, clearAllCache } from './services/db';
 
 // Global media URL lookup cache
 const cachedMediaUrls = {};
@@ -1581,8 +1581,10 @@ export default function App() {
     if (isLocationChanged) {
       setMessages([]);
       cacheFile(`history_array_${profile.id}`, []);
+      clearAllCache(); // 清空 IndexedDB 中所有文件缓存（附件、头像等）
       lastKnownCloudIndexTimeRef.current = 0;
       shardTimestampsRef.current = {};
+      legacyHistoryMissingRef.current = false; // 重置 legacy 标志以便重新检测新路径
     }
 
     setSettingsOpen(false);

@@ -470,7 +470,7 @@ export default function ChatArea({
     if (isDraggingThumbRef.current) return;
 
     const scrollableDist = el.scrollHeight - el.clientHeight;
-    if (scrollableDist > 40) {
+    if (scrollableDist > 40 && el.scrollTop > el.clientHeight * 1.5) {
       const fraction = Math.max(0, Math.min(1, el.scrollTop / scrollableDist));
 
       setScrollThumbInfo(prev => ({
@@ -485,6 +485,9 @@ export default function ChatArea({
           setScrollThumbInfo(prev => ({ ...prev, visible: false }));
         }
       }, 1000);
+    } else if (scrollThumbInfo.visible) {
+      // 未超过 1.5 屏，隐藏滑块
+      setScrollThumbInfo(prev => ({ ...prev, visible: false }));
     }
   };
 

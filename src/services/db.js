@@ -47,3 +47,18 @@ export function getCachedFile(id) {
         }
     });
 }
+
+export function clearAllCache() {
+    return new Promise((resolve) => {
+        if (!db) return resolve();
+        try {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            tx.objectStore(STORE_NAME).clear();
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => resolve();
+        } catch (e) {
+            console.warn('Failed to clear IndexedDB cache:', e);
+            resolve();
+        }
+    });
+}

@@ -250,7 +250,7 @@ class WebDavStorageClient {
             const folderUrl = `${baseUrl}/${currentPath}`;
             try {
                 // Check if directory exists to avoid 405 MKCOL warning
-                const propRes = await fetch(folderUrl, {
+                const propRes = await fetchWithTimeout(folderUrl, {
                     method: 'PROPFIND',
                     headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
                 });
@@ -258,7 +258,7 @@ class WebDavStorageClient {
             } catch(e) {}
 
             try {
-                const res = await fetch(folderUrl, {
+                const res = await fetchWithTimeout(folderUrl, {
                     method: 'MKCOL',
                     headers: { 'Authorization': this.getAuthHeader() }
                 });
@@ -291,7 +291,7 @@ class WebDavStorageClient {
             currentPath = currentPath ? `${currentPath}/${encodedPart}` : encodedPart;
             const folderUrl = `${baseUrl}/${currentPath}`;
             try {
-                const propRes = await fetch(folderUrl, {
+                const propRes = await fetchWithTimeout(folderUrl, {
                     method: 'PROPFIND',
                     headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
                 });
@@ -299,7 +299,7 @@ class WebDavStorageClient {
             } catch(e) {}
 
             try {
-                await fetch(folderUrl, {
+                await fetchWithTimeout(folderUrl, {
                     method: 'MKCOL',
                     headers: { 'Authorization': this.getAuthHeader() }
                 });
@@ -810,7 +810,7 @@ class WebDavStorageClient {
                 const xmlBody = '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>';
                 
                 try {
-                    let response = await fetch(targetUrl, {
+                    let response = await fetchWithTimeout(targetUrl, {
                         method: 'PROPFIND',
                         headers: {
                             'Authorization': this.getAuthHeader(),
@@ -825,7 +825,7 @@ class WebDavStorageClient {
                         try {
                             await this.ensureFolderPathExist();
                             createdDir = true;
-                            response = await fetch(targetUrl, {
+                            response = await fetchWithTimeout(targetUrl, {
                                 method: 'PROPFIND',
                                 headers: {
                                     'Authorization': this.getAuthHeader(),
@@ -883,7 +883,7 @@ class WebDavStorageClient {
         } else if (this.type === 'S3') {
             const endpoint = (this.config.endpoint || '').replace(/\/+$/, '');
             if (!endpoint) throw new Error('S3 Endpoint 不能为空');
-            const response = await fetch(endpoint, { method: 'HEAD' });
+            const response = await fetchWithTimeout(endpoint, { method: 'HEAD' });
             return { ok: true, status: response.status, message: 'S3 服务器连通正常！' };
         }
         return { ok: true, message: '连接配置有效' };
