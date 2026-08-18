@@ -10,9 +10,7 @@ from http.server import SimpleHTTPRequestHandler, HTTPServer
 
 # WebView2 flags for clean local desktop execution
 os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = (
-    '--disable-web-security --allow-running-insecure-content '
-    '--disable-site-isolation-trials --disable-features=IsolateOrigins,site-per-process '
-    '--disable-background-networking --disable-sync --ignore-certificate-errors'
+    '--disable-web-security --allow-running-insecure-content --ignore-certificate-errors'
 )
 
 webview.settings['IGNORE_SSL_ERRORS'] = True
@@ -169,8 +167,12 @@ def get_free_port():
     return port
 
 
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
 def start_embedded_server(dist_dir, port):
     class QuietCORSHandler(SimpleHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=dist_dir, **kwargs)
 
@@ -178,6 +180,7 @@ def start_embedded_server(dist_dir, port):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE, PROPFIND, HEAD')
             self.send_header('Access-Control-Allow-Headers', '*')
+            self.send_header('Connection', 'close')
             super().end_headers()
 
         def do_OPTIONS(self):
@@ -187,7 +190,7 @@ def start_embedded_server(dist_dir, port):
         def log_message(self, format, *args):
             pass  # Suppress HTTP server output logs
 
-    server = HTTPServer(('127.0.0.1', port), QuietCORSHandler)
+    server = ThreadingHTTPServer(('127.0.0.1', port), QuietCORSHandler)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     return server
