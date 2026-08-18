@@ -8,6 +8,15 @@ fn save_file_to_downloads(suggested_name: String, base64_content: String) -> Res
     std::fs::create_dir_all(&downloads_dir).map_err(|e| e.to_string())?;
     let file_path = downloads_dir.join(&suggested_name);
     
+    // 如果下载目录中已存在该文件且文件大小大于0，直接返回路径秒开，无需重复写盘
+    if file_path.exists() {
+        if let Ok(metadata) = std::fs::metadata(&file_path) {
+            if metadata.len() > 0 {
+                return Ok(file_path.to_string_lossy().to_string());
+            }
+        }
+    }
+
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(&base64_content)

@@ -611,19 +611,22 @@ export default function ChatArea({
   const handleStartDownload = async (msg, openInBrowser = false) => {
     if (downloads[msg.id]?.status === 'downloading') return;
     
-    const dlState = createDownloadState();
-    setDownloads(prev => ({
-      ...prev,
-      [msg.id]: { progress: 0, status: 'downloading', dlState }
-    }));
+    const displayName = msg.content.replace(/^\d+_/, '');
+    
+    // 先查询本地 IndexedDB 缓存（如果已缓存，则为秒开，绝不触发 UI 下载动画）
+    let blob = await getCachedFile(msg.id);
+    const isCached = !!blob;
+
+    let dlState = null;
+    if (!isCached) {
+      dlState = createDownloadState();
+      setDownloads(prev => ({
+        ...prev,
+        [msg.id]: { progress: 0, status: 'downloading', dlState }
+      }));
+    }
 
     try {
-      let blob = null;
-      const displayName = msg.content.replace(/^\d+_/, '');
-      
-      // Check IndexedDB cache first
-      blob = await getCachedFile(msg.id);
-      
       if (!blob) {
         if (msg.isChunked && msg.totalChunks > 0) {
           const chunks = [];
