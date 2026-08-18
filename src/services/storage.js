@@ -1,5 +1,4 @@
 import CryptoJS from 'crypto-js';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 
 function logDebug(msg) {
     if (typeof window !== 'undefined' && window.__addDebugLog) {
@@ -7,43 +6,18 @@ function logDebug(msg) {
     }
 }
 
-// Safe fetch wrapper with timeout (uses native Rust HTTP fetch when running under Tauri to bypass CORS)
+// Safe fetch wrapper with timeout
 export async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const combinedSignal = options.signal || controller.signal;
 
-    const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
-
-    // Ensure Origin header is present for Tauri http plugin requirements
-    const reqHeaders = { ...(options.headers || {}) };
-    if (!reqHeaders['Origin'] && !reqHeaders['origin']) {
-        reqHeaders['Origin'] = typeof window !== 'undefined' ? (window.location.origin || 'http://localhost') : 'http://localhost';
-    }
-
-    const reqOptions = {
-        ...options,
-        headers: reqHeaders,
-        signal: combinedSignal
-    };
-
-    const method = reqOptions.method || 'GET';
+    const method = options.method || 'GET';
     const fileName = url.split('?')[0].split('/').pop();
     logDebug(`[HTTP] ${method} ${fileName}`);
 
     try {
-        let response;
-        if (isTauri) {
-            try {
-                response = await tauriFetch(url, reqOptions);
-            } catch (tauriErr) {
-                logDebug(`[Tauri Fetch Warning] ${tauriErr.message || tauriErr}, falling back to window.fetch`);
-                response = await window.fetch(url, reqOptions);
-            }
-        } else {
-            response = await window.fetch(url, reqOptions);
-        }
-
+        const response = await window.fetch(url, { ...options, signal: combinedSignal });
         clearTimeout(timeoutId);
         logDebug(`[HTTP] ${method} ${fileName} -> Status ${response.status} (${response.statusText || 'OK'})`);
         return response;

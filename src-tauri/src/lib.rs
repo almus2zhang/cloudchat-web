@@ -64,7 +64,6 @@ fn open_folder(path: String) -> Result<(), String> {
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_store::Builder::default().build())
-    .plugin(tauri_plugin_http::init())
     .plugin(tauri_plugin_window_state::Builder::default().build())
     .invoke_handler(tauri::generate_handler![save_file_to_downloads, open_file, open_folder])
     .setup(|app| {
