@@ -6,6 +6,24 @@ import CalendarModal from './CalendarModal';
 import InputModal from './InputModal';
 import { getInitialAvatar } from '../utils/avatar';
 
+const logDebug = (msg) => {
+  if (typeof window !== 'undefined' && window.__addDebugLog) {
+    window.__addDebugLog(msg);
+  }
+};
+
+async function invokeTauri(cmd, args = {}) {
+  if (typeof window !== 'undefined') {
+    if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
+      return await window.__TAURI__.core.invoke(cmd, args);
+    }
+    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {
+      return await window.__TAURI_INTERNALS__.invoke(cmd, args);
+    }
+  }
+  return await invoke(cmd, args);
+}
+
 const CATEGORY_MAP = {
   'diary': '日记',
   'transfer': '传输',
@@ -671,11 +689,13 @@ export default function ChatArea({
         const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
 
         if (isTauri) {
+          logDebug(`[Tauri File Action] file: ${displayName}, openInBrowser: ${openInBrowser}, isPreviewable: ${isPreviewable}`);
           const reader = new FileReader();
           reader.onloadend = async () => {
             const base64 = reader.result.split(',')[1];
             if (openInBrowser) {
               if (isPreviewable) {
+                logDebug(`[Tauri Preview] Opening previewable file in browser tab: ${displayName}`);
                 const mimeType = MIME_MAP[ext] || blob.type || 'application/octet-stream';
                 const typedBlob = new Blob([blob], { type: mimeType });
                 const url = URL.createObjectURL(typedBlob);
@@ -684,25 +704,41 @@ export default function ChatArea({
               } else {
                 // 点击二进制文件卡片直接在桌面保存并调用系统关联程序打开
                 try {
-                  const savedPath = await invoke('save_file_to_downloads', { suggestedName: displayName, base64Content: base64 });
+                  logDebug(`[Tauri Open File] Saving to downloads: ${displayName}...`);
+                  const savedPath = await invokeTauri('save_file_to_downloads', {
+                    suggestedName: displayName,
+                    suggested_name: displayName,
+                    base64Content: base64,
+                    base64_content: base64
+                  });
+                  logDebug(`[Tauri Open File] Saved path: ${savedPath}. Launching open_file...`);
                   if (savedPath) {
                     lastSavedFilePathRef.current = savedPath;
-                    await invoke('open_file', { path: savedPath });
+                    await invokeTauri('open_file', { path: savedPath });
+                    logDebug(`[Tauri Open File] open_file invoked successfully!`);
                   }
                 } catch (e) {
-                  console.error('Tauri save/open file error:', e);
+                  logDebug(`[Tauri Open File ERR] ${e.message || e}`);
                 }
               }
             } else {
               // 点击下载按钮，自动保存至系统 Downloads 目录并打开 Explorer 高亮显示
               try {
-                const savedPath = await invoke('save_file_to_downloads', { suggestedName: displayName, base64Content: base64 });
+                logDebug(`[Tauri Download] Saving to downloads: ${displayName}...`);
+                const savedPath = await invokeTauri('save_file_to_downloads', {
+                  suggestedName: displayName,
+                  suggested_name: displayName,
+                  base64Content: base64,
+                  base64_content: base64
+                });
+                logDebug(`[Tauri Download] Saved path: ${savedPath}. Opening explorer folder...`);
                 if (savedPath) {
                   lastSavedFilePathRef.current = savedPath;
-                  await invoke('open_folder', { path: savedPath });
+                  await invokeTauri('open_folder', { path: savedPath });
+                  logDebug(`[Tauri Download] open_folder invoked successfully!`);
                 }
               } catch (e) {
-                console.error('Tauri save file error:', e);
+                logDebug(`[Tauri Download ERR] ${e.message || e}`);
               }
             }
           };
@@ -880,11 +916,15 @@ export default function ChatArea({
 
   const handleOpenDownloadsFolder = async () => {
     const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+    logDebug(`[Tauri Folder Action] handleOpenDownloadsFolder called, isTauri: ${isTauri}, lastSavedPath: ${lastSavedFilePathRef.current}`);
     if (isTauri) {
       try {
-        await invoke('open_folder', { path: lastSavedFilePathRef.current || '' });
+        const savedPath = lastSavedFilePathRef.current || '';
+        logDebug(`[Tauri Folder Action] Invoking open_folder for path: ${savedPath}...`);
+        await invokeTauri('open_folder', { path: savedPath });
+        logDebug(`[Tauri Folder Action] open_folder invoked successfully!`);
       } catch (e) {
-        console.error('Tauri open folder error:', e);
+        logDebug(`[Tauri Folder Action ERR] ${e.message || e}`);
       }
     } else if (window.pywebview && window.pywebview.api && window.pywebview.api.open_downloads_folder) {
       window.pywebview.api.open_downloads_folder();
