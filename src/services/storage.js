@@ -1,12 +1,17 @@
 import CryptoJS from 'crypto-js';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 
-// Safe fetch wrapper with timeout (prevents sync hanging indefinitely)
+// Safe fetch wrapper with timeout (uses native Rust HTTP fetch when running under Tauri to bypass CORS)
 export async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const combinedSignal = options.signal || controller.signal;
+
+    const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+    const fetchImpl = isTauri ? tauriFetch : window.fetch.bind(window);
+
     try {
-        const response = await fetch(url, { ...options, signal: combinedSignal });
+        const response = await fetchImpl(url, { ...options, signal: combinedSignal });
         clearTimeout(timeoutId);
         return response;
     } catch (err) {
