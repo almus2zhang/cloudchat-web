@@ -1185,8 +1185,8 @@ export default function ChatArea({
       >
         {/* WebDAV Diary Web Pages Section */}
         {activeCategory === 'diary' && (
-          <div className="bg-bgSecondary/90 border border-cyan-500/30 rounded-2xl p-4 shadow-xl mb-4 animate-fade-in">
-            <div className="flex items-center justify-between border-b border-borderColor/50 pb-3 mb-3">
+          <div className="w-full mb-4 animate-fade-in space-y-4">
+            <div className="flex items-center justify-between border-b border-borderColor/60 pb-3 bg-bgSecondary/40 p-3 rounded-xl border border-borderColor">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
                   <i className="fa-solid fa-book-bookmark text-base"></i>
@@ -1241,7 +1241,7 @@ export default function ChatArea({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[320px] overflow-y-auto custom-scrollbar p-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 p-1">
                 {diaryFiles.map((file, idx) => (
                   <div
                     key={file.name + idx}
@@ -2023,59 +2023,61 @@ export default function ChatArea({
         </div>
       )}
 
-      {/* Inputs Footer Area - Zero rounding to save space, flat alignment */}
-      <footer className="border-t border-borderColor bg-bgSecondary p-2 shrink-0">
-        <div className="flex gap-2 items-end">
-          <label className="w-9 h-9 rounded flex items-center justify-center text-textSecondary hover:text-accentColor hover:bg-white/5 transition-all cursor-pointer shrink-0">
-            <input 
-              type="file" 
-              multiple 
-              onChange={handleFileChange}
-              className="hidden" 
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.zip"
-            />
-            <i className="fa-solid fa-plus text-lg"></i>
-          </label>
-          <button 
-            onClick={handleShareLocation}
-            className="w-9 h-9 rounded flex items-center justify-center text-textSecondary hover:text-accentColor hover:bg-white/5 transition-all shrink-0"
-            title="Share simulated location"
-          >
-            <i className="fa-solid fa-location-dot text-base"></i>
-          </button>
-          
-          <div className="flex-1 min-w-0 bg-bgPrimary border border-borderColor rounded px-3 py-1 flex items-center">
-            <textarea 
-              ref={textareaRef}
-              rows={1}
-              value={inputText}
-              onChange={handleInputChange}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder="Type a message..."
-              className="flex-1 bg-transparent text-textPrimary text-sm py-1.5 focus:outline-none resize-none overflow-y-auto max-h-32"
-            />
-          </div>
+      {/* Inputs Footer Area - Hide when viewing diary category */}
+      {activeCategory !== 'diary' && (
+        <footer className="border-t border-borderColor bg-bgSecondary p-2 shrink-0">
+          <div className="flex gap-2 items-end">
+            <label className="w-9 h-9 rounded flex items-center justify-center text-textSecondary hover:text-accentColor hover:bg-white/5 transition-all cursor-pointer shrink-0">
+              <input 
+                type="file" 
+                multiple 
+                onChange={handleFileChange}
+                className="hidden" 
+                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.zip"
+              />
+              <i className="fa-solid fa-plus text-lg"></i>
+            </label>
+            <button 
+              onClick={handleShareLocation}
+              className="w-9 h-9 rounded flex items-center justify-center text-textSecondary hover:text-accentColor hover:bg-white/5 transition-all shrink-0"
+              title="Share simulated location"
+            >
+              <i className="fa-solid fa-location-dot text-base"></i>
+            </button>
 
-          <button 
-            onClick={handleSend}
-            onMouseDown={handleSendMouseDown}
-            onMouseUp={handleSendMouseUp}
-            onTouchStart={handleSendMouseDown}
-            onTouchEnd={handleSendMouseUp}
-            disabled={!inputText.trim()}
-            className={`w-9 h-9 rounded flex items-center justify-center text-white transition-all shrink-0 ${
-              inputText.trim() ? 'bg-accentColor hover:bg-accentHover shadow-md shadow-accentColor/10' : 'bg-borderColor/50 text-textMuted cursor-not-allowed'
-            }`}
-          >
-            <i className="fa-solid fa-paper-plane"></i>
-          </button>
-        </div>
-      </footer>
+            <div className="flex-1 min-w-0 bg-bgPrimary border border-borderColor rounded px-3 py-1 flex items-center">
+              <textarea 
+                ref={textareaRef}
+                rows={1}
+                value={inputText}
+                onChange={handleInputChange}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder="Type a message..."
+                className="flex-1 bg-transparent text-textPrimary text-sm py-1.5 focus:outline-none resize-none overflow-y-auto max-h-32"
+              />
+            </div>
+
+            <button 
+              onClick={handleSend}
+              onMouseDown={handleSendMouseDown}
+              onMouseUp={handleSendMouseUp}
+              onTouchStart={handleSendMouseDown}
+              onTouchEnd={handleSendMouseUp}
+              disabled={!inputText.trim()}
+              className={`w-9 h-9 rounded flex items-center justify-center text-white transition-all shrink-0 ${
+                inputText.trim() ? 'bg-accentColor hover:bg-accentHover shadow-md shadow-accentColor/10' : 'bg-borderColor/50 text-textMuted cursor-not-allowed'
+              }`}
+            >
+              <i className="fa-solid fa-paper-plane"></i>
+            </button>
+          </div>
+        </footer>
+      )}
 
       {/* Right-Click Context Menu */}
       {contextMenu && (
