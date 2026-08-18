@@ -276,6 +276,11 @@ export default function ChatArea({
   // Scroll lock preference state
   const [lockScroll, setLockScroll] = useState(false);
 
+  // Fast scrollbar thumb state & refs
+  const [scrollThumbInfo, setScrollThumbInfo] = useState({ visible: false, topRatio: 0, heightRatio: 0.1, isDragging: false });
+  const scrollHideTimerRef = useRef(null);
+  const isDraggingThumbRef = useRef(false);
+
   // Folder navigation state (multi-level stack)
   const [folderStack, setFolderStack] = useState([]);
   const currentFolderId = folderStack.length > 0 ? folderStack[folderStack.length - 1] : null;
@@ -425,6 +430,70 @@ export default function ChatArea({
       };
       setVisibleCount(prev => Math.min(totalFiltered, prev + 100));
     }
+
+    // Fast scrollbar position update
+    const scrollableDist = el.scrollHeight - el.clientHeight;
+    if (scrollableDist > 40) {
+      const fraction = Math.max(0, Math.min(1, el.scrollTop / scrollableDist));
+      const heightRatio = Math.max(0.08, Math.min(0.28, el.clientHeight / el.scrollHeight));
+      const topRatio = fraction * (1 - heightRatio);
+
+      setScrollThumbInfo(prev => ({
+        ...prev,
+        visible: true,
+        topRatio,
+        heightRatio
+      }));
+
+      if (scrollHideTimerRef.current) clearTimeout(scrollHideTimerRef.current);
+      scrollHideTimerRef.current = setTimeout(() => {
+        if (!isDraggingThumbRef.current) {
+          setScrollThumbInfo(prev => ({ ...prev, visible: false }));
+        }
+      }, 1200);
+    }
+  };
+
+  const handleThumbPointerDown = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isDraggingThumbRef.current = true;
+    setScrollThumbInfo(prev => ({ ...prev, isDragging: true, visible: true }));
+
+    const containerEl = listRef.current;
+    if (!containerEl) return;
+
+    const rect = containerEl.getBoundingClientRect();
+    const containerHeight = rect.height;
+    const scrollableDist = containerEl.scrollHeight - containerEl.clientHeight;
+
+    const updateScrollPos = (clientY) => {
+      const offsetY = Math.max(0, Math.min(containerHeight, clientY - rect.top));
+      const targetFraction = offsetY / containerHeight;
+      containerEl.scrollTop = targetFraction * scrollableDist;
+    };
+
+    updateScrollPos(e.clientY);
+
+    const onPointerMove = (moveEvt) => {
+      if (isDraggingThumbRef.current) {
+        updateScrollPos(moveEvt.clientY);
+      }
+    };
+
+    const onPointerUp = () => {
+      isDraggingThumbRef.current = false;
+      setScrollThumbInfo(prev => ({ ...prev, isDragging: false }));
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      if (scrollHideTimerRef.current) clearTimeout(scrollHideTimerRef.current);
+      scrollHideTimerRef.current = setTimeout(() => {
+        setScrollThumbInfo(prev => ({ ...prev, visible: false }));
+      }, 1200);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
   };
 
   // Adjust textarea height dynamically
@@ -1930,6 +1999,29 @@ export default function ChatArea({
           })
         )}
       </div>
+
+      {/* Web Draggable Fast-Scrollbar Thumb Overlay */}
+      {scrollThumbInfo.visible && (
+        <div 
+          className={`absolute right-1 z-30 transition-opacity duration-300 select-none ${
+            scrollThumbInfo.isDragging ? 'opacity-100 scale-105' : 'opacity-85 hover:opacity-100'
+          }`}
+          style={{
+            top: `${scrollThumbInfo.topRatio * 100}%`,
+            height: `${scrollThumbInfo.heightRatio * 100}%`,
+            maxHeight: '75%',
+            minHeight: '48px'
+          }}
+          onPointerDown={handleThumbPointerDown}
+          title="按住拖动可快速滚动历史消息"
+        >
+          <div className={`w-3.5 h-full rounded-full border border-white/20 shadow-xl flex items-center justify-center cursor-grab active:cursor-grabbing transition-colors ${
+            scrollThumbInfo.isDragging ? 'bg-accentColor ring-2 ring-accentColor/40' : 'bg-cyan-500/80 hover:bg-accentColor'
+          }`}>
+            <i className="fa-solid fa-up-down text-[9px] text-white"></i>
+          </div>
+        </div>
+      )}
 
       {/* Inputs Footer Area - Zero rounding to save space, flat alignment */}
       <footer className="border-t border-borderColor bg-bgSecondary p-2 shrink-0">
