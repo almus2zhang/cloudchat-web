@@ -2014,25 +2014,25 @@ export default function ChatArea({
         )}
       </div>
 
-      {/* Web Draggable Fast-Scrollbar Large Floating Circle Overlay */}
+      {/* Web Draggable Fast-Scrollbar Extra Large Floating Circle Overlay */}
       {scrollThumbInfo.visible && (
         <div 
           className={`absolute right-2 z-40 transition-opacity duration-300 select-none touch-none ${
-            scrollThumbInfo.isDragging ? 'opacity-100 scale-110 shadow-2xl' : 'opacity-85 hover:opacity-100'
+            scrollThumbInfo.isDragging ? 'opacity-100 scale-110 shadow-2xl' : 'opacity-90 hover:opacity-100'
           }`}
           style={{
-            top: `calc(${scrollThumbInfo.topRatio * 100}% * ((100% - 48px) / 100%))`,
-            width: '48px',
-            height: '48px',
+            top: `calc(${scrollThumbInfo.topRatio * 100}% * ((100% - 56px) / 100%))`,
+            width: '56px',
+            height: '56px',
             touchAction: 'none'
           }}
           onPointerDown={handleThumbPointerDown}
           title="按住拖动可快速滚动历史消息"
         >
-          <div className={`w-12 h-12 rounded-full border border-white/30 shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing transition-colors ${
-            scrollThumbInfo.isDragging ? 'bg-accentColor ring-4 ring-accentColor/40' : 'bg-cyan-600/90 hover:bg-accentColor'
+          <div className={`w-14 h-14 rounded-full border-2 border-white/40 shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing transition-colors ${
+            scrollThumbInfo.isDragging ? 'bg-indigo-600 ring-4 ring-indigo-400/50' : 'bg-slate-700/90 hover:bg-indigo-600'
           }`}>
-            <i className="fa-solid fa-up-down text-sm text-white"></i>
+            <i className="fa-solid fa-up-down text-base text-white"></i>
           </div>
         </div>
       )}
