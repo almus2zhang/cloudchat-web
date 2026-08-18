@@ -1,12 +1,17 @@
 import os
 import sys
 import json
+import socket
+import threading
+import subprocess
+import base64
 import webview
+from http.server import SimpleHTTPRequestHandler, HTTPServer
 
-# WebView2 flags to disable CORS restrictions & security isolation for local desktop app
+# WebView2 flags for clean local desktop execution
 os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = (
     '--disable-web-security --allow-running-insecure-content '
-    '--disable-site-isolation-trials --disable-features=IsolateOrigins,site-per-process,Translate,OptimizationHints,MediaRouter '
+    '--disable-site-isolation-trials --disable-features=IsolateOrigins,site-per-process '
     '--disable-background-networking --disable-sync --ignore-certificate-errors'
 )
 
@@ -57,10 +62,6 @@ def save_window_state(win):
         pass
 
 
-import base64
-import subprocess
-import platform
-
 class DesktopApi:
     def __init__(self):
         self.window = None
@@ -100,7 +101,7 @@ class DesktopApi:
             else:
                 subprocess.Popen(['xdg-open', downloads_dir])
             return True
-        except Exception as e:
+        except Exception:
             return False
 
     def open_file(self, file_path):
@@ -148,16 +149,50 @@ def get_dist_path():
         return os.path.join(base_dir, 'dist')
 
 
+def get_free_port():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(('127.0.0.1', 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def start_embedded_server(dist_dir, port):
+    class QuietCORSHandler(SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=dist_dir, **kwargs)
+
+        def end_headers(self):
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE, PROPFIND, HEAD')
+            self.send_header('Access-Control-Allow-Headers', '*')
+            super().end_headers()
+
+        def do_OPTIONS(self):
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, format, *args):
+            pass  # Suppress HTTP server output logs
+
+    server = HTTPServer(('127.0.0.1', port), QuietCORSHandler)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    return server
+
+
 if __name__ == '__main__':
     dist_dir = get_dist_path()
-    index_file = os.path.join(dist_dir, 'index.html')
+    port = get_free_port()
+    start_embedded_server(dist_dir, port)
+    target_url = f'http://127.0.0.1:{port}/index.html'
 
     state = load_window_state()
     api = DesktopApi()
 
     kwargs = {
         'title': 'CloudChat Desktop',
-        'url': index_file,
+        'url': target_url,
         'width': state['width'],
         'height': state['height'],
         'resizable': True,
@@ -172,22 +207,13 @@ if __name__ == '__main__':
     window = webview.create_window(**kwargs)
     api.set_window(window)
 
-    def on_resized():
-        save_window_state(window)
-
-    def on_moved():
-        save_window_state(window)
-
     def on_closing():
         save_window_state(window)
 
-    window.events.resized += on_resized
-    window.events.moved += on_moved
     window.events.closing += on_closing
 
     webview.start(
         gui='edgechromium',
         debug=False,
-        private_mode=False,
-        storage_path=storage_dir
+        private_mode=False
     )
