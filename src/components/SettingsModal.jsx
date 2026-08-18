@@ -247,8 +247,8 @@ export default function SettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-y-auto animate-fade-in">
-      <div className="bg-bgSecondary border border-borderColor rounded-xl w-full max-w-lg shadow-2xl scale-in my-8">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto animate-fade-in">
+      <div className="bg-bgSecondary border border-borderColor rounded-xl w-full max-w-lg max-w-[calc(100vw-16px)] shadow-2xl scale-in my-auto max-h-[92vh] flex flex-col">
         
         {/* Header */}
         <div className="px-6 py-4 border-b border-borderColor flex justify-between items-center">

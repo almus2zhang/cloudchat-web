@@ -75,8 +75,8 @@ export default function FolderPickerModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-fade-in">
-      <div className="bg-bgSecondary border border-borderColor rounded-xl w-full max-w-md overflow-hidden shadow-2xl scale-in">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4 animate-fade-in">
+      <div className="bg-bgSecondary border border-borderColor rounded-xl w-full max-w-md max-w-[calc(100vw-16px)] overflow-hidden shadow-2xl scale-in">
         <div className="p-5 border-b border-borderColor">
           <h3 className="text-textPrimary text-lg font-semibold">{title}</h3>
           {hint && <p className="text-textMuted text-xs mt-1">{hint}</p>}

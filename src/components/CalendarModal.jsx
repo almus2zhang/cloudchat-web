@@ -97,8 +97,8 @@ export default function CalendarModal({ isOpen, onClose, messages = [], onSelect
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-bgSecondary border border-borderColor rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col min-h-[380px]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="bg-bgSecondary border border-borderColor rounded-2xl shadow-2xl w-full max-w-sm max-w-[calc(100vw-16px)] overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-borderColor bg-bgPrimary/50">
           <div className="flex items-center gap-1.5">

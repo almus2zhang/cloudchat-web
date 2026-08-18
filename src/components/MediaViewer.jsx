@@ -300,7 +300,7 @@ export default function MediaViewer({
     <div 
       ref={containerRef}
       id="media-viewer-overlay"
-      className="fixed inset-0 bg-black/95 z-[999] flex flex-col justify-between p-4 animate-fade-in select-none"
+      className="fixed inset-0 bg-black/95 z-[999] flex flex-col justify-between p-2 sm:p-4 animate-fade-in select-none"
       onClick={handleContainerClick}
       onMouseMove={handleMouseMove}
       onTouchStart={handleDragStart}
@@ -309,7 +309,7 @@ export default function MediaViewer({
       style={cursorStyle}
     >
       {/* Top Toolbar */}
-      <div className="flex justify-end gap-3 z-10 toolbar-button-container">
+      <div className="flex justify-end gap-1.5 sm:gap-3 z-10 toolbar-button-container flex-wrap">
         <button 
           onClick={onDownload}
           className="w-10 h-10 rounded-lg flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-all cursor-pointer"

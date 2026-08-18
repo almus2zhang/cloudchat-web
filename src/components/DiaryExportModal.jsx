@@ -190,8 +190,8 @@ export default function DiaryExportModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-bgSecondary border border-borderColor rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="bg-bgSecondary border border-borderColor rounded-2xl shadow-2xl w-full max-w-xl max-w-[calc(100vw-16px)] overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-borderColor bg-white/5">
           <div className="flex items-center gap-2.5">
@@ -212,7 +212,7 @@ export default function DiaryExportModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
           {resultUrl ? (
             /* Success View */
             <div className="py-6 text-center space-y-4 animate-scale-up">
@@ -228,7 +228,7 @@ export default function DiaryExportModal({
                 {resultUrl}
               </div>
 
-              <div className="flex items-center justify-center gap-3 pt-2">
+              <div className="flex items-center justify-center gap-3 pt-2 flex-wrap">
                 <a
                   href={resultUrl}
                   target="_blank"
@@ -259,7 +259,7 @@ export default function DiaryExportModal({
             /* Config Form View */
             <>
               {/* Form Input Fields */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1.5">日记专栏标题</label>
                   <input
@@ -285,7 +285,7 @@ export default function DiaryExportModal({
               {/* Export Mode Selection */}
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1.5">导出部署模式</label>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div
                     onClick={() => setExportMode('relative')}
                     className={`p-2.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${

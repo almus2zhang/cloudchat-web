@@ -956,12 +956,12 @@ export default function ChatArea({
 
         {/* Multi-Selection Toolbar */}
         {selectedMessageIds.size > 0 && (
-          <div className="absolute inset-0 bg-bgSecondary flex items-center px-2 sm:px-4 gap-1.5 sm:gap-2 animate-fade-in z-20 overflow-x-auto">
-            <span className="text-xs font-semibold text-accentColor flex items-center gap-1.5 shrink-0">
-              <i className="fa-solid fa-square-check"></i> {selectedMessageIds.size} items selected
-            </span>
-
-            <div className="flex-1"></div>
+          <div className="absolute inset-0 bg-bgSecondary flex flex-wrap items-center justify-end px-2 py-1 gap-1.5 sm:gap-2 animate-fade-in z-20 overflow-y-auto max-h-full border-b border-borderColor">
+            {/* 仅显示选中的数字 Badge，去除 long text "* items selected" */}
+            <div className="flex items-center gap-1 text-xs font-bold text-accentColor bg-accentColor/10 border border-accentColor/30 rounded-lg px-2 py-1 shrink-0 mr-auto" title={`已选中 ${selectedMessageIds.size} 条`}>
+              <i className="fa-solid fa-square-check text-xs"></i>
+              <span>{selectedMessageIds.size}</span>
+            </div>
 
             {/* 打包文件夹 */}
             <button
@@ -1990,11 +1990,11 @@ export default function ChatArea({
           ref={contextMenuRef}
           style={{
             position: 'fixed',
-            left: Math.max(10, Math.min(contextMenu.x + 15, window.innerWidth - 190)),
-            top: Math.max(10, Math.min(contextMenu.y - 5, window.innerHeight - 250)),
+            left: Math.max(8, Math.min(contextMenu.x + 8, window.innerWidth - 195)),
+            top: Math.max(8, Math.min(contextMenu.y - 5, window.innerHeight - 360)),
             zIndex: 9999
           }}
-          className="bg-bgSecondary border border-borderColor rounded-xl shadow-2xl py-1.5 min-w-[170px] animate-fade-in backdrop-blur-sm"
+          className="bg-bgSecondary border border-borderColor rounded-xl shadow-2xl py-1.5 min-w-[160px] max-w-[calc(100vw-16px)] max-h-[calc(100vh-20px)] overflow-y-auto animate-fade-in backdrop-blur-sm"
         >
           {/* 多选状态：显示所有多选操作（替代单条操作） */}
           {selectedMessageIds.size > 1 && (
