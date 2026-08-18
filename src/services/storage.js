@@ -14,14 +14,36 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
     const combinedSignal = options.signal || controller.signal;
 
     const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
-    const fetchImpl = isTauri ? tauriFetch : window.fetch.bind(window);
 
-    const method = options.method || 'GET';
+    // Ensure Origin header is present for Tauri http plugin requirements
+    const reqHeaders = { ...(options.headers || {}) };
+    if (!reqHeaders['Origin'] && !reqHeaders['origin']) {
+        reqHeaders['Origin'] = typeof window !== 'undefined' ? (window.location.origin || 'http://localhost') : 'http://localhost';
+    }
+
+    const reqOptions = {
+        ...options,
+        headers: reqHeaders,
+        signal: combinedSignal
+    };
+
+    const method = reqOptions.method || 'GET';
     const fileName = url.split('?')[0].split('/').pop();
     logDebug(`[HTTP] ${method} ${fileName}`);
 
     try {
-        const response = await fetchImpl(url, { ...options, signal: combinedSignal });
+        let response;
+        if (isTauri) {
+            try {
+                response = await tauriFetch(url, reqOptions);
+            } catch (tauriErr) {
+                logDebug(`[Tauri Fetch Warning] ${tauriErr.message || tauriErr}, falling back to window.fetch`);
+                response = await window.fetch(url, reqOptions);
+            }
+        } else {
+            response = await window.fetch(url, reqOptions);
+        }
+
         clearTimeout(timeoutId);
         logDebug(`[HTTP] ${method} ${fileName} -> Status ${response.status} (${response.statusText || 'OK'})`);
         return response;
