@@ -449,7 +449,7 @@ export default function ChatArea({
         if (!isDraggingThumbRef.current) {
           setScrollThumbInfo(prev => ({ ...prev, visible: false }));
         }
-      }, 1200);
+      }, 1000);
     }
   };
 
