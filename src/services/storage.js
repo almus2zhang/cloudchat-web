@@ -208,6 +208,31 @@ class WebDavStorageClient {
         return `Basic ${creds}`;
     }
 
+    async testConnection() {
+        if (!this.config.webDavUrl) {
+            throw new Error('WebDAV 服务器地址不能为空');
+        }
+        await this.ensureDirectoriesExist();
+        const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
+        const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
+        const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
+        const parts = [];
+        if (root) parts.push(root);
+        if (userDirClean) parts.push(userDirClean);
+        const folderUrl = parts.length > 0 ? `${baseUrl}/${parts.join('/')}` : baseUrl;
+
+        const res = await fetchWithTimeout(folderUrl, {
+            method: 'PROPFIND',
+            headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
+        }, 10000);
+
+        if (res.ok || res.status === 207 || res.status === 405) {
+            return { success: true, message: `WebDAV 连接测试成功！(HTTP Status ${res.status})` };
+        } else {
+            throw new Error(`WebDAV 连接失败 (HTTP Status ${res.status})`);
+        }
+    }
+
     async ensureDirectoriesExist() {
         const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
@@ -302,58 +327,42 @@ class WebDavStorageClient {
     }
 
     async uploadFile(file, fileName, contentType, onProgress) {
+        await this.ensureDirectoriesExist();
         const url = this.getUrl(fileName);
-        return new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('PUT', url, true);
-            xhr.setRequestHeader('Authorization', this.getAuthHeader());
-            xhr.setRequestHeader('Content-Type', contentType);
+        const response = await fetchWithTimeout(url, {
+            method: 'PUT',
+            headers: {
+                'Authorization': this.getAuthHeader(),
+                'Content-Type': contentType || 'application/octet-stream'
+            },
+            body: file
+        }, 60000);
 
-            xhr.upload.onprogress = (e) => {
-                if (e.lengthComputable && onProgress) {
-                    const progress = Math.round((e.loaded / e.total) * 100);
-                    onProgress(progress);
-                }
-            };
-
-            xhr.onload = () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    resolve(url);
-                } else {
-                    reject(new Error(`Upload failed: ${xhr.status}`));
-                }
-            };
-            xhr.onerror = () => reject(new Error('Network error during upload'));
-            xhr.send(file);
-        });
+        if (!response.ok) {
+            throw new Error(`Upload failed: ${response.status} ${response.statusText || ''}`);
+        }
+        if (onProgress) onProgress(100);
+        return url;
     }
 
     async uploadFileRange(fileChunk, fileName, contentType, startByte, endByte, totalLength, onProgress) {
+        await this.ensureDirectoriesExist();
         const url = this.getUrl(fileName);
-        return new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('PUT', url, true);
-            xhr.setRequestHeader('Authorization', this.getAuthHeader());
-            xhr.setRequestHeader('Content-Type', contentType);
-            xhr.setRequestHeader('Content-Range', `bytes ${startByte}-${endByte}/${totalLength}`);
+        const response = await fetchWithTimeout(url, {
+            method: 'PUT',
+            headers: {
+                'Authorization': this.getAuthHeader(),
+                'Content-Type': contentType || 'application/octet-stream',
+                'Content-Range': `bytes ${startByte}-${endByte}/${totalLength}`
+            },
+            body: fileChunk
+        }, 60000);
 
-            xhr.upload.onprogress = (e) => {
-                if (e.lengthComputable && onProgress) {
-                    const progress = Math.round((e.loaded / e.total) * 100);
-                    onProgress(progress);
-                }
-            };
-
-            xhr.onload = () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    resolve(url);
-                } else {
-                    reject(new Error(`Range upload failed: ${xhr.status}`));
-                }
-            };
-            xhr.onerror = () => reject(new Error('Network error during range upload'));
-            xhr.send(fileChunk);
-        });
+        if (!response.ok) {
+            throw new Error(`Range upload failed: ${response.status} ${response.statusText || ''}`);
+        }
+        if (onProgress) onProgress(100);
+        return url;
     }
 
     async uploadText(content, fileName) {
@@ -1051,6 +1060,21 @@ class S3StorageClient {
 
     async recycleFile(fileName) {
         await this.deleteFile(fileName);
+    }
+
+    async testConnection() {
+        if (!this.config.endpoint || !this.config.bucket) {
+            throw new Error('S3 Endpoint 与 Bucket 不能为空');
+        }
+        const url = `${this.config.endpoint.replace(/\/+$/, '')}/${this.config.bucket}`;
+        const headers = {};
+        signS3Request('HEAD', url, this.config, headers);
+        const res = await fetchWithTimeout(url, { method: 'HEAD', headers }, 10000);
+        if (res.ok || res.status === 404 || res.status === 403) {
+            return { success: true, message: `S3 存储桶连接测试成功！(HTTP Status ${res.status})` };
+        } else {
+            throw new Error(`S3 连接失败 (HTTP Status ${res.status})`);
+        }
     }
 
     async getFileSize(fileName) {
