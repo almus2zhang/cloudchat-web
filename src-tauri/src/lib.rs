@@ -65,6 +65,7 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_store::Builder::default().build())
     .plugin(tauri_plugin_window_state::Builder::default().build())
+    .plugin(tauri_plugin_http::init())
     .invoke_handler(tauri::generate_handler![save_file_to_downloads, open_file, open_folder])
     .setup(|app| {
       if cfg!(debug_assertions) {

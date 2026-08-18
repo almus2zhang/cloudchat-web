@@ -1,4 +1,5 @@
 import CryptoJS from 'crypto-js';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 
 function logDebug(msg) {
     if (typeof window !== 'undefined' && window.__addDebugLog) {
@@ -12,12 +13,25 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const combinedSignal = options.signal || controller.signal;
 
+    const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+
     const method = options.method || 'GET';
     const fileName = url.split('?')[0].split('/').pop();
     logDebug(`[HTTP] ${method} ${fileName}`);
 
     try {
-        const response = await window.fetch(url, { ...options, signal: combinedSignal });
+        let response;
+        if (isTauri) {
+            try {
+                response = await tauriFetch(url, { ...options, signal: combinedSignal });
+            } catch (tauriErr) {
+                logDebug(`[Tauri Fetch Warning] ${tauriErr.message || tauriErr}, falling back to window.fetch`);
+                response = await window.fetch(url, { ...options, signal: combinedSignal });
+            }
+        } else {
+            response = await window.fetch(url, { ...options, signal: combinedSignal });
+        }
+
         clearTimeout(timeoutId);
         logDebug(`[HTTP] ${method} ${fileName} -> Status ${response.status} (${response.statusText || 'OK'})`);
         return response;
