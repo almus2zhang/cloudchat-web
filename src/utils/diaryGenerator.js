@@ -69,7 +69,7 @@ async function syncAssetToDiaryFolder(sourceFileName, assetName, targetAssetsDir
   }
 
   // For images, retrieve blob (from IndexedDB cache or download), compress via Canvas (max 1200px, 80% quality), and upload!
-  let blob = await getCachedFile(sourceFileName);
+  let blob = await getCachedFile(sourceFileName) || await getCachedFile(`avatar_${sourceFileName}`);
   if (!blob && typeof storageClient.downloadFile === 'function') {
     try {
       blob = await storageClient.downloadFile(sourceFileName);
@@ -260,9 +260,13 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
     await Promise.all(batch.map(msg => processMediaItem(msg)));
   }
 
-  // 4b. Pre-resolve all unique senderAvatar values in messages
+  // 4b. Pre-resolve all unique senderAvatar values in messages & profile avatar
   const avatarUrlMap = {};
-  const uniqueAvatars = new Set(sortedMsgs.map(m => m.senderAvatar).filter(Boolean));
+  const uniqueAvatars = new Set([
+    ...sortedMsgs.map(m => m.senderAvatar).filter(Boolean),
+    avatar
+  ].filter(Boolean));
+
   await Promise.all([...uniqueAvatars].map(async (av) => {
     if (av.startsWith('data:') || av.startsWith('https://') || av.startsWith('http://')) {
       avatarUrlMap[av] = av;
@@ -278,17 +282,18 @@ export async function generateDiaryHtml({ folderName, author, avatar, templateId
     }
   }));
 
-  // Helper to get per-message avatar URL, falling back to authorAvatarStr
-  const resolveItemAvatar = (item) => {
-    if (item.senderAvatar && avatarUrlMap[item.senderAvatar]) return avatarUrlMap[item.senderAvatar];
-    return authorAvatarStr;
-  };
-
-  // 解析某条消息的头像（无 senderAvatar 时回退到 authorAvatarStr）
+  // Helper to resolve per-message avatar URL (falls back to authorAvatarStr or SVG letter avatar)
   const resolveMsgAvatar = (msg) => {
     if (msg && msg.senderAvatar && avatarUrlMap[msg.senderAvatar]) return avatarUrlMap[msg.senderAvatar];
-    return authorAvatarStr;
+    if (authorAvatarStr && authorAvatarStr !== DEFAULT_AVATAR) return authorAvatarStr;
+    const name = msg ? (msg.senderName || msg.sender || authorStr) : authorStr;
+    const letter = (name || 'U').charAt(0).toUpperCase();
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="#212c3d"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-size="90" font-weight="bold" fill="#818cf8">${letter}</text></svg>`
+    );
   };
+
+  const resolveItemAvatar = (item) => resolveMsgAvatar(item.messages ? item.messages[0] : item);
 
   // 收集文件夹节点及其所有子文件夹的全部消息
   const collectNodeMessages = (node) => {
