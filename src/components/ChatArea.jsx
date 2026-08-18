@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createDownloadState } from '../services/storage';
 import { getCachedFile, cacheFile } from '../services/db';
 import CalendarModal from './CalendarModal';
+import InputModal from './InputModal';
 import { getInitialAvatar } from '../utils/avatar';
 
 const CATEGORY_MAP = {
@@ -288,6 +289,18 @@ export default function ChatArea({
   // Pagination & Lazy Load States
   const [visibleCount, setVisibleCount] = useState(100);
 
+  // Generic Input Modal State
+  const [inputModalConfig, setInputModalConfig] = useState({
+    isOpen: false,
+    title: '',
+    hint: '',
+    defaultValue: '',
+    placeholder: '',
+    inputType: 'text',
+    confirmText: '确定',
+    onConfirm: () => {}
+  });
+
   // WebDAV Diary Files listing state
   const [diaryFiles, setDiaryFiles] = useState([]);
   const [isLoadingDiary, setIsLoadingDiary] = useState(false);
@@ -440,27 +453,18 @@ export default function ChatArea({
     if (scrollableDist > 40) {
       const fraction = Math.max(0, Math.min(1, el.scrollTop / scrollableDist));
 
-      if (startScrollTopRef.current === null) {
-        startScrollTopRef.current = el.scrollTop;
-      }
-      const distScrolled = Math.abs(el.scrollTop - startScrollTopRef.current);
-      const thresholdPx = el.clientHeight * 1.5;
-
-      if (distScrolled >= thresholdPx) {
-        setScrollThumbInfo(prev => ({
-          ...prev,
-          visible: true,
-          topRatio: fraction
-        }));
-      }
+      setScrollThumbInfo(prev => ({
+        ...prev,
+        visible: true,
+        topRatio: fraction
+      }));
 
       if (scrollHideTimerRef.current) clearTimeout(scrollHideTimerRef.current);
       scrollHideTimerRef.current = setTimeout(() => {
-        startScrollTopRef.current = null;
         if (!isDraggingThumbRef.current) {
           setScrollThumbInfo(prev => ({ ...prev, visible: false }));
         }
-      }, 500);
+      }, 1000);
     }
   };
 
@@ -513,7 +517,7 @@ export default function ChatArea({
       if (scrollHideTimerRef.current) clearTimeout(scrollHideTimerRef.current);
       scrollHideTimerRef.current = setTimeout(() => {
         setScrollThumbInfo(prev => ({ ...prev, visible: false }));
-      }, 1200);
+      }, 500);
     };
 
     window.addEventListener('pointermove', onPointerMove, { passive: false });
@@ -1010,11 +1014,19 @@ export default function ChatArea({
                 {/* Change PIN */}
                 <button 
                   onClick={() => {
-                    const p = prompt('请输入新设定的隐私访问密码：');
-                    if (p && p.trim()) {
-                      if (onChangePrivacyPin) onChangePrivacyPin(p.trim());
-                      alert('✅ 密码更改成功！后续请使用 ##新密码## 访问。');
-                    }
+                    setInputModalConfig({
+                      isOpen: true,
+                      title: '修改隐私访问密码',
+                      hint: '请输入新的隐私解锁密码（后续使用 ##新密码## 唤醒）：',
+                      defaultValue: '',
+                      inputType: 'password',
+                      placeholder: '请输入新密码...',
+                      confirmText: '保存密码',
+                      onConfirm: (p) => {
+                        setInputModalConfig(prev => ({ ...prev, isOpen: false }));
+                        if (onChangePrivacyPin) onChangePrivacyPin(p.trim());
+                      }
+                    });
                   }}
                   className="px-2 py-1 text-xs text-textSecondary hover:text-textPrimary bg-bgPrimary border border-borderColor rounded-full transition-all flex items-center gap-1"
                   title="修改隐私解锁密码"
@@ -2229,11 +2241,20 @@ export default function ChatArea({
 
               <button
                 onClick={() => {
-                  const newText = prompt('编辑文本消息：', contextMenu.msg.content);
-                  if (newText !== null && newText.trim()) {
-                    if (onEditTextMessage) onEditTextMessage(contextMenu.msg.id, newText.trim());
-                  }
+                  const targetMsg = contextMenu.msg;
                   setContextMenu(null);
+                  setInputModalConfig({
+                    isOpen: true,
+                    title: '编辑文本消息',
+                    hint: '修改后的文本内容将同步更新：',
+                    defaultValue: targetMsg.content || '',
+                    placeholder: '请输入消息内容...',
+                    confirmText: '保存编辑',
+                    onConfirm: (newText) => {
+                      setInputModalConfig(prev => ({ ...prev, isOpen: false }));
+                      if (onEditTextMessage) onEditTextMessage(targetMsg.id, newText);
+                    }
+                  });
                 }}
                 className="w-full px-4 py-2 text-xs text-textPrimary hover:bg-white/5 transition-colors flex items-center gap-2.5"
               >
@@ -2292,11 +2313,20 @@ export default function ChatArea({
           {selectedMessageIds.size <= 1 && contextMenu.msg.type !== 'TEXT' && contextMenu.msg.type !== 'FOLDER' && (
             <button
               onClick={() => {
-                const newCap = prompt('为该非文本条目添加/修改注释（方便搜索）：', contextMenu.msg.caption || '');
-                if (newCap !== null) {
-                  if (onUpdateCaption) onUpdateCaption(contextMenu.msg.id, newCap.trim());
-                }
+                const targetMsg = contextMenu.msg;
                 setContextMenu(null);
+                setInputModalConfig({
+                  isOpen: true,
+                  title: targetMsg.caption ? '修改注释' : '添加注释',
+                  hint: '给该条目添加便于搜索与检索的关联描述：',
+                  defaultValue: targetMsg.caption || '',
+                  placeholder: '请输入注释文字...',
+                  confirmText: '保存注释',
+                  onConfirm: (newCap) => {
+                    setInputModalConfig(prev => ({ ...prev, isOpen: false }));
+                    if (onUpdateCaption) onUpdateCaption(targetMsg.id, newCap);
+                  }
+                });
               }}
               className="w-full px-4 py-2 text-xs text-amber-400 hover:bg-amber-500/10 transition-colors flex items-center gap-2.5"
             >
@@ -2406,6 +2436,18 @@ export default function ChatArea({
           </div>
         </div>
       )}
+      {/* Input Modal for Edit Message, Caption, Privacy PIN */}
+      <InputModal
+        isOpen={inputModalConfig.isOpen}
+        title={inputModalConfig.title}
+        hint={inputModalConfig.hint}
+        defaultValue={inputModalConfig.defaultValue}
+        placeholder={inputModalConfig.placeholder}
+        inputType={inputModalConfig.inputType || 'text'}
+        confirmText={inputModalConfig.confirmText || '确定'}
+        onConfirm={inputModalConfig.onConfirm}
+        onCancel={() => setInputModalConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </main>
   );
 }

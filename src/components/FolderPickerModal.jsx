@@ -75,13 +75,13 @@ export default function FolderPickerModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4 animate-fade-in">
-      <div className="bg-bgSecondary border border-borderColor rounded-xl w-full max-w-md max-w-[calc(100vw-16px)] overflow-hidden shadow-2xl scale-in">
-        <div className="p-5 border-b border-borderColor">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4 animate-fade-in backdrop-blur-sm">
+      <div className="bg-bgSecondary border border-borderColor rounded-2xl w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden shadow-2xl scale-in">
+        <div className="p-5 border-b border-borderColor bg-white/5">
           <h3 className="text-textPrimary text-lg font-semibold">{title}</h3>
           {hint && <p className="text-textMuted text-xs mt-1">{hint}</p>}
         </div>
-        <div className="p-3 max-h-80 overflow-y-auto">
+        <div className="p-3 flex-1 max-h-[60vh] overflow-y-auto">
           {rootFolders.length === 0 ? (
             <p className="text-textMuted text-sm text-center py-6">还没有任何文件夹，请先打包创建文件夹</p>
           ) : (

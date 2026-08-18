@@ -7,6 +7,7 @@ import ConfirmModal from './components/ConfirmModal';
 import FolderPickerModal from './components/FolderPickerModal';
 import MediaViewer from './components/MediaViewer';
 import DiaryExportModal from './components/DiaryExportModal';
+import InputModal from './components/InputModal';
 import { StorageClient } from './services/storage';
 import { initDB, cacheFile, getCachedFile } from './services/db';
 
@@ -42,6 +43,18 @@ export default function App() {
   const [moveIntoFolderContextId, setMoveIntoFolderContextId] = useState(null);
   const [chooseParentFolderOpen, setChooseParentFolderOpen] = useState(false);
   const [chooseParentTargets, setChooseParentTargets] = useState([]); // 候选父文件夹消息数组
+
+  // Generic Input Modal State
+  const [inputModalConfig, setInputModalConfig] = useState({
+    isOpen: false,
+    title: '',
+    hint: '',
+    defaultValue: '',
+    placeholder: '',
+    inputType: 'text',
+    confirmText: '确定',
+    onConfirm: () => {}
+  });
 
   const handleOpenDiaryExport = (folderMsgOrMsgs) => {
     if (!folderMsgOrMsgs) return;
@@ -1119,8 +1132,22 @@ export default function App() {
       pushHistoryToCloud(updated);
     } else {
       // Create new folder and pack selected items into it（在文件夹内时挂到当前文件夹下）
-      const name = folderName || prompt('请输入文件夹名称/注释：');
-      if (name === null) return;
+      if (!folderName) {
+        setInputModalConfig({
+          isOpen: true,
+          title: '新建并打包文件夹',
+          hint: '请输入新建文件夹的名称或注释：',
+          defaultValue: '新文件夹',
+          placeholder: '请输入文件夹名称...',
+          confirmText: '打包',
+          onConfirm: (val) => {
+            setInputModalConfig(prev => ({ ...prev, isOpen: false }));
+            handlePackFolder(currentFolderId, val);
+          }
+        });
+        return;
+      }
+      const name = folderName;
 
       const firstMsg = selectedMsgs.find(m => m.type !== 'FOLDER') || selectedMsgs[0];
       const newFolderId = 'folder_' + Date.now();
@@ -1315,8 +1342,23 @@ export default function App() {
 
   const handleRenameFolder = (folderMsg, newName) => {
     if (!folderMsg || folderMsg.type !== 'FOLDER') return;
-    const name = newName !== undefined ? newName : prompt('修改文件夹名称/注释：', folderMsg.content || '');
-    if (name === null || !name.trim()) return;
+    if (newName === undefined) {
+      setInputModalConfig({
+        isOpen: true,
+        title: '修改文件夹名称',
+        hint: '请输入新的文件夹名称或注释：',
+        defaultValue: folderMsg.content || '',
+        placeholder: '请输入文件夹名称...',
+        confirmText: '保存',
+        onConfirm: (val) => {
+          setInputModalConfig(prev => ({ ...prev, isOpen: false }));
+          handleRenameFolder(folderMsg, val);
+        }
+      });
+      return;
+    }
+    const name = newName;
+    if (!name || !name.trim()) return;
 
     const updated = messages.map(m => {
       if (m.id === folderMsg.id) {
@@ -1710,6 +1752,19 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Input Modal for Rename/Create Folder */}
+      <InputModal
+        isOpen={inputModalConfig.isOpen}
+        title={inputModalConfig.title}
+        hint={inputModalConfig.hint}
+        defaultValue={inputModalConfig.defaultValue}
+        placeholder={inputModalConfig.placeholder}
+        inputType={inputModalConfig.inputType || 'text'}
+        confirmText={inputModalConfig.confirmText || '确定'}
+        onConfirm={inputModalConfig.onConfirm}
+        onCancel={() => setInputModalConfig(prev => ({ ...prev, isOpen: false }))}
+      />
 
     </div>
   );

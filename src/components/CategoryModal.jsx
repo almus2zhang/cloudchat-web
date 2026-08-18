@@ -68,13 +68,13 @@ export default function CategoryModal({ isOpen, messages, onSave, onCancel }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4 animate-fade-in">
-      <div className="bg-bgSecondary border border-borderColor rounded-xl w-full max-w-sm max-w-[calc(100vw-16px)] overflow-hidden shadow-2xl scale-in">
-        <div className="p-6 border-b border-borderColor">
-          <h2 className="text-textPrimary font-semibold text-lg">Choose Category</h2>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4 animate-fade-in backdrop-blur-sm">
+      <div className="bg-bgSecondary border border-borderColor rounded-2xl w-full max-w-sm max-h-[85vh] flex flex-col overflow-hidden shadow-2xl scale-in">
+        <div className="p-5 border-b border-borderColor bg-white/5">
+          <h2 className="text-textPrimary font-semibold text-base">选择分类</h2>
         </div>
         
-        <div className="p-6 flex flex-col gap-4">
+        <div className="p-5 flex-1 overflow-y-auto flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">Select Category</label>
             <select 

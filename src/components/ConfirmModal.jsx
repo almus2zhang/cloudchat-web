@@ -4,9 +4,9 @@ export default function ConfirmModal({ isOpen, title, message, onOk, onCancel, c
   if (!isOpen) return null;
   
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4 animate-fade-in">
-      <div className="bg-bgSecondary border border-borderColor rounded-xl w-full max-w-sm max-w-[calc(100vw-16px)] overflow-hidden shadow-2xl scale-in">
-        <div className="p-6 text-center">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4 animate-fade-in backdrop-blur-sm">
+      <div className="bg-bgSecondary border border-borderColor rounded-2xl w-full max-w-sm max-h-[85vh] flex flex-col overflow-hidden shadow-2xl scale-in">
+        <div className="p-6 text-center flex-1 overflow-y-auto">
           <div className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center text-xl mb-4 ${isDanger ? 'bg-red-500/10 text-red-500' : 'bg-accentColor/10 text-accentColor'}`}>
             <i className="fa-solid fa-circle-exclamation"></i>
           </div>
