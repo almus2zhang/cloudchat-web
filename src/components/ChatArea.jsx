@@ -431,18 +431,17 @@ export default function ChatArea({
       setVisibleCount(prev => Math.min(totalFiltered, prev + 100));
     }
 
-    // Fast scrollbar position update
+    // Fast scrollbar position update (ignore during active touch/mouse dragging)
+    if (isDraggingThumbRef.current) return;
+
     const scrollableDist = el.scrollHeight - el.clientHeight;
     if (scrollableDist > 40) {
       const fraction = Math.max(0, Math.min(1, el.scrollTop / scrollableDist));
-      const heightRatio = Math.max(0.08, Math.min(0.28, el.clientHeight / el.scrollHeight));
-      const topRatio = fraction * (1 - heightRatio);
 
       setScrollThumbInfo(prev => ({
         ...prev,
         visible: true,
-        topRatio,
-        heightRatio
+        topRatio: fraction
       }));
 
       if (scrollHideTimerRef.current) clearTimeout(scrollHideTimerRef.current);
@@ -457,6 +456,12 @@ export default function ChatArea({
   const handleThumbPointerDown = (e) => {
     e.preventDefault();
     e.stopPropagation();
+
+    const targetEl = e.currentTarget;
+    try {
+      targetEl.setPointerCapture(e.pointerId);
+    } catch (_) {}
+
     isDraggingThumbRef.current = true;
     setScrollThumbInfo(prev => ({ ...prev, isDragging: true, visible: true }));
 
@@ -465,35 +470,44 @@ export default function ChatArea({
 
     const rect = containerEl.getBoundingClientRect();
     const containerHeight = rect.height;
+    const thumbSize = 48;
+    const availableTravel = Math.max(1, containerHeight - thumbSize);
     const scrollableDist = containerEl.scrollHeight - containerEl.clientHeight;
 
     const updateScrollPos = (clientY) => {
-      const offsetY = Math.max(0, Math.min(containerHeight, clientY - rect.top));
-      const targetFraction = offsetY / containerHeight;
-      containerEl.scrollTop = targetFraction * scrollableDist;
+      const offsetY = Math.max(0, Math.min(availableTravel, clientY - rect.top - (thumbSize / 2)));
+      const fraction = offsetY / availableTravel;
+      containerEl.scrollTop = fraction * scrollableDist;
+      setScrollThumbInfo(prev => ({ ...prev, topRatio: fraction }));
     };
 
     updateScrollPos(e.clientY);
 
     const onPointerMove = (moveEvt) => {
       if (isDraggingThumbRef.current) {
+        moveEvt.preventDefault();
         updateScrollPos(moveEvt.clientY);
       }
     };
 
-    const onPointerUp = () => {
+    const onPointerUp = (upEvt) => {
+      try {
+        targetEl.releasePointerCapture(upEvt.pointerId);
+      } catch (_) {}
       isDraggingThumbRef.current = false;
       setScrollThumbInfo(prev => ({ ...prev, isDragging: false }));
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
       if (scrollHideTimerRef.current) clearTimeout(scrollHideTimerRef.current);
       scrollHideTimerRef.current = setTimeout(() => {
         setScrollThumbInfo(prev => ({ ...prev, visible: false }));
       }, 1200);
     };
 
-    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
     window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
   };
 
   // Adjust textarea height dynamically
@@ -2000,25 +2014,25 @@ export default function ChatArea({
         )}
       </div>
 
-      {/* Web Draggable Fast-Scrollbar Thumb Overlay */}
+      {/* Web Draggable Fast-Scrollbar Large Floating Circle Overlay */}
       {scrollThumbInfo.visible && (
         <div 
-          className={`absolute right-1 z-30 transition-opacity duration-300 select-none ${
-            scrollThumbInfo.isDragging ? 'opacity-100 scale-105' : 'opacity-85 hover:opacity-100'
+          className={`absolute right-2 z-40 transition-opacity duration-300 select-none touch-none ${
+            scrollThumbInfo.isDragging ? 'opacity-100 scale-110 shadow-2xl' : 'opacity-85 hover:opacity-100'
           }`}
           style={{
-            top: `${scrollThumbInfo.topRatio * 100}%`,
-            height: `${scrollThumbInfo.heightRatio * 100}%`,
-            maxHeight: '75%',
-            minHeight: '48px'
+            top: `calc(${scrollThumbInfo.topRatio * 100}% * ((100% - 48px) / 100%))`,
+            width: '48px',
+            height: '48px',
+            touchAction: 'none'
           }}
           onPointerDown={handleThumbPointerDown}
           title="按住拖动可快速滚动历史消息"
         >
-          <div className={`w-3.5 h-full rounded-full border border-white/20 shadow-xl flex items-center justify-center cursor-grab active:cursor-grabbing transition-colors ${
-            scrollThumbInfo.isDragging ? 'bg-accentColor ring-2 ring-accentColor/40' : 'bg-cyan-500/80 hover:bg-accentColor'
+          <div className={`w-12 h-12 rounded-full border border-white/30 shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing transition-colors ${
+            scrollThumbInfo.isDragging ? 'bg-accentColor ring-4 ring-accentColor/40' : 'bg-cyan-600/90 hover:bg-accentColor'
           }`}>
-            <i className="fa-solid fa-up-down text-[9px] text-white"></i>
+            <i className="fa-solid fa-up-down text-sm text-white"></i>
           </div>
         </div>
       )}
