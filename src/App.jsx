@@ -11,6 +11,7 @@ import InputModal from './components/InputModal';
 import DebugLogsModal from './components/DebugLogsModal';
 import { StorageClient } from './services/storage';
 import { initDB, cacheFile, getCachedFile, clearAllCache } from './services/db';
+import { generateInitialAvatarBlob } from './utils/avatar';
 
 // Global media URL lookup cache
 const cachedMediaUrls = {};
@@ -339,15 +340,34 @@ export default function App() {
     if (!client) return null;
     try {
       const blob = await client.downloadFile(avatarFilename);
-      if (blob) {
+      if (blob && blob.size > 0) {
         cacheFile(`avatar_${avatarFilename}`, blob); // Cache in IndexedDB for future refreshes
         const url = URL.createObjectURL(blob);
         cachedAvatarUrls[avatarFilename] = url;
         return url;
       }
     } catch (e) {
-      console.warn('Failed to load avatar:', avatarFilename, e);
+      console.warn('Failed to load avatar from server:', avatarFilename, e);
     }
+
+    // 兜底：如果头像文件不存在/下载失败，生成首字母头像 Blob 并自动上传补全
+    try {
+      const fallbackName = avatarFilename.replace(/^avatar_*/, '').replace(/\.jpg$/, '') || 'User';
+      const fallbackBlob = await generateInitialAvatarBlob(fallbackName);
+      if (fallbackBlob && client) {
+        cacheFile(`avatar_${avatarFilename}`, fallbackBlob);
+        const url = URL.createObjectURL(fallbackBlob);
+        cachedAvatarUrls[avatarFilename] = url;
+        // 静默补发到服务器
+        client.uploadFile(fallbackBlob, avatarFilename, 'image/jpeg').catch(err => {
+          console.warn('[Avatar Fallback Upload Warning]:', err);
+        });
+        return url;
+      }
+    } catch (e) {
+      console.warn('Fallback avatar generation error:', e);
+    }
+
     return null;
   };
 
@@ -1585,6 +1605,34 @@ export default function App() {
       lastKnownCloudIndexTimeRef.current = 0;
       shardTimestampsRef.current = {};
       legacyHistoryMissingRef.current = false; // 重置 legacy 标志以便重新检测新路径
+
+      // 路径更改：校验并补发头像文件到新服务器路径
+      if (profile.avatar) {
+        const client = activeClientRef.current;
+        const avatarName = profile.avatar;
+        const username = profile.username || 'User';
+        (async () => {
+          try {
+            if (typeof client.ensureDirectoriesExist === 'function') {
+              await client.ensureDirectoriesExist();
+            }
+            const avatarTime = await client.getLastModified(avatarName);
+            if (avatarTime === 0) {
+              let avatarBlob = await getCachedFile(`avatar_${avatarName}`);
+              if (!avatarBlob) {
+                avatarBlob = await generateInitialAvatarBlob(username);
+              }
+              if (avatarBlob) {
+                await client.uploadFile(avatarBlob, avatarName, 'image/jpeg');
+                cacheFile(`avatar_${avatarName}`, avatarBlob);
+                console.log('[Profile] Avatar auto uploaded to new path:', avatarName);
+              }
+            }
+          } catch (e) {
+            console.warn('[Profile] Failed to check/re-upload avatar on path change:', e);
+          }
+        })();
+      }
     }
 
     setSettingsOpen(false);

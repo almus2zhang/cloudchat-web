@@ -38,3 +38,27 @@ export const PRESET_AVATARS = [
   getInitialAvatar('Kira'),
   getInitialAvatar('Orion')
 ];
+
+export async function generateInitialAvatarBlob(name) {
+  return new Promise((resolve) => {
+    try {
+      const dataUrl = getInitialAvatar(name);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, 128, 128);
+        canvas.toBlob((blob) => {
+          resolve(blob || null);
+        }, 'image/jpeg', 0.85);
+      };
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
