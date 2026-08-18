@@ -417,6 +417,8 @@ export default function ChatArea({
     });
   }, [messages, currentFolderId, isPrivacyMode, viewHiddenOnly, searchQuery, activeCategory]);
 
+  const startScrollTopRef = useRef(null);
+
   // Scroll event listener on chat container
   const handleScroll = (e) => {
     const el = e.currentTarget;
@@ -438,18 +440,27 @@ export default function ChatArea({
     if (scrollableDist > 40) {
       const fraction = Math.max(0, Math.min(1, el.scrollTop / scrollableDist));
 
-      setScrollThumbInfo(prev => ({
-        ...prev,
-        visible: true,
-        topRatio: fraction
-      }));
+      if (startScrollTopRef.current === null) {
+        startScrollTopRef.current = el.scrollTop;
+      }
+      const distScrolled = Math.abs(el.scrollTop - startScrollTopRef.current);
+      const thresholdPx = el.clientHeight * 1.5;
+
+      if (distScrolled >= thresholdPx) {
+        setScrollThumbInfo(prev => ({
+          ...prev,
+          visible: true,
+          topRatio: fraction
+        }));
+      }
 
       if (scrollHideTimerRef.current) clearTimeout(scrollHideTimerRef.current);
       scrollHideTimerRef.current = setTimeout(() => {
+        startScrollTopRef.current = null;
         if (!isDraggingThumbRef.current) {
           setScrollThumbInfo(prev => ({ ...prev, visible: false }));
         }
-      }, 1000);
+      }, 500);
     }
   };
 
