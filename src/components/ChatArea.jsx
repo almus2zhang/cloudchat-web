@@ -1179,9 +1179,10 @@ export default function ChatArea({
         )}
       </header>
 
-      {/* Message List */}
-      <div 
-        ref={listRef}
+      {/* Message List Container (Middle Window Only) */}
+      <div className="flex-1 min-h-0 relative flex flex-col">
+        <div 
+          ref={listRef}
         onScroll={handleScroll}
         onContextMenu={(e) => {
           // If right clicking on empty list background (not on a message row/bubble)
@@ -2036,6 +2037,7 @@ export default function ChatArea({
           </div>
         </div>
       )}
+      </div>
 
       {/* Inputs Footer Area - Hide when viewing diary category */}
       {activeCategory !== 'diary' && (
