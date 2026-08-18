@@ -568,8 +568,18 @@ export default function App() {
     const client = activeClientRef.current;
 
     const rawList = overrideMsgs || messages;
-    const targetList = rawList.filter(m => m.status === 'SUCCESS');
-    if (targetList.length === 0) return;
+    let targetList = rawList.filter(m => m.status === 'SUCCESS');
+    if (targetList.length === 0) {
+      targetList = [{
+        id: 'msg_dummy_init',
+        sender: 'system',
+        content: '',
+        timestamp: Date.now(),
+        type: 'TEXT',
+        status: 'SUCCESS',
+        isDeleted: true
+      }];
+    }
 
     cacheFile(`history_array_${profile.id}`, targetList);
 
