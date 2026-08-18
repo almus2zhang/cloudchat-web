@@ -441,9 +441,18 @@ export default function App() {
         await client.ensureDirectoriesExist();
       }
 
-      const cloudIndexTime = await client.getLastModified('chat_index.json');
+      let cloudIndexTime = await client.getLastModified('chat_index.json');
       let indexData = {};
       let needsMigration = false;
+
+      if (cloudIndexTime === 0) {
+        try {
+          const indexText = typeof client.downloadText === 'function' ? await client.downloadText('chat_index.json') : await (await client.downloadFile('chat_index.json')).text();
+          if (indexText && (indexText.trim().startsWith('{') || indexText.trim().startsWith('['))) {
+            cloudIndexTime = Date.now();
+          }
+        } catch (e) {}
+      }
 
       if (cloudIndexTime === 0) {
         if (!legacyHistoryMissingRef.current) {
@@ -451,18 +460,20 @@ export default function App() {
           if (oldTime > 0) {
             needsMigration = true;
           } else {
-            legacyHistoryMissingRef.current = true;
+            try {
+              const legacyText = typeof client.downloadText === 'function' ? await client.downloadText('chat_history.json') : await (await client.downloadFile('chat_history.json')).text();
+              if (legacyText && legacyText.trim().startsWith('[')) {
+                needsMigration = true;
+              } else {
+                legacyHistoryMissingRef.current = true;
+              }
+            } catch (e) {
+              legacyHistoryMissingRef.current = true;
+            }
           }
         }
         
         if (!needsMigration) {
-          setMessages(prev => {
-            const failedOnly = prev.filter(m => m.status === 'FAILED');
-            if (currentProfileRef.current) {
-              cacheFile(`history_array_${currentProfileRef.current.id}`, failedOnly);
-            }
-            return failedOnly;
-          });
           setStatusText('Connected (No history file)');
           setStatusDotClass('bg-green-500');
           setIsSyncing(false);

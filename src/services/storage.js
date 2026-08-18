@@ -583,17 +583,39 @@ class WebDavStorageClient {
     async getLastModified(fileName) {
         const url = this.getUrl(fileName);
         try {
+            const headRes = await fetchWithTimeout(url, {
+                method: 'HEAD',
+                headers: { 'Authorization': this.getAuthHeader() }
+            }, 6000);
+            if (headRes.ok) {
+                const lm = headRes.headers.get('Last-Modified') || headRes.headers.get('last-modified');
+                if (lm) {
+                    const t = new Date(lm).getTime();
+                    if (t > 0) return t;
+                }
+                return Date.now();
+            }
+        } catch (e) {}
+
+        try {
             const response = await fetchWithTimeout(url, {
                 method: 'PROPFIND',
                 headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
             }, 8000);
             if (response.ok) {
+                const lmHeader = response.headers.get('Last-Modified') || response.headers.get('last-modified');
+                if (lmHeader) {
+                    const t = new Date(lmHeader).getTime();
+                    if (t > 0) return t;
+                }
                 const text = await response.text();
                 const match = text.match(/<[a-zA-Z0-9:]*getlastmodified[^>]*>(.*?)<\/[a-zA-Z0-9:]*getlastmodified>/i);
                 if (match && match[1]) {
                     const dateStr = match[1];
-                    return new Date(dateStr).getTime() || 0;
+                    const t = new Date(dateStr).getTime();
+                    if (t > 0) return t;
                 }
+                return Date.now();
             }
         } catch (e) {}
         return 0;
