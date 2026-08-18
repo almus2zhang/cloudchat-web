@@ -9,6 +9,12 @@
     "core:default",
     "window-state:default",
     "http:default",
-    "http:allow-fetch"
+    {
+      "identifier": "http:allow-fetch",
+      "allow": [
+        { "url": "http://*/*" },
+        { "url": "https://*/*" }
+      ]
+    }
   ]
 }
