@@ -1,5 +1,23 @@
 import CryptoJS from 'crypto-js';
 
+// Safe fetch wrapper with timeout (prevents sync hanging indefinitely)
+export async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const combinedSignal = options.signal || controller.signal;
+    try {
+        const response = await fetch(url, { ...options, signal: combinedSignal });
+        clearTimeout(timeoutId);
+        return response;
+    } catch (err) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+            throw new Error(`网络请求超时 (${Math.round(timeoutMs / 1000)}秒)`);
+        }
+        throw err;
+    }
+}
+
 // Download progress helper: reads a fetch Response body with progress callbacks
 // Supports pause/cancel via dlState object
 export async function readResponseWithProgress(response, onProgress, dlState) {
@@ -238,6 +256,10 @@ class WebDavStorageClient {
     }
 
     getUrl(fileName) {
+        if (!fileName) return '';
+        if (typeof fileName === 'string' && (fileName.startsWith('http://') || fileName.startsWith('https://'))) {
+            return fileName;
+        }
         const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
@@ -309,33 +331,33 @@ class WebDavStorageClient {
 
     async uploadText(content, fileName) {
         const url = this.getUrl(fileName);
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
             method: 'PUT',
             headers: {
                 'Authorization': this.getAuthHeader(),
                 'Content-Type': 'application/json'
             },
             body: content
-        });
+        }, 12000);
         if (!response.ok) throw new Error(`Upload text failed: ${response.status}`);
         return url;
     }
 
     async downloadFile(fileName) {
         const url = this.getUrl(fileName);
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
             headers: { 'Authorization': this.getAuthHeader() }
-        });
+        }, 20000);
         if (!response.ok) throw new Error(`Download failed: ${response.status}`);
         return await response.blob();
     }
 
     async downloadFileWithProgress(fileName, onProgress, dlState) {
         const url = this.getUrl(fileName);
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
             headers: { 'Authorization': this.getAuthHeader() },
             signal: dlState?.controller?.signal
-        });
+        }, 60000);
         if (!response.ok) throw new Error(`Download failed: ${response.status}`);
         return await readResponseWithProgress(response, onProgress, dlState);
     }
@@ -533,10 +555,10 @@ class WebDavStorageClient {
     async getFileSize(fileName) {
         const url = this.getUrl(fileName);
         try {
-            const response = await fetch(url, {
+            const response = await fetchWithTimeout(url, {
                 method: 'HEAD',
                 headers: { 'Authorization': this.getAuthHeader() }
-            });
+            }, 8000);
             if (response.ok) {
                 return parseInt(response.headers.get('Content-Length') || '-1');
             }
@@ -547,10 +569,10 @@ class WebDavStorageClient {
     async getLastModified(fileName) {
         const url = this.getUrl(fileName);
         try {
-            const response = await fetch(url, {
+            const response = await fetchWithTimeout(url, {
                 method: 'PROPFIND',
                 headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
-            });
+            }, 8000);
             if (response.ok) {
                 const text = await response.text();
                 const match = text.match(/<[a-zA-Z0-9:]*getlastmodified[^>]*>(.*?)<\/[a-zA-Z0-9:]*getlastmodified>/i);
@@ -820,6 +842,10 @@ class S3StorageClient {
     }
 
     getUrl(fileName) {
+        if (!fileName) return '';
+        if (typeof fileName === 'string' && (fileName.startsWith('http://') || fileName.startsWith('https://'))) {
+            return fileName;
+        }
         const endpoint = this.config.endpoint.replace(/\/+$/, '');
         const bucket = this.config.bucket;
         const key = this.getKey(fileName);

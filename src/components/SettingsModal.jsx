@@ -161,29 +161,42 @@ export default function SettingsModal({
   };
 
   const convertAvatarToBlob = async (src) => {
+    if (!src) return null;
     if (src.startsWith('data:')) {
-      const res = await fetch(src);
-      return await res.blob();
+      try {
+        const res = await fetch(src);
+        return await res.blob();
+      } catch (e) {
+        return null;
+      }
     }
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => {
-        const MAX = 128;
-        const canvas = document.createElement('canvas');
-        canvas.width = MAX;
-        canvas.height = MAX;
-        const ctx = canvas.getContext('2d');
-        const side = Math.min(img.width, img.height);
-        const sx = (img.width - side) / 2;
-        const sy = (img.height - side) / 2;
-        ctx.drawImage(img, sx, sy, side, side, 0, 0, MAX, MAX);
-        canvas.toBlob((blob) => {
-          if (blob) resolve(blob);
-          else reject(new Error('Canvas toBlob failed'));
-        }, 'image/jpeg', 0.85);
+        try {
+          const MAX = 128;
+          const canvas = document.createElement('canvas');
+          canvas.width = MAX;
+          canvas.height = MAX;
+          const ctx = canvas.getContext('2d');
+          const side = Math.min(img.width, img.height);
+          const sx = (img.width - side) / 2;
+          const sy = (img.height - side) / 2;
+          ctx.drawImage(img, sx, sy, side, side, 0, 0, MAX, MAX);
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else resolve(null);
+          }, 'image/jpeg', 0.85);
+        } catch (e) {
+          // Canvas tainted by CORS SecurityError -> fallback without export
+          resolve(null);
+        }
       };
-      img.onerror = (e) => reject(e);
+      img.onerror = () => {
+        // Safe fallback on CORS failure
+        resolve(null);
+      };
       img.src = src;
     });
   };

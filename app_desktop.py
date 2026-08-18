@@ -3,11 +3,11 @@ import sys
 import json
 import webview
 
-# Minimal WebView2 flags
+# WebView2 flags to disable CORS restrictions & security isolation for local desktop app
 os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = (
-    '--disable-web-security --ignore-certificate-errors '
-    '--disable-features=Translate,OptimizationHints,MediaRouter '
-    '--disable-background-networking --disable-sync'
+    '--disable-web-security --allow-running-insecure-content '
+    '--disable-site-isolation-trials --disable-features=IsolateOrigins,site-per-process,Translate,OptimizationHints,MediaRouter '
+    '--disable-background-networking --disable-sync --ignore-certificate-errors'
 )
 
 webview.settings['IGNORE_SSL_ERRORS'] = True
