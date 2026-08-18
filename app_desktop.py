@@ -136,6 +136,18 @@ class DesktopApi:
             pass
         return False
 
+    def save_file_to_downloads(self, suggested_name, base64_content):
+        try:
+            downloads_dir = os.path.join(os.path.expanduser('~'), 'Downloads')
+            os.makedirs(downloads_dir, exist_ok=True)
+            save_path = os.path.join(downloads_dir, suggested_name)
+            data = base64.b64decode(base64_content)
+            with open(save_path, 'wb') as f:
+                f.write(data)
+            return save_path
+        except Exception:
+            return None
+
 
 def get_dist_path():
     if getattr(sys, 'frozen', False):

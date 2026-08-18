@@ -664,17 +664,55 @@ export default function ChatArea({
           'webm': 'video/webm'
         };
 
-        const mimeType = MIME_MAP[ext] || blob.type || 'application/octet-stream';
-        const typedBlob = new Blob([blob], { type: mimeType });
-        const url = URL.createObjectURL(typedBlob);
-        
         const previewableExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'mp3', 'wav', 'ogg', 'm4a', 'mp4', 'webm', 'pdf', 'txt', 'json', 'xml', 'html', 'htm', 'js', 'css', 'md', 'log'];
-        
-        if (openInBrowser && previewableExtensions.includes(ext)) {
-          // 仅图片、视频、音频、PDF、纯文本在网页新标签打开预览
-          const win = window.open(url, '_blank');
-          if (!win) {
-            // 被浏览器弹窗拦截时退回到下载
+        const isPreviewable = previewableExtensions.includes(ext);
+
+        // 桌面 PyInstaller Webview 适配
+        if (window.pywebview && window.pywebview.api) {
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            const base64 = reader.result.split(',')[1];
+            if (openInBrowser) {
+              if (isPreviewable) {
+                const mimeType = MIME_MAP[ext] || blob.type || 'application/octet-stream';
+                const typedBlob = new Blob([blob], { type: mimeType });
+                const url = URL.createObjectURL(typedBlob);
+                window.open(url, '_blank');
+                setTimeout(() => URL.revokeObjectURL(url), 10000);
+              } else {
+                // 点击二进制文件卡片直接在桌面保存并调用系统关联程序打开
+                const savedPath = await window.pywebview.api.save_file_to_downloads(displayName, base64);
+                if (savedPath) {
+                  window.pywebview.api.open_file(savedPath);
+                }
+              }
+            } else {
+              // 点击下载按钮，自动保存至系统 Downloads 目录
+              const savedPath = await window.pywebview.api.save_file_to_downloads(displayName, base64);
+              if (savedPath) {
+                alert(`文件已保存至下载目录:\n${savedPath}`);
+              }
+            }
+          };
+          reader.readAsDataURL(blob);
+        } else {
+          // 标准 Web 浏览器适配
+          const mimeType = MIME_MAP[ext] || blob.type || 'application/octet-stream';
+          const typedBlob = new Blob([blob], { type: mimeType });
+          const url = URL.createObjectURL(typedBlob);
+
+          if (openInBrowser && isPreviewable) {
+            const win = window.open(url, '_blank');
+            if (!win) {
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = displayName;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            }
+          } else {
+            // 下载或非预览文件：强制标准下载，绝不调用 window.open(blob) 避免“获取打开'blob'连接的应用”提示
             const a = document.createElement('a');
             a.href = url;
             a.download = displayName;
@@ -682,16 +720,8 @@ export default function ChatArea({
             a.click();
             document.body.removeChild(a);
           }
-        } else {
-          // 其他非直接预览文件（如 ZIP、DOCX、XLSX、EXE、APK 等），避免调用 window.open 报“无法打开blob连接应用”错误
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = displayName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
         }
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
       }
       
       setDownloads(prev => ({
