@@ -202,8 +202,8 @@ export default function App() {
         const dbMsgs = await getCachedFile(`history_array_${activeProfileId}`);
         if (dbMsgs && Array.isArray(dbMsgs)) {
           const { sanitized } = sanitizeMessages(dbMsgs);
+          setMessages(sanitized);
           const alive = sanitized.filter(m => !m.isDeleted);
-          setMessages(alive);
           resolveLocalMediaUrls(alive);
           return;
         }
@@ -216,8 +216,8 @@ export default function App() {
         try {
           const msgs = JSON.parse(cached);
           const { sanitized } = sanitizeMessages(msgs);
+          setMessages(sanitized);
           const alive = sanitized.filter(m => !m.isDeleted);
-          setMessages(alive);
           resolveLocalMediaUrls(alive);
           // Migrate legacy cache to DB (keep full list with isDeleted for merge correctness)
           cacheFile(`history_array_${activeProfileId}`, sanitized);
@@ -472,6 +472,9 @@ export default function App() {
   const syncHistory = async (force = false) => {
     if (isSyncing || !currentProfileRef.current || !activeClientRef.current) return;
     setIsSyncing(true);
+    if (force) {
+      shardTimestampsRef.current = {};
+    }
 
     addDebugLog(`=== 开始同步历史记录 (force=${force}) ===`);
     addDebugLog(`当前账号: ${currentProfileRef.current.name} (${currentProfileRef.current.saveDir}), 类型: ${currentProfileRef.current.serverType}`);
@@ -616,26 +619,34 @@ export default function App() {
 
           setMessages(prev => {
             let mergedMap = new Map();
-            downloadedMessages.forEach(m => mergedMap.set(m.id, m));
-            prev.forEach(m => {
-              if (!mergedMap.has(m.id)) {
-                mergedMap.set(m.id, m);
+            prev.forEach(m => mergedMap.set(m.id, m));
+
+            downloadedMessages.forEach(cloudMsg => {
+              const existing = mergedMap.get(cloudMsg.id);
+              if (!existing) {
+                mergedMap.set(cloudMsg.id, cloudMsg);
+              } else {
+                const existingTime = existing.lastModified || existing.timestamp || 0;
+                const cloudTime = cloudMsg.lastModified || cloudMsg.timestamp || 0;
+                if (cloudTime >= existingTime || cloudMsg.isDeleted) {
+                  mergedMap.set(cloudMsg.id, cloudMsg);
+                }
               }
             });
 
             const merged = Array.from(mergedMap.values());
-            const alive = merged.filter(m => !m.isDeleted);
-            alive.sort((a, b) => a.timestamp - b.timestamp);
+            merged.sort((a, b) => a.timestamp - b.timestamp);
 
             cacheFile(`history_array_${currentProfileRef.current.id}`, merged);
+            const alive = merged.filter(m => !m.isDeleted);
             resolveLocalMediaUrls(alive);
             
             if (needsMigration || repairedTotal > 0) {
               pushHistoryToCloud(merged);
             }
 
-            addDebugLog(`[Sync] 最终刷新界面显示 ${alive.length} 条有效消息`);
-            return alive;
+            addDebugLog(`[Sync] 最终刷新界面显示 ${alive.length} 条有效消息（总记录 ${merged.length} 条）`);
+            return merged;
           });
 
           setStatusText('Synchronized');
