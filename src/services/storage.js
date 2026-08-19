@@ -197,10 +197,81 @@ export class StorageClient {
     }
 }
 
+export function isPrivateOrLanIp(host) {
+    if (!host) return false;
+    const cleanHost = host.trim().toLowerCase();
+    if (cleanHost === 'localhost' || cleanHost.endsWith('.local') || cleanHost.endsWith('.lan')) {
+        return true;
+    }
+    const parts = cleanHost.split('.');
+    if (parts.length !== 4) return false;
+    try {
+        const octets = parts.map(n => parseInt(n, 10));
+        const p0 = octets[0];
+        const p1 = octets[1];
+        if (p0 === 127 || p0 === 10) return true;
+        if (p0 === 172 && p1 >= 16 && p1 <= 31) return true;
+        if (p0 === 192 && p1 === 168) return true;
+        return false;
+    } catch (_) {
+        return false;
+    }
+}
+
+export function extractHost(rawUrl) {
+    if (!rawUrl) return '';
+    let url = rawUrl.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'http://' + url;
+    }
+    try {
+        const u = new URL(url);
+        return u.hostname || '';
+    } catch (_) {
+        return '';
+    }
+}
+
+export async function checkWebLanStatus(webDavUrl, webDavFallbackUrl) {
+    const host = extractHost(webDavUrl);
+    if (!host) {
+        return { isServerLan: false, isSameLan: false, debugMessage: '[Web LAN Debug] 主服务 URL 为空' };
+    }
+
+    const isServerLan = isPrivateOrLanIp(host);
+    if (!isServerLan) {
+        return { isServerLan: false, isSameLan: false, debugMessage: `[Web LAN Debug] 配置的主服务 (${host}) 为外网域名/公网 IP` };
+    }
+
+    const baseUrl = (webDavUrl || '').replace(/\/+$/, '');
+    try {
+        logDebug(`[Web LAN Debug] 正在对局域网主服务 (${baseUrl}) 进行 800ms 快速连通性响应测试...`);
+        const res = await fetchWithTimeout(baseUrl, { method: 'OPTIONS' }, 800);
+        logDebug(`[Web LAN Debug MATCHED] 局域网主服务响应成功 (Status ${res.status}) -> 确认在同一局域网，使用局域网地址 (${webDavUrl})`);
+        return { isServerLan: true, isSameLan: true, debugMessage: `[Web LAN Debug MATCHED] 局域网主服务响应成功 -> 使用局域网地址 (${webDavUrl})` };
+    } catch (e) {
+        const fallbackTarget = webDavFallbackUrl ? webDavFallbackUrl : '原地址(未配备用)';
+        logDebug(`[Web LAN Debug SWITCH] 局域网主服务未在 800ms 内响应 (${e.message}) -> 判定不在同一局域网，瞬间切换至备用地址: ${fallbackTarget}`);
+        return { isServerLan: true, isSameLan: false, debugMessage: `[Web LAN Debug SWITCH] 不在同一局域网 -> 瞬间切换至备用地址: ${fallbackTarget}` };
+    }
+}
+
 class WebDavStorageClient {
     constructor(config) {
         this.config = config;
         this.type = 'WEBDAV';
+    }
+
+    getEffectiveWebDavUrl() {
+        const primary = (this.config.webDavUrl || '').trim();
+        const fallback = (this.config.webDavFallbackUrl || '').trim();
+        const host = extractHost(primary);
+        
+        if (isPrivateOrLanIp(host) && this.config.isSameLan === false && fallback) {
+            logDebug(`[WebDav Client Switch] Same LAN = false -> Instantly using fallback URL: ${fallback}`);
+            return fallback;
+        }
+        return primary;
     }
 
     getAuthHeader() {
@@ -213,7 +284,7 @@ class WebDavStorageClient {
             throw new Error('WebDAV 服务器地址不能为空');
         }
         await this.ensureDirectoriesExist();
-        const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
+        const baseUrl = this.getEffectiveWebDavUrl().replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
         const parts = [];
@@ -234,7 +305,7 @@ class WebDavStorageClient {
     }
 
     async ensureDirectoriesExist() {
-        const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
+        const baseUrl = this.getEffectiveWebDavUrl().replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
 
@@ -272,7 +343,7 @@ class WebDavStorageClient {
     }
 
     async ensureFolderPathExist(subPath) {
-        const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
+        const baseUrl = this.getEffectiveWebDavUrl().replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
 
@@ -312,7 +383,7 @@ class WebDavStorageClient {
         if (typeof fileName === 'string' && (fileName.startsWith('http://') || fileName.startsWith('https://'))) {
             return fileName;
         }
-        const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
+        const baseUrl = this.getEffectiveWebDavUrl().replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
 
@@ -467,7 +538,7 @@ class WebDavStorageClient {
             console.error('WebDAV deleteDiaryFile: refusing unsafe fileName:', fileName);
             throw new Error('非法的日记文件名');
         }
-        const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
+        const baseUrl = this.getEffectiveWebDavUrl().replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
 
@@ -529,7 +600,7 @@ class WebDavStorageClient {
             console.error('WebDAV recycleFile: refusing unsafe fileName:', fileName);
             return;
         }
-        const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
+        const baseUrl = this.getEffectiveWebDavUrl().replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
 
@@ -653,7 +724,7 @@ class WebDavStorageClient {
     }
 
     async listDiaryFiles() {
-        const baseUrl = this.config.webDavUrl.replace(/\/+$/, '');
+        const baseUrl = this.getEffectiveWebDavUrl().replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
 

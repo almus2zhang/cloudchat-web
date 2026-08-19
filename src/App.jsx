@@ -9,7 +9,7 @@ import MediaViewer from './components/MediaViewer';
 import DiaryExportModal from './components/DiaryExportModal';
 import InputModal from './components/InputModal';
 import DebugLogsModal from './components/DebugLogsModal';
-import { StorageClient } from './services/storage';
+import { StorageClient, checkWebLanStatus } from './services/storage';
 import { initDB, cacheFile, getCachedFile, clearAllCache } from './services/db';
 import { generateInitialAvatarBlob } from './utils/avatar';
 
@@ -54,6 +54,21 @@ export default function App() {
   const [diaryExportOpen, setDiaryExportOpen] = useState(false);
   const [diaryExportFolder, setDiaryExportFolder] = useState(null);
   const [diaryExportSelectedMsgs, setDiaryExportSelectedMsgs] = useState(null);
+
+  const [isSameLan, setIsSameLan] = useState(false);
+
+  useEffect(() => {
+    if (!currentProfile) return;
+    let isSubscribed = true;
+    checkWebLanStatus(currentProfile.webDavUrl, currentProfile.webDavFallbackUrl).then(res => {
+      if (isSubscribed) {
+        setIsSameLan(res.isSameLan);
+        const effectiveConfig = { ...currentProfile, isSameLan: res.isSameLan };
+        activeClientRef.current = StorageClient.create(effectiveConfig);
+      }
+    });
+    return () => { isSubscribed = false; };
+  }, [currentProfile?.webDavUrl, currentProfile?.webDavFallbackUrl]);
 
   // Folder nesting states: 移入文件夹 & 打包时选择父文件夹
   const [moveIntoFolderOpen, setMoveIntoFolderOpen] = useState(false);
@@ -1890,6 +1905,7 @@ export default function App() {
       {/* Main Chat Area */}
       <ChatArea 
         currentProfile={currentProfile}
+        isSameLan={isSameLan}
         messages={messages.filter(m => !m.isDeleted)}
         activeCategory={activeCategory}
         selectedMessageIds={selectedMessageIds}

@@ -33,6 +33,7 @@ const CATEGORY_MAP = {
 
 export default function ChatArea({
   currentProfile,
+  isSameLan = false,
   messages,
   activeCategory,
   selectedMessageIds,
@@ -2476,7 +2477,9 @@ export default function ChatArea({
               onTouchEnd={handleSendMouseUp}
               disabled={!inputText.trim()}
               className={`w-9 h-9 rounded flex items-center justify-center text-white transition-all shrink-0 ${
-                inputText.trim() ? 'bg-accentColor hover:bg-accentHover shadow-md shadow-accentColor/10' : 'bg-borderColor/50 text-textMuted cursor-not-allowed'
+                inputText.trim() 
+                  ? (isSameLan ? '!bg-[#07c160] hover:!bg-[#06ad56] shadow-md shadow-emerald-500/10' : 'bg-accentColor hover:bg-accentHover shadow-md shadow-accentColor/10') 
+                  : 'bg-borderColor/50 text-textMuted cursor-not-allowed'
               }`}
             >
               <i className="fa-solid fa-paper-plane"></i>
