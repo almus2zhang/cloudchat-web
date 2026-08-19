@@ -454,7 +454,10 @@ export default function App() {
     return { sanitized, repairedCount };
   };
 
-  const scrollToBottom = () => {
+  const scrollToBottom = (force = false) => {
+    if (!force && typeof localStorage !== 'undefined' && localStorage.getItem('cloudchat_lock_scroll') === 'true') {
+      return;
+    }
     try {
       const containers = document.querySelectorAll('.chat-messages-container, [data-chat-messages], .overflow-y-auto');
       containers.forEach(el => {

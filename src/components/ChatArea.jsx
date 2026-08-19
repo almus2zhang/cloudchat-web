@@ -294,8 +294,10 @@ export default function ChatArea({
   const [contextMenu, setContextMenu] = useState(null);
   const contextMenuRef = useRef(null);
 
-  // Scroll lock preference state
-  const [lockScroll, setLockScroll] = useState(false);
+  // Scroll lock preference state (persisted in localStorage)
+  const [lockScroll, setLockScroll] = useState(() => {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('cloudchat_lock_scroll') === 'true';
+  });
 
   // Fast scrollbar thumb state & refs
   const [scrollThumbInfo, setScrollThumbInfo] = useState({ visible: false, topRatio: 0, heightRatio: 0.1, isDragging: false });
@@ -1261,7 +1263,13 @@ export default function ChatArea({
               <input 
                 type="checkbox" 
                 checked={lockScroll} 
-                onChange={(e) => setLockScroll(e.target.checked)} 
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setLockScroll(val);
+                  if (typeof localStorage !== 'undefined') {
+                    localStorage.setItem('cloudchat_lock_scroll', val ? 'true' : 'false');
+                  }
+                }} 
                 className="rounded border-borderColor bg-transparent text-accentColor focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5 cursor-pointer accent-accentColor"
               />
               <span className="font-semibold flex items-center gap-1 text-[10px] sm:text-[11px]">
