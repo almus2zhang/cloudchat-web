@@ -74,6 +74,7 @@ export default function ChatArea({
   const lastSavedFilePathRef = useRef('');
   // Cache of resolved avatar blob URLs keyed by raw avatar value (filename or data: URL)
   const [avatarBlobUrls, setAvatarBlobUrls] = useState({});
+  const [expandedFileIds, setExpandedFileIds] = useState(new Set());
 
   // Resolve all unique avatar values in current messages to displayable URLs
   useEffect(() => {
@@ -1906,24 +1907,50 @@ export default function ChatArea({
                                     </div>
                                   );
                                 })()}
-                                {msgType === 'FILE' && (
-                                  <div className={`flex items-center gap-2 p-2 rounded-xl border text-xs pr-4 ${item.isOutgoing ? 'bg-white/10 border-white/20' : 'bg-bgPrimary/60 border-borderColor/40'}`}>
-                                    <i className={`fa-solid fa-file-arrow-down text-base shrink-0 ${item.isOutgoing ? 'text-white' : 'text-cyan-400'}`}></i>
-                                    <div className="min-w-0 flex-1">
-                                      <span className={`font-semibold block truncate ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}>{msg.content.replace(/^\d+_/, '')}</span>
-                                      <span className={`text-[10px] block ${item.isOutgoing ? 'text-white/80' : 'text-textMuted'}`}>{msg.fileSize ? formatSize(msg.fileSize) : ''}</span>
+                                {msgType === 'FILE' && (() => {
+                                  const fileName = msg.content.replace(/^\d+_/, '');
+                                  const isLong = fileName.length > 25;
+                                  const isExpanded = expandedFileIds.has(msg.id);
+                                  return (
+                                    <div className={`flex items-center gap-2 p-2 rounded-xl border text-xs pr-4 ${item.isOutgoing ? 'bg-white/10 border-white/20' : 'bg-bgPrimary/60 border-borderColor/40'}`}>
+                                      <i className={`fa-solid fa-file-arrow-down text-base shrink-0 ${item.isOutgoing ? 'text-white' : 'text-cyan-400'}`}></i>
+                                      <div className="min-w-0 flex-1">
+                                        <span className={`font-semibold block text-xs leading-snug ${isExpanded ? 'break-all whitespace-pre-wrap' : 'line-clamp-2 break-all'} ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}>
+                                          {fileName}
+                                        </span>
+                                        {isLong && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setExpandedFileIds(prev => {
+                                                const next = new Set(prev);
+                                                if (next.has(msg.id)) next.delete(msg.id);
+                                                else next.add(msg.id);
+                                                return next;
+                                              });
+                                            }}
+                                            className={`text-[10px] hover:underline cursor-pointer font-normal mt-0.5 inline-block ${
+                                              item.isOutgoing ? 'text-white/80 hover:text-white' : 'text-cyan-400 hover:text-cyan-300'
+                                            }`}
+                                          >
+                                            {isExpanded ? '收起' : '展开全文'}
+                                          </button>
+                                        )}
+                                        <span className={`text-[10px] block ${item.isOutgoing ? 'text-white/80' : 'text-textMuted'}`}>{msg.fileSize ? formatSize(msg.fileSize) : ''}</span>
+                                      </div>
+                                      <button 
+                                        onClick={(e) => { e.stopPropagation(); handleStartDownload(msg, false); }}
+                                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 cursor-pointer ${
+                                          item.isOutgoing ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-black/10 hover:bg-black/20 text-textPrimary'
+                                        }`}
+                                        title="下载文件"
+                                      >
+                                        <i className="fa-solid fa-download"></i>
+                                      </button>
                                     </div>
-                                    <button 
-                                      onClick={(e) => { e.stopPropagation(); handleStartDownload(msg, false); }}
-                                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 cursor-pointer ${
-                                        item.isOutgoing ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-black/10 hover:bg-black/20 text-textPrimary'
-                                      }`}
-                                      title="下载文件"
-                                    >
-                                      <i className="fa-solid fa-download"></i>
-                                    </button>
-                                  </div>
-                                )}
+                                  );
+                                })()}
                                 {(msgType === 'IMAGE' || msgType === 'VIDEO') && (
                                   <div className="rounded-xl overflow-hidden max-h-48 bg-black/10 border border-borderColor/40 cursor-pointer" onClick={() => handleOpenMediaViewer(msg.id)}>
                                     {msg.url ? (
@@ -2068,9 +2095,28 @@ export default function ChatArea({
                                 }`}></i>
                               </div>
                               <div className="min-w-0 flex-1">
-                                <span className="font-semibold block text-xs truncate leading-snug">
+                                <span className={`font-semibold block text-xs leading-snug ${expandedFileIds.has(item.id) ? 'break-all whitespace-pre-wrap' : 'line-clamp-2 break-all'}`}>
                                   {item.content.replace(/^\d+_/, '')}
                                 </span>
+                                {item.content.replace(/^\d+_/, '').length > 25 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setExpandedFileIds(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(item.id)) next.delete(item.id);
+                                        else next.add(item.id);
+                                        return next;
+                                      });
+                                    }}
+                                    className={`text-[10px] hover:underline cursor-pointer font-normal mt-0.5 inline-block ${
+                                      item.isOutgoing ? 'text-white/80 hover:text-white' : 'text-cyan-400 hover:text-cyan-300'
+                                    }`}
+                                  >
+                                    {expandedFileIds.has(item.id) ? '收起' : '展开全文'}
+                                  </button>
+                                )}
                                 <span className="text-[10px] text-textMuted block mt-0.5">
                                   {item.fileSize ? formatSize(item.fileSize) : 'Unknown size'}
                                 </span>
