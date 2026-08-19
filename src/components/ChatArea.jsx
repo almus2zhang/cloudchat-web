@@ -856,6 +856,61 @@ export default function ChatArea({
     }
   };
 
+  // --- Multi-Selection Batch Download Handler ---
+  const handleBatchDownload = async (targetMsgs) => {
+    const msgs = Array.isArray(targetMsgs) && targetMsgs.length > 0
+      ? targetMsgs
+      : messages.filter(m => selectedMessageIds.has(m.id));
+
+    if (msgs.length === 0) return;
+
+    for (let i = 0; i < msgs.length; i++) {
+      const msg = msgs[i];
+      if (msg.type === 'FOLDER') continue;
+
+      const isMediaOrFile = ['FILE', 'IMAGE', 'VIDEO', 'AUDIO'].includes(String(msg.type).toUpperCase()) || msg.fileSize > 0 || (msg.content && msg.content.includes('/'));
+      
+      if (isMediaOrFile) {
+        handleStartDownload(msg, false);
+      } else if (msg.content) {
+        // 下载纯文本消息为 .txt 文件
+        const textContent = msg.caption ? `${msg.content}\n\n[注释] ${msg.caption}` : msg.content;
+        const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+        const fileName = `message_${msg.id || Date.now()}.txt`;
+        
+        const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+        if (isTauri) {
+          try {
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+              const base64 = reader.result.split(',')[1];
+              await invokeTauri('save_file_to_downloads', {
+                suggestedName: fileName,
+                suggested_name: fileName,
+                base64Content: base64,
+                base64_content: base64
+              });
+            };
+            reader.readAsDataURL(blob);
+          } catch (_) {}
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+        }
+      }
+      
+      if (msgs.length > 1) {
+        await new Promise(res => setTimeout(res, 200));
+      }
+    }
+  };
+
   const handlePauseDownload = (msgId) => {
     const dl = downloads[msgId];
     if (dl && dl.dlState) {
@@ -1365,6 +1420,15 @@ export default function ChatArea({
               title="生成日记"
             >
               <i className="fa-solid fa-book-bookmark text-sm"></i>
+            </button>
+
+            {/* 批量下载 */}
+            <button
+              onClick={() => handleBatchDownload(messages.filter(m => selectedMessageIds.has(m.id)))}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-teal-400 hover:bg-teal-500/10 transition-all shrink-0"
+              title="批量下载选中条目"
+            >
+              <i className="fa-solid fa-download text-sm"></i>
             </button>
 
             {/* 范围选择（Shift 模式）：选中第一条到最后一条中间全部 */}
@@ -2480,6 +2544,17 @@ export default function ChatArea({
                 <i className="fa-solid fa-book-bookmark w-4 text-center"></i> 生成日记
               </button>
 
+              <button
+                onClick={() => {
+                  const selectedMsgs = messages.filter(m => selectedMessageIds.has(m.id));
+                  handleBatchDownload(selectedMsgs);
+                  setContextMenu(null);
+                }}
+                className="w-full px-4 py-2 text-xs font-semibold text-teal-400 hover:bg-teal-500/10 transition-colors flex items-center gap-2.5"
+              >
+                <i className="fa-solid fa-download w-4 text-center"></i> 下载所选 ({selectedMessageIds.size})
+              </button>
+
               <div className="my-1 border-t border-borderColor"></div>
 
               <button
@@ -2593,6 +2668,16 @@ export default function ChatArea({
                 className="w-full px-4 py-2 text-xs text-cyan-400 hover:bg-cyan-500/10 transition-colors flex items-center gap-2.5 font-semibold"
               >
                 <i className="fa-solid fa-floppy-disk text-cyan-400 w-4 text-center"></i> 另存为...
+              </button>
+
+              <button
+                onClick={() => {
+                  handleBatchDownload([contextMenu.msg]);
+                  setContextMenu(null);
+                }}
+                className="w-full px-4 py-2 text-xs text-teal-400 hover:bg-teal-500/10 transition-colors flex items-center gap-2.5 font-semibold"
+              >
+                <i className="fa-solid fa-download text-teal-400 w-4 text-center"></i> 下载文件/消息
               </button>
 
               <button
