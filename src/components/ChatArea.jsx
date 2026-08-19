@@ -1220,7 +1220,7 @@ export default function ChatArea({
   return (
     <main className="flex-1 flex flex-col min-w-0 bg-bgPrimary relative h-full">
       {/* Header */}
-      <header className="h-14 border-b border-borderColor flex items-center px-4 justify-between bg-bgSecondary shrink-0 relative">
+      <header className="min-h-[3.5rem] h-auto border-b border-borderColor flex flex-wrap items-center px-3 sm:px-4 py-2 justify-between bg-bgSecondary shrink-0 relative transition-all gap-2">
         <div className="flex items-center gap-3 min-w-0">
           <button 
             onClick={onToggleSidebar}
@@ -1240,7 +1240,7 @@ export default function ChatArea({
 
         {/* Persistent Header Search Bar */}
         {selectedMessageIds.size === 0 && (
-          <div className="relative flex items-center w-36 sm:w-56 shrink-0 mx-2">
+          <div className="relative flex items-center min-w-[140px] max-w-xs flex-1 shrink-0 mx-2">
             <i className="fa-solid fa-magnifying-glass absolute left-2.5 text-[11px] text-textMuted pointer-events-none"></i>
             <input 
               type="text"
@@ -1275,7 +1275,7 @@ export default function ChatArea({
 
         {/* Scroll Lock & Privacy Controls */}
         {selectedMessageIds.size === 0 && (
-          <div className="flex items-center shrink-0 ml-2 gap-2">
+          <div className="flex flex-wrap items-center shrink-0 ml-auto gap-2">
             {isPrivacyMode && (
               <>
                 <span className="hidden sm:flex px-2.5 py-1 bg-purple-500/15 border border-purple-500/30 text-purple-400 rounded-full text-xs font-semibold items-center gap-1.5 animate-pulse">
@@ -1354,9 +1354,9 @@ export default function ChatArea({
 
         {/* Multi-Selection Toolbar */}
         {selectedMessageIds.size > 0 && (
-          <div className="absolute inset-0 bg-bgSecondary flex flex-wrap items-center justify-end px-2 py-1 gap-1.5 sm:gap-2 animate-fade-in z-20 overflow-y-auto max-h-full border-b border-borderColor">
-            {/* 仅显示选中的数字 Badge，去除 long text "* items selected" */}
-            <div className="flex items-center gap-1 text-xs font-bold text-accentColor bg-accentColor/10 border border-accentColor/30 rounded-lg px-2 py-1 shrink-0 mr-auto" title={`已选中 ${selectedMessageIds.size} 条`}>
+          <div className="w-full flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 animate-fade-in z-20 py-0.5">
+            {/* 仅显示选中的数字 Badge */}
+            <div className="flex items-center gap-1 text-xs font-bold text-accentColor bg-accentColor/10 border border-accentColor/30 rounded-lg px-2.5 h-8 shrink-0 mr-auto" title={`已选中 ${selectedMessageIds.size} 条`}>
               <i className="fa-solid fa-square-check text-xs"></i>
               <span>{selectedMessageIds.size}</span>
             </div>
@@ -1364,29 +1364,32 @@ export default function ChatArea({
             {/* 打包文件夹 */}
             <button
               onClick={() => onPackFolder(currentFolderId)}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-cyan-400 hover:bg-cyan-500/10 transition-all shrink-0"
+              className="h-8 px-2.5 min-w-[2.25rem] flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-cyan-400 hover:bg-cyan-500/10 border border-cyan-500/20 bg-cyan-500/5 transition-all shrink-0 grow sm:grow-0"
               title="打包文件夹"
             >
-              <i className="fa-solid fa-folder-plus text-sm"></i>
+              <i className="fa-solid fa-folder-plus text-xs"></i>
+              <span className="text-xs hidden md:inline">打包</span>
             </button>
 
             {/* 移入文件夹 */}
             <button
               onClick={() => onMoveIntoFolder(currentFolderId)}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-sky-400 hover:bg-sky-500/10 transition-all shrink-0"
+              className="h-8 px-2.5 min-w-[2.25rem] flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-sky-400 hover:bg-sky-500/10 border border-sky-500/20 bg-sky-500/5 transition-all shrink-0 grow sm:grow-0"
               title="移入文件夹"
             >
-              <i className="fa-solid fa-folder-open text-sm"></i>
+              <i className="fa-solid fa-folder-open text-xs"></i>
+              <span className="text-xs hidden md:inline">移入</span>
             </button>
 
             {/* 移出文件夹 */}
             {currentFolderId && (
               <button
                 onClick={() => onRemoveMessagesFromFolder(messages.filter(m => selectedMessageIds.has(m.id)))}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-amber-400 hover:bg-amber-500/10 transition-all shrink-0"
+                className="h-8 px-2.5 min-w-[2.25rem] flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-amber-400 hover:bg-amber-500/10 border border-amber-500/20 bg-amber-500/5 transition-all shrink-0 grow sm:grow-0"
                 title="移出文件夹"
               >
-                <i className="fa-solid fa-folder-minus text-sm"></i>
+                <i className="fa-solid fa-folder-minus text-xs"></i>
+                <span className="text-xs hidden md:inline">移出</span>
               </button>
             )}
 
@@ -1400,10 +1403,11 @@ export default function ChatArea({
               return totalTargetCount >= 2 ? (
                 <button
                   onClick={() => onGroupSelected()}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg text-purple-400 hover:bg-purple-500/10 transition-all shrink-0"
+                  className="h-8 px-2.5 min-w-[2.25rem] flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-purple-400 hover:bg-purple-500/10 border border-purple-500/20 bg-purple-500/5 transition-all shrink-0 grow sm:grow-0"
                   title="合并消息"
                 >
-                  <i className="fa-solid fa-object-group text-sm"></i>
+                  <i className="fa-solid fa-object-group text-xs"></i>
+                  <span className="text-xs hidden md:inline">合并</span>
                 </button>
               ) : null;
             })()}
@@ -1412,54 +1416,61 @@ export default function ChatArea({
             {Array.from(selectedMessageIds).some(id => messages.find(m => m.id === id)?.groupId) && (
               <button
                 onClick={() => onUngroupMessage(messages.filter(m => selectedMessageIds.has(m.id)))}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-amber-400 hover:bg-amber-500/10 transition-all shrink-0"
+                className="h-8 px-2.5 min-w-[2.25rem] flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-amber-400 hover:bg-amber-500/10 border border-amber-500/20 bg-amber-500/5 transition-all shrink-0 grow sm:grow-0"
                 title="拆散组合"
               >
-                <i className="fa-solid fa-object-ungroup text-sm"></i>
+                <i className="fa-solid fa-object-ungroup text-xs"></i>
+                <span className="text-xs hidden md:inline">拆散</span>
               </button>
             )}
 
-            {/* 移出隐私（仅隐私模式下显示，移入只能长按删除按钮触发） */}
+            {/* 移出隐私 */}
             {isPrivacyMode && (
               <button
                 onClick={() => onToggleHideMessage(messages.filter(m => selectedMessageIds.has(m.id)))}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-purple-400 hover:bg-purple-500/10 transition-all shrink-0"
+                className="h-8 px-2.5 min-w-[2.25rem] flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-purple-400 hover:bg-purple-500/10 border border-purple-500/20 bg-purple-500/5 transition-all shrink-0 grow sm:grow-0"
                 title="移出隐私空间"
               >
-                <i className="fa-solid fa-lock-open text-sm"></i>
+                <i className="fa-solid fa-lock-open text-xs"></i>
+                <span className="text-xs hidden md:inline">解锁</span>
               </button>
             )}
 
             {/* 生成日记 */}
             <button
               onClick={() => onOpenDiaryExport(messages.filter(m => selectedMessageIds.has(m.id)))}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-emerald-400 hover:bg-emerald-500/10 transition-all shrink-0"
+              className="h-8 px-2.5 min-w-[2.25rem] flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 border border-emerald-500/20 bg-emerald-500/5 transition-all shrink-0 grow sm:grow-0"
               title="生成日记"
             >
-              <i className="fa-solid fa-book-bookmark text-sm"></i>
+              <i className="fa-solid fa-book-bookmark text-xs"></i>
+              <span className="text-xs hidden md:inline">日记</span>
             </button>
 
             {/* 批量下载 */}
             <button
               onClick={() => handleBatchDownload(messages.filter(m => selectedMessageIds.has(m.id)))}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-teal-400 hover:bg-teal-500/10 transition-all shrink-0"
+              className="h-8 px-2.5 min-w-[2.25rem] flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-teal-400 hover:bg-teal-500/10 border border-teal-500/20 bg-teal-500/5 transition-all shrink-0 grow sm:grow-0"
               title="批量下载选中条目"
             >
-              <i className="fa-solid fa-download text-sm"></i>
+              <i className="fa-solid fa-download text-xs"></i>
+              <span className="text-xs hidden md:inline">下载</span>
             </button>
 
-            {/* 范围选择（Shift 模式）：选中第一条到最后一条中间全部 */}
+            {/* 范围选择 */}
             <button
               onClick={handleToggleRangeSelect}
-              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all shrink-0 ${
-                rangeSelectActive ? 'bg-accentColor/20 text-accentColor ring-1 ring-accentColor' : 'text-sky-400 hover:bg-sky-500/10'
+              className={`h-8 px-2.5 min-w-[2.25rem] flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium border transition-all shrink-0 grow sm:grow-0 ${
+                rangeSelectActive 
+                  ? 'bg-accentColor/20 text-accentColor border-accentColor' 
+                  : 'text-sky-400 hover:bg-sky-500/10 border-sky-500/20 bg-sky-500/5'
               }`}
-              title={rangeSelectActive ? '范围选择已激活，点击目标条目完成全选（再点取消）' : '范围选择（选中第一条到最后一条中间全部）'}
+              title={rangeSelectActive ? '范围选择已激活，点击目标条目完成全选' : '范围选择'}
             >
-              <i className="fa-solid fa-check-double text-sm"></i>
+              <i className="fa-solid fa-check-double text-xs"></i>
+              <span className="text-xs hidden md:inline">范围</span>
             </button>
 
-            {/* 删除（短按删除，长按移入隐私） */}
+            {/* 删除 */}
             <button
               onPointerDown={(e) => {
                 e.stopPropagation();
@@ -1485,18 +1496,21 @@ export default function ChatArea({
                 if (deleteLongPressFiredRef.current) return;
                 onDeleteSelected();
               }}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-500/10 transition-all shrink-0"
+              className="h-8 px-2.5 min-w-[2.25rem] flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-red-400 hover:bg-red-500/10 border border-red-500/20 bg-red-500/5 transition-all shrink-0 grow sm:grow-0"
               title="删除选中（长按移入隐私）"
             >
-              <i className="fa-regular fa-trash-can text-sm"></i>
+              <i className="fa-regular fa-trash-can text-xs"></i>
+              <span className="text-xs hidden md:inline">删除</span>
             </button>
 
+            {/* 取消 */}
             <button
               onClick={onClearSelection}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-textSecondary hover:text-textPrimary transition-all shrink-0"
+              className="h-8 px-2.5 min-w-[2.25rem] flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-textSecondary hover:text-textPrimary hover:bg-bgPrimary border border-borderColor transition-all shrink-0 grow sm:grow-0"
               title="取消多选"
             >
-              <i className="fa-solid fa-xmark text-sm"></i>
+              <i className="fa-solid fa-xmark text-xs"></i>
+              <span className="text-xs hidden md:inline">取消</span>
             </button>
           </div>
         )}
