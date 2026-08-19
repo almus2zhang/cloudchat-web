@@ -55,21 +55,6 @@ export default function App() {
   const [diaryExportFolder, setDiaryExportFolder] = useState(null);
   const [diaryExportSelectedMsgs, setDiaryExportSelectedMsgs] = useState(null);
 
-  const [isSameLan, setIsSameLan] = useState(false);
-
-  useEffect(() => {
-    if (!currentProfile) return;
-    let isSubscribed = true;
-    checkWebLanStatus(currentProfile.webDavUrl, currentProfile.webDavFallbackUrl).then(res => {
-      if (isSubscribed) {
-        setIsSameLan(res.isSameLan);
-        const effectiveConfig = { ...currentProfile, isSameLan: res.isSameLan };
-        activeClientRef.current = StorageClient.create(effectiveConfig);
-      }
-    });
-    return () => { isSubscribed = false; };
-  }, [currentProfile?.webDavUrl, currentProfile?.webDavFallbackUrl]);
-
   // Folder nesting states: 移入文件夹 & 打包时选择父文件夹
   const [moveIntoFolderOpen, setMoveIntoFolderOpen] = useState(false);
   const [moveIntoFolderContextId, setMoveIntoFolderContextId] = useState(null);
@@ -127,6 +112,21 @@ export default function App() {
 
   const currentProfile = profiles.find(p => p.id === activeProfileId) || null;
   currentProfileRef.current = currentProfile;
+
+  const [isSameLan, setIsSameLan] = useState(false);
+
+  useEffect(() => {
+    if (!currentProfile) return;
+    let isSubscribed = true;
+    checkWebLanStatus(currentProfile.webDavUrl, currentProfile.webDavFallbackUrl).then(res => {
+      if (isSubscribed) {
+        setIsSameLan(res.isSameLan);
+        const effectiveConfig = { ...currentProfile, isSameLan: res.isSameLan };
+        activeClientRef.current = StorageClient.create(effectiveConfig);
+      }
+    });
+    return () => { isSubscribed = false; };
+  }, [currentProfile?.webDavUrl, currentProfile?.webDavFallbackUrl]);
 
   // 1. Initial Load
   useEffect(() => {
