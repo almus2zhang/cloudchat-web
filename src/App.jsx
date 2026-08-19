@@ -628,8 +628,22 @@ export default function App() {
               } else {
                 const existingTime = existing.lastModified || existing.timestamp || 0;
                 const cloudTime = cloudMsg.lastModified || cloudMsg.timestamp || 0;
-                if (cloudTime >= existingTime || cloudMsg.isDeleted) {
-                  mergedMap.set(cloudMsg.id, cloudMsg);
+
+                const existingDeleted = existing.isDeleted === true || String(existing.isDeleted) === 'true';
+                const cloudDeleted = cloudMsg.isDeleted === true || String(cloudMsg.isDeleted) === 'true';
+
+                if (cloudDeleted && !existingDeleted) {
+                  mergedMap.set(cloudMsg.id, { ...existing, ...cloudMsg, isDeleted: true, lastModified: Math.max(existingTime, cloudTime) });
+                } else if (existingDeleted && !cloudDeleted) {
+                  if (cloudTime > existingTime) {
+                    mergedMap.set(cloudMsg.id, cloudMsg);
+                  } else {
+                    mergedMap.set(cloudMsg.id, { ...existing, isDeleted: true });
+                  }
+                } else {
+                  if (cloudTime >= existingTime) {
+                    mergedMap.set(cloudMsg.id, { ...existing, ...cloudMsg });
+                  }
                 }
               }
             });
@@ -638,7 +652,7 @@ export default function App() {
             merged.sort((a, b) => a.timestamp - b.timestamp);
 
             cacheFile(`history_array_${currentProfileRef.current.id}`, merged);
-            const alive = merged.filter(m => !m.isDeleted);
+            const alive = merged.filter(m => !m.isDeleted && String(m.isDeleted) !== 'true');
             resolveLocalMediaUrls(alive);
             
             if (needsMigration || repairedTotal > 0) {
@@ -1864,7 +1878,8 @@ export default function App() {
         onOpenSettings={() => setSettingsOpen(true)}
         onSync={() => syncHistory(true)}
         isSyncing={isSyncing}
-        messages={messages.filter(m => !m.isDeleted)}
+        messages={messages.filter(m => !m.isDeleted && String(m.isDeleted) !== 'true')}
+        isPrivacyMode={isPrivacyMode}
         diaryCount={diaryFileCount}
         statusText={statusText}
         statusDotClass={statusDotClass}

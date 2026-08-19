@@ -12,7 +12,8 @@ export default function Sidebar({
   onOpenSettings,
   onSync,
   isSyncing,
-  messages,
+  messages = [],
+  isPrivacyMode = false,
   diaryCount = 0,
   statusText,
   statusDotClass,
@@ -20,6 +21,16 @@ export default function Sidebar({
   onOpenDebugLogs
 }) {
   const [avatarUrl, setAvatarUrl] = React.useState(null);
+
+  const allVisibleCount = React.useMemo(() => {
+    if (!Array.isArray(messages)) return 0;
+    return messages.filter(m => {
+      if (m.isDeleted || String(m.isDeleted) === 'true') return false;
+      if (m.folderId) return false;
+      if (!isPrivacyMode && m.isHidden) return false;
+      return true;
+    }).length;
+  }, [messages, isPrivacyMode]);
 
   React.useEffect(() => {
     const raw = currentProfile?.avatar;
@@ -108,7 +119,7 @@ export default function Sidebar({
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                 activeCategory === 'all' ? 'bg-accentColor/20 text-accentColor' : 'bg-borderColor/50 text-textMuted'
               }`}>
-                {messages.length}
+                {allVisibleCount}
               </span>
             </li>
 

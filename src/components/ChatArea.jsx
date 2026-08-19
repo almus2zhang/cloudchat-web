@@ -1161,7 +1161,7 @@ export default function ChatArea({
               {activeCategory === 'all' ? 'All Messages' : `# ${CATEGORY_MAP[activeCategory] || activeCategory}`}
             </h2>
             <p className="text-[10px] text-textMuted truncate">
-              {messages.length} messages cached locally
+              {filteredMessages.length} 条消息
             </p>
           </div>
         </div>
