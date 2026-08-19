@@ -1687,6 +1687,10 @@ export default function App() {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   // Global Drag and Drop File Handler
+  const handleSendMessageRef = useRef(handleSendMessage);
+  handleSendMessageRef.current = handleSendMessage;
+  const lastProcessedPathRef = useRef({});
+
   useEffect(() => {
     const handleDragOver = (e) => {
       e.preventDefault();
@@ -1709,7 +1713,7 @@ export default function App() {
       if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         const files = Array.from(e.dataTransfer.files);
         for (const file of files) {
-          handleSendMessage(null, file);
+          handleSendMessageRef.current(null, file);
         }
       }
     };
@@ -1718,21 +1722,29 @@ export default function App() {
     window.addEventListener('dragleave', handleDragLeave);
     window.addEventListener('drop', handleDrop);
 
-    // Tauri native Drag & Drop support (intercepts OS native file drag onto Tauri window)
     let unlistenTauri = null;
+    let isCancelled = false;
     const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
     if (isTauri) {
       (async () => {
         try {
           const { getCurrentWindow } = await import('@tauri-apps/api/window');
-          const { listen } = await import('@tauri-apps/api/event');
           const { convertFileSrc } = await import('@tauri-apps/api/core');
 
           const processPath = async (filePath) => {
+            if (!filePath) return;
+            const now = Date.now();
+            const lastTime = lastProcessedPathRef.current[filePath] || 0;
+            // 防重复/防刷：1.5秒内同一文件路径仅处理一次
+            if (now - lastTime < 1500) {
+              return;
+            }
+            lastProcessedPathRef.current[filePath] = now;
+
             addDebugLog(`[Tauri DragDrop] 收到拖入文件路径: ${filePath}`);
             try {
               let file = null;
-              // 1. 优先通过 Rust read_file_binary 读取（无视 WebView 权限/协议安全限制）
+              // 1. 优先通过 Rust read_file_binary 读取
               try {
                 const invoke = window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
                 if (invoke) {
@@ -1762,7 +1774,7 @@ export default function App() {
               }
 
               if (file) {
-                handleSendMessage(null, file);
+                handleSendMessageRef.current(null, file);
               }
             } catch (err) {
               addDebugLog(`[Tauri DragDrop ERR] 文件解析发送失败: ${err.stack || err.message || err}`);
@@ -1782,8 +1794,7 @@ export default function App() {
           try {
             const currentWin = getCurrentWindow();
             if (currentWin && typeof currentWin.onDragDropEvent === 'function') {
-              unlistenTauri = await currentWin.onDragDropEvent(async (event) => {
-                addDebugLog(`[Tauri DragDrop Event]: ${JSON.stringify(event)}`);
+              const cleanup = await currentWin.onDragDropEvent(async (event) => {
                 const payload = event.payload || event;
                 const type = payload.type || event.type;
                 if (type === 'over' || type === 'enter' || type === 'hover') {
@@ -1799,27 +1810,14 @@ export default function App() {
                   }
                 }
               });
+              if (isCancelled) {
+                cleanup();
+              } else {
+                unlistenTauri = cleanup;
+              }
             }
           } catch (err) {
             addDebugLog(`[Tauri DragDrop Warning] onDragDropEvent 设置失败: ${err.message || err}`);
-          }
-
-          if (!unlistenTauri) {
-            const unlistenDrop = await listen('tauri://file-drop', async (event) => {
-              setIsDraggingOver(false);
-              const paths = extractPathsFromEvent(event);
-              addDebugLog(`[Tauri DragDrop] tauri://file-drop 监听触发: ${JSON.stringify(paths)}`);
-              for (const p of paths) {
-                await processPath(p);
-              }
-            });
-            const unlistenHover = await listen('tauri://file-drop-hover', () => setIsDraggingOver(true));
-            const unlistenCancel = await listen('tauri://file-drop-cancelled', () => setIsDraggingOver(false));
-            unlistenTauri = () => {
-              unlistenDrop();
-              unlistenHover();
-              unlistenCancel();
-            };
           }
         } catch (e) {
           console.warn('[Tauri DragDrop Setup Error]:', e);
@@ -1828,12 +1826,13 @@ export default function App() {
     }
 
     return () => {
+      isCancelled = true;
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('dragleave', handleDragLeave);
       window.removeEventListener('drop', handleDrop);
       if (unlistenTauri) unlistenTauri();
     };
-  }, [handleSendMessage]);
+  }, []);
 
   const handleCloseMediaViewer = () => {
     setMediaViewerOpen(false);
