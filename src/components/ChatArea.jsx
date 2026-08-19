@@ -627,7 +627,7 @@ export default function ChatArea({
   };
 
   // --- Download Handler ---
-  const handleStartDownload = async (msg, openInBrowser = false) => {
+  const handleStartDownload = async (msg, openInBrowser = false, autoOpenFolder = true) => {
     if (downloads[msg.id]?.status === 'downloading') return;
     
     const displayName = msg.content.replace(/^\d+_/, '');
@@ -762,8 +762,10 @@ export default function ChatArea({
                 logDebug(`[Tauri Download] Saved path: ${savedPath}. Opening explorer folder...`);
                 if (savedPath) {
                   lastSavedFilePathRef.current = savedPath;
-                  await invokeTauri('open_folder', { path: savedPath });
-                  logDebug(`[Tauri Download] open_folder invoked successfully!`);
+                  if (autoOpenFolder) {
+                    await invokeTauri('open_folder', { path: savedPath });
+                    logDebug(`[Tauri Download] open_folder invoked successfully!`);
+                  }
                 }
               } catch (e) {
                 logDebug(`[Tauri Download ERR] ${e.message || e}`);
@@ -864,6 +866,8 @@ export default function ChatArea({
 
     if (msgs.length === 0) return;
 
+    const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+
     for (let i = 0; i < msgs.length; i++) {
       const msg = msgs[i];
       if (msg.type === 'FOLDER') continue;
@@ -871,27 +875,32 @@ export default function ChatArea({
       const isMediaOrFile = ['FILE', 'IMAGE', 'VIDEO', 'AUDIO'].includes(String(msg.type).toUpperCase()) || msg.fileSize > 0 || (msg.content && msg.content.includes('/'));
       
       if (isMediaOrFile) {
-        handleStartDownload(msg, false);
+        await handleStartDownload(msg, false, false);
       } else if (msg.content) {
         // 下载纯文本消息为 .txt 文件
         const textContent = msg.caption ? `${msg.content}\n\n[注释] ${msg.caption}` : msg.content;
         const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
         const fileName = `message_${msg.id || Date.now()}.txt`;
         
-        const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
         if (isTauri) {
           try {
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-              const base64 = reader.result.split(',')[1];
-              await invokeTauri('save_file_to_downloads', {
-                suggestedName: fileName,
-                suggested_name: fileName,
-                base64Content: base64,
-                base64_content: base64
-              });
-            };
-            reader.readAsDataURL(blob);
+            await new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = async () => {
+                const base64 = reader.result.split(',')[1];
+                const savedPath = await invokeTauri('save_file_to_downloads', {
+                  suggestedName: fileName,
+                  suggested_name: fileName,
+                  base64Content: base64,
+                  base64_content: base64
+                });
+                if (savedPath) {
+                  lastSavedFilePathRef.current = savedPath;
+                }
+                resolve();
+              };
+              reader.readAsDataURL(blob);
+            });
           } catch (_) {}
         } else {
           const url = URL.createObjectURL(blob);
@@ -907,6 +916,14 @@ export default function ChatArea({
       
       if (msgs.length > 1) {
         await new Promise(res => setTimeout(res, 200));
+      }
+    }
+
+    if (isTauri && lastSavedFilePathRef.current) {
+      try {
+        await invokeTauri('open_folder', { path: lastSavedFilePathRef.current });
+      } catch (e) {
+        logDebug(`[Tauri Batch Open Folder ERR] ${e.message || e}`);
       }
     }
   };
