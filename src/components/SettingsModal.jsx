@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { cacheFile } from '../services/db';
+import { StorageClient } from '../services/storage';
 import { PRESET_AVATARS, getInitialAvatar } from '../utils/avatar';
 
 // 校验「设定的用户目录」合法性：目录各段只能包含数字、字母、下划线、连字符。
@@ -43,8 +44,7 @@ export default function SettingsModal({
     setIsTestingConn(true);
     setTestResult(null);
     try {
-      const StorageModule = await import('../services/storage');
-      const testService = StorageModule.StorageClient.create(editingProfile);
+      const testService = StorageClient.create(editingProfile);
       const res = await testService.testConnection();
       setTestResult({ success: true, message: res.message });
     } catch (err) {

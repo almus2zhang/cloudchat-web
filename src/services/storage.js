@@ -187,15 +187,6 @@ export function signS3Request(method, urlString, config, headers = {}, payloadHa
 }
 
 // Storage Client Implementations
-export class StorageClient {
-    static create(config) {
-        if (config.type === 'WEBDAV') {
-            return new WebDavStorageClient(config);
-        } else {
-            return new S3StorageClient(config);
-        }
-    }
-}
 
 export function isPrivateOrLanIp(host) {
     if (!host) return false;
@@ -1173,5 +1164,15 @@ class S3StorageClient {
             }
         } catch (e) {}
         return 0;
+    }
+}
+
+export class StorageClient {
+    static create(config) {
+        if (config.type === 'WEBDAV') {
+            return new WebDavStorageClient(config);
+        } else {
+            return new S3StorageClient(config);
+        }
     }
 }
