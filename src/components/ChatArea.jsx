@@ -479,23 +479,28 @@ export default function ChatArea({
       const distanceScrolled = Math.abs(el.scrollTop - scrollStartTopRef.current);
       const isPastThreshold = distanceScrolled > el.clientHeight * 1.5;
 
-      if (isPastThreshold || scrollThumbInfo.visible) {
-        const fraction = Math.max(0, Math.min(1, el.scrollTop / scrollableDist));
+      const fraction = Math.max(0, Math.min(1, el.scrollTop / scrollableDist));
 
+      if (isPastThreshold) {
         setScrollThumbInfo(prev => ({
           ...prev,
           visible: true,
           topRatio: fraction
         }));
-
-        if (scrollHideTimerRef.current) clearTimeout(scrollHideTimerRef.current);
-        scrollHideTimerRef.current = setTimeout(() => {
-          if (!isDraggingThumbRef.current) {
-            setScrollThumbInfo(prev => ({ ...prev, visible: false }));
-            scrollStartTopRef.current = null;
-          }
-        }, 1000);
+      } else {
+        setScrollThumbInfo(prev => ({
+          ...prev,
+          topRatio: fraction
+        }));
       }
+
+      if (scrollHideTimerRef.current) clearTimeout(scrollHideTimerRef.current);
+      scrollHideTimerRef.current = setTimeout(() => {
+        if (!isDraggingThumbRef.current) {
+          setScrollThumbInfo(prev => ({ ...prev, visible: false }));
+          scrollStartTopRef.current = null;
+        }
+      }, 1000);
     }
   };
 
