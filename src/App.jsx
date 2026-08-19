@@ -1713,13 +1713,82 @@ export default function App() {
         }
       }
     };
+
     window.addEventListener('dragover', handleDragOver);
     window.addEventListener('dragleave', handleDragLeave);
     window.addEventListener('drop', handleDrop);
+
+    // Tauri native Drag & Drop support (intercepts OS native file drag onto Tauri window)
+    let unlistenTauri = null;
+    const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+    if (isTauri) {
+      (async () => {
+        try {
+          const { getCurrentWindow } = await import('@tauri-apps/api/window');
+          const { listen } = await import('@tauri-apps/api/event');
+          const { convertFileSrc } = await import('@tauri-apps/api/core');
+
+          const processPath = async (filePath) => {
+            try {
+              const assetUrl = convertFileSrc(filePath);
+              const resp = await fetch(assetUrl);
+              const blob = await resp.blob();
+              const fileName = filePath.split(/[/\\]/).pop() || 'file';
+              const file = new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
+              handleSendMessage(null, file);
+            } catch (err) {
+              console.error('[Tauri DragDrop Error]:', err);
+            }
+          };
+
+          try {
+            const currentWin = getCurrentWindow();
+            if (currentWin && typeof currentWin.onDragDropEvent === 'function') {
+              unlistenTauri = await currentWin.onDragDropEvent(async (event) => {
+                const payload = event.payload;
+                if (!payload) return;
+                if (payload.type === 'over' || payload.type === 'enter') {
+                  setIsDraggingOver(true);
+                } else if (payload.type === 'leave' || payload.type === 'cancelled') {
+                  setIsDraggingOver(false);
+                } else if (payload.type === 'drop') {
+                  setIsDraggingOver(false);
+                  const paths = payload.paths || [];
+                  for (const p of paths) {
+                    await processPath(p);
+                  }
+                }
+              });
+            }
+          } catch (_) {}
+
+          if (!unlistenTauri) {
+            const unlistenDrop = await listen('tauri://file-drop', async (event) => {
+              setIsDraggingOver(false);
+              const paths = Array.isArray(event.payload) ? event.payload : (event.payload?.paths || []);
+              for (const p of paths) {
+                await processPath(p);
+              }
+            });
+            const unlistenHover = await listen('tauri://file-drop-hover', () => setIsDraggingOver(true));
+            const unlistenCancel = await listen('tauri://file-drop-cancelled', () => setIsDraggingOver(false));
+            unlistenTauri = () => {
+              unlistenDrop();
+              unlistenHover();
+              unlistenCancel();
+            };
+          }
+        } catch (e) {
+          console.warn('[Tauri DragDrop Setup Error]:', e);
+        }
+      })();
+    }
+
     return () => {
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('dragleave', handleDragLeave);
       window.removeEventListener('drop', handleDrop);
+      if (unlistenTauri) unlistenTauri();
     };
   }, [handleSendMessage]);
 
