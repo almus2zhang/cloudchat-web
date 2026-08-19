@@ -1729,43 +1729,86 @@ export default function App() {
           const { convertFileSrc } = await import('@tauri-apps/api/core');
 
           const processPath = async (filePath) => {
+            addDebugLog(`[Tauri DragDrop] 收到拖入文件路径: ${filePath}`);
             try {
-              const assetUrl = convertFileSrc(filePath);
-              const resp = await fetch(assetUrl);
-              const blob = await resp.blob();
-              const fileName = filePath.split(/[/\\]/).pop() || 'file';
-              const file = new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
-              handleSendMessage(null, file);
+              let file = null;
+              // 1. 优先通过 Rust read_file_binary 读取（无视 WebView 权限/协议安全限制）
+              try {
+                const invoke = window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
+                if (invoke) {
+                  const base64Str = await invoke('read_file_binary', { path: filePath });
+                  const byteCharacters = atob(base64Str);
+                  const byteNumbers = new Array(byteCharacters.length);
+                  for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                  }
+                  const byteArray = new Uint8Array(byteNumbers);
+                  const fileName = filePath.split(/[/\\]/).pop() || 'file';
+                  file = new File([byteArray], fileName, { type: 'application/octet-stream' });
+                  addDebugLog(`[Tauri DragDrop] 框架 Rust 读取二进制成功: ${fileName} (${file.size} bytes)`);
+                }
+              } catch (eRust) {
+                addDebugLog(`[Tauri DragDrop Warning] Rust read_file_binary 失败: ${eRust.message || eRust}，尝试 asset 协议...`);
+              }
+
+              // 2. 回退：使用 convertFileSrc + fetch
+              if (!file) {
+                const assetUrl = convertFileSrc(filePath);
+                const resp = await window.fetch(assetUrl);
+                const blob = await resp.blob();
+                const fileName = filePath.split(/[/\\]/).pop() || 'file';
+                file = new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
+                addDebugLog(`[Tauri DragDrop] convertFileSrc 读取成功: ${fileName} (${file.size} bytes)`);
+              }
+
+              if (file) {
+                handleSendMessage(null, file);
+              }
             } catch (err) {
+              addDebugLog(`[Tauri DragDrop ERR] 文件解析发送失败: ${err.stack || err.message || err}`);
               console.error('[Tauri DragDrop Error]:', err);
             }
+          };
+
+          const extractPathsFromEvent = (evt) => {
+            if (!evt) return [];
+            if (Array.isArray(evt)) return evt;
+            if (Array.isArray(evt.payload)) return evt.payload;
+            if (evt.payload && Array.isArray(evt.payload.paths)) return evt.payload.paths;
+            if (Array.isArray(evt.paths)) return evt.paths;
+            return [];
           };
 
           try {
             const currentWin = getCurrentWindow();
             if (currentWin && typeof currentWin.onDragDropEvent === 'function') {
               unlistenTauri = await currentWin.onDragDropEvent(async (event) => {
-                const payload = event.payload;
-                if (!payload) return;
-                if (payload.type === 'over' || payload.type === 'enter') {
+                addDebugLog(`[Tauri DragDrop Event]: ${JSON.stringify(event)}`);
+                const payload = event.payload || event;
+                const type = payload.type || event.type;
+                if (type === 'over' || type === 'enter' || type === 'hover') {
                   setIsDraggingOver(true);
-                } else if (payload.type === 'leave' || payload.type === 'cancelled') {
+                } else if (type === 'leave' || type === 'cancelled') {
                   setIsDraggingOver(false);
-                } else if (payload.type === 'drop') {
+                } else if (type === 'drop') {
                   setIsDraggingOver(false);
-                  const paths = payload.paths || [];
+                  const paths = extractPathsFromEvent(event);
+                  addDebugLog(`[Tauri DragDrop] 监听到 drop 事件，路径列表: ${JSON.stringify(paths)}`);
                   for (const p of paths) {
                     await processPath(p);
                   }
                 }
               });
             }
-          } catch (_) {}
+          } catch (err) {
+            addDebugLog(`[Tauri DragDrop Warning] onDragDropEvent 设置失败: ${err.message || err}`);
+          }
 
           if (!unlistenTauri) {
             const unlistenDrop = await listen('tauri://file-drop', async (event) => {
               setIsDraggingOver(false);
-              const paths = Array.isArray(event.payload) ? event.payload : (event.payload?.paths || []);
+              const paths = extractPathsFromEvent(event);
+              addDebugLog(`[Tauri DragDrop] tauri://file-drop 监听触发: ${JSON.stringify(paths)}`);
               for (const p of paths) {
                 await processPath(p);
               }

@@ -69,13 +69,21 @@ fn open_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn read_file_binary(path: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let base64_str = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(base64_str)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_store::Builder::default().build())
     .plugin(tauri_plugin_window_state::Builder::default().build())
     .plugin(tauri_plugin_http::init())
-    .invoke_handler(tauri::generate_handler![save_file_to_downloads, open_file, open_folder])
+    .invoke_handler(tauri::generate_handler![save_file_to_downloads, open_file, open_folder, read_file_binary])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
