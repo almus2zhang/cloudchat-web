@@ -2477,10 +2477,10 @@ export default function ChatArea({
               onTouchEnd={handleSendMouseUp}
               disabled={!inputText.trim()}
               className={`w-9 h-9 rounded flex items-center justify-center text-white transition-all shrink-0 ${
-                inputText.trim() 
-                  ? (isSameLan ? '!bg-[#07c160] hover:!bg-[#06ad56] shadow-md shadow-emerald-500/10' : 'bg-accentColor hover:bg-accentHover shadow-md shadow-accentColor/10') 
-                  : 'bg-borderColor/50 text-textMuted cursor-not-allowed'
-              }`}
+                isSameLan 
+                  ? '!bg-[#07c160] hover:!bg-[#06ad56] shadow-md shadow-emerald-500/10' 
+                  : 'bg-accentColor hover:bg-accentHover shadow-md shadow-accentColor/10'
+              } ${!inputText.trim() ? 'opacity-60 cursor-not-allowed' : 'opacity-100'}`}
             >
               <i className="fa-solid fa-paper-plane"></i>
             </button>

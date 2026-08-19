@@ -113,12 +113,12 @@ export default function App() {
   const currentProfile = profiles.find(p => p.id === activeProfileId) || null;
   currentProfileRef.current = currentProfile;
 
-  const [isSameLan, setIsSameLan] = useState(false);
+  const [isSameLan, setIsSameLan] = useState(true);
 
   useEffect(() => {
     if (!currentProfile) return;
     let isSubscribed = true;
-    checkWebLanStatus(currentProfile.webDavUrl, currentProfile.webDavFallbackUrl).then(res => {
+    checkWebLanStatus(currentProfile).then(res => {
       if (isSubscribed) {
         setIsSameLan(res.isSameLan);
         const effectiveConfig = { ...currentProfile, isSameLan: res.isSameLan };

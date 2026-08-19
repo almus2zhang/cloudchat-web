@@ -223,7 +223,22 @@ export function extractHost(rawUrl) {
     }
 }
 
-export async function checkWebLanStatus(webDavUrl, webDavFallbackUrl) {
+export async function checkWebLanStatus(profileOrUrl, fallbackUrl) {
+    let webDavUrl = '';
+    let webDavFallbackUrl = '';
+    let user = '';
+    let pass = '';
+
+    if (typeof profileOrUrl === 'object' && profileOrUrl !== null) {
+        webDavUrl = profileOrUrl.webDavUrl || '';
+        webDavFallbackUrl = profileOrUrl.webDavFallbackUrl || '';
+        user = profileOrUrl.webDavUser || '';
+        pass = profileOrUrl.webDavPass || '';
+    } else {
+        webDavUrl = profileOrUrl || '';
+        webDavFallbackUrl = fallbackUrl || '';
+    }
+
     const host = extractHost(webDavUrl);
     if (!host) {
         return { isServerLan: false, isSameLan: false, debugMessage: '[Web LAN Debug] 主服务 URL 为空' };
@@ -235,14 +250,19 @@ export async function checkWebLanStatus(webDavUrl, webDavFallbackUrl) {
     }
 
     const baseUrl = (webDavUrl || '').replace(/\/+$/, '');
+    const headers = {};
+    if (user || pass) {
+        headers['Authorization'] = `Basic ${btoa(`${user}:${pass}`)}`;
+    }
+
     try {
-        logDebug(`[Web LAN Debug] 正在对局域网主服务 (${baseUrl}) 进行 800ms 快速连通性响应测试...`);
-        const res = await fetchWithTimeout(baseUrl, { method: 'OPTIONS' }, 800);
+        logDebug(`[Web LAN Debug] 正在对局域网主服务 (${baseUrl}) 进行 1500ms 快速连通性响应测试...`);
+        const res = await fetchWithTimeout(baseUrl, { method: 'PROPFIND', headers: { ...headers, Depth: '0' } }, 1500);
         logDebug(`[Web LAN Debug MATCHED] 局域网主服务响应成功 (Status ${res.status}) -> 确认在同一局域网，使用局域网地址 (${webDavUrl})`);
-        return { isServerLan: true, isSameLan: true, debugMessage: `[Web LAN Debug MATCHED] 局域网主服务响应成功 -> 使用局域网地址 (${webDavUrl})` };
+        return { isServerLan: true, isSameLan: true, debugMessage: `[Web LAN Debug MATCHED] 局域网主服务响应成功 (Status ${res.status}) -> 使用局域网地址 (${webDavUrl})` };
     } catch (e) {
         const fallbackTarget = webDavFallbackUrl ? webDavFallbackUrl : '原地址(未配备用)';
-        logDebug(`[Web LAN Debug SWITCH] 局域网主服务未在 800ms 内响应 (${e.message}) -> 判定不在同一局域网，瞬间切换至备用地址: ${fallbackTarget}`);
+        logDebug(`[Web LAN Debug SWITCH] 局域网主服务未在 1500ms 内响应 (${e.message || e}) -> 判定不在同一局域网，瞬间切换至备用地址: ${fallbackTarget}`);
         return { isServerLan: true, isSameLan: false, debugMessage: `[Web LAN Debug SWITCH] 不在同一局域网 -> 瞬间切换至备用地址: ${fallbackTarget}` };
     }
 }
