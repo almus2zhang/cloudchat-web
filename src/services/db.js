@@ -62,3 +62,16 @@ export function clearAllCache() {
         }
     });
 }
+export function deleteCachedFile(id) {
+    return new Promise((resolve) => {
+        if (!db) return resolve();
+        try {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const req = tx.objectStore(STORE_NAME).delete(id);
+            req.onsuccess = () => resolve();
+            req.onerror = () => resolve();
+        } catch (e) {
+            resolve();
+        }
+    });
+}

@@ -10,15 +10,29 @@ import DiaryExportModal from './components/DiaryExportModal';
 import InputModal from './components/InputModal';
 import DebugLogsModal from './components/DebugLogsModal';
 import { StorageClient, checkWebLanStatus } from './services/storage';
-import { initDB, cacheFile, getCachedFile, clearAllCache } from './services/db';
+import { initDB, cacheFile, getCachedFile, clearAllCache, deleteCachedFile } from './services/db';
 import { generateInitialAvatarBlob } from './utils/avatar';
 
 // Global media URL lookup cache
 const cachedMediaUrls = {};
 // Global avatar URL lookup cache (filename -> blob URL)
 const cachedAvatarUrls = {};
-// Track locally-generated fallback avatars (network error, NOT 404) - should NOT be pushed to server
-const generatedAvatarKeys = new Set();
+// Persistent tracker: avatars that are locally-generated fallbacks (NOT real server files).
+// Stored in localStorage so it survives page refresh.
+const LS_GENERATED_AVATARS_KEY = 'cloudchat_generated_avatar_keys';
+const generatedAvatarKeys = {
+  _set: null,
+  _load() {
+    if (!this._set) {
+      try { this._set = new Set(JSON.parse(localStorage.getItem(LS_GENERATED_AVATARS_KEY) || '[]')); }
+      catch { this._set = new Set(); }
+    }
+    return this._set;
+  },
+  has(key) { return this._load().has(key); },
+  add(key) { this._load().add(key); try { localStorage.setItem(LS_GENERATED_AVATARS_KEY, JSON.stringify([...this._set])); } catch {} },
+  delete(key) { this._load().delete(key); try { localStorage.setItem(LS_GENERATED_AVATARS_KEY, JSON.stringify([...this._set])); } catch {} },
+};
 if (typeof window !== 'undefined') {
   window.__cachedAvatarUrls = cachedAvatarUrls;
 }
@@ -333,23 +347,19 @@ export default function App() {
   // 2b. Resolve avatar filename -> blob URL via downloadFile (avoids WebDAV auth popups)
   const resolveAvatarUrl = async (avatarFilename) => {
     if (!avatarFilename) return null;
-    // Local Android URIs cannot be fetched over WebDAV
-    if (avatarFilename.startsWith('content://') || avatarFilename.startsWith('file://')) {
-      return null;
-    }
-    // If it's already a safe displayable URL (data: or https:), return as-is
-    if (avatarFilename.startsWith('data:') || avatarFilename.startsWith('https://') || avatarFilename.startsWith('http://')) {
-      return avatarFilename;
-    }
-    // Return cached blob URL if available in memory
-    // But if it's a generated avatar, try re-fetching from server first (to replace with real one)
-    if (cachedAvatarUrls[avatarFilename] && !generatedAvatarKeys.has(avatarFilename)) {
+    if (avatarFilename.startsWith('content://') || avatarFilename.startsWith('file://')) return null;
+    if (avatarFilename.startsWith('data:') || avatarFilename.startsWith('https://') || avatarFilename.startsWith('http://')) return avatarFilename;
+
+    const isGenerated = generatedAvatarKeys.has(avatarFilename);
+
+    // Return cached memory URL only for real (non-generated) avatars
+    if (cachedAvatarUrls[avatarFilename] && !isGenerated) {
       return cachedAvatarUrls[avatarFilename];
     }
 
-    // Check IndexedDB persistent cache first (instant load on refresh before storage client connects)
-    // Skip IndexedDB cache if this avatar was previously marked as a generated fallback
-    if (!generatedAvatarKeys.has(avatarFilename)) {
+    // Check IndexedDB only if NOT marked as a generated fallback
+    // (generated fallbacks are intentionally NOT stored in IndexedDB to avoid pollution)
+    if (!isGenerated) {
       try {
         const cachedBlob = await getCachedFile(`avatar_${avatarFilename}`);
         if (cachedBlob) {
@@ -358,19 +368,23 @@ export default function App() {
           return url;
         }
       } catch (e) {
-        console.warn('IndexedDB avatar lookup warning:', e);
+        console.warn('[Avatar] IndexedDB lookup warning:', e);
       }
     }
 
-    // Download via storage client if available (handles auth headers internally)
+    // Try to download from server
     const client = activeClientRef.current;
-    if (!client) return null;
+    if (!client) {
+      // No client yet - return existing memory URL if any (may be generated, better than nothing)
+      return cachedAvatarUrls[avatarFilename] || null;
+    }
+
     try {
       const blob = await client.downloadFile(avatarFilename);
       if (blob && blob.size > 0) {
-        // Successfully fetched real avatar from server - clear any generated marker
+        // Real avatar from server: clear generated marker, store in IndexedDB
         generatedAvatarKeys.delete(avatarFilename);
-        cacheFile(`avatar_${avatarFilename}`, blob); // Cache in IndexedDB for future refreshes
+        cacheFile(`avatar_${avatarFilename}`, blob);
         const url = URL.createObjectURL(blob);
         cachedAvatarUrls[avatarFilename] = url;
         return url;
@@ -378,36 +392,35 @@ export default function App() {
     } catch (e) {
       const errMsg = e?.message || String(e);
       const is404 = errMsg.includes('404');
-      console.warn(`Failed to load avatar from server [${is404 ? '404-not-found' : 'network-error'}]:`, avatarFilename, e);
+      console.warn(`[Avatar] fetch failed [${is404 ? '404' : 'network-err'}]:`, avatarFilename);
 
-      // 兜底：生成首字母头像 Blob
       try {
         const fallbackName = avatarFilename.replace(/^avatar_*/, '').replace(/\.jpg$/, '') || 'User';
         const fallbackBlob = await generateInitialAvatarBlob(fallbackName);
         if (fallbackBlob) {
-          cacheFile(`avatar_${avatarFilename}`, fallbackBlob);
           const url = URL.createObjectURL(fallbackBlob);
           cachedAvatarUrls[avatarFilename] = url;
 
           if (is404) {
-            // 文件确实不存在（404）：安全地上传兜底头像到服务器补全
-            client.uploadFile(fallbackBlob, avatarFilename, 'image/jpeg').catch(err => {
-              console.warn('[Avatar Fallback Upload Warning]:', err);
-            });
+            // 文件确实不存在 (404): 缓存并上传补全
+            cacheFile(`avatar_${avatarFilename}`, fallbackBlob);
+            client.uploadFile(fallbackBlob, avatarFilename, 'image/jpeg').catch(err =>
+              console.warn('[Avatar] fallback upload warning:', err));
           } else {
-            // 网络错误/超时/认证失败：仅本地临时使用，标记为临时生成，不上传服务器
-            // 下次 resolveAvatarUrl 会重新尝试从服务器获取真实头像
+            // 网络错误: 仅内存缓存，标记为本地生成，不写 IndexedDB 不上传服务器
+            // 确保旧的污染 IndexedDB 缓存被清除
             generatedAvatarKeys.add(avatarFilename);
-            console.info('[Avatar] Marked as local-generated (will retry from server):', avatarFilename);
+            deleteCachedFile(`avatar_${avatarFilename}`).catch(() => {});
+            console.info('[Avatar] local-only generated (will retry server next call):', avatarFilename);
           }
           return url;
         }
       } catch (genErr) {
-        console.warn('Fallback avatar generation error:', genErr);
+        console.warn('[Avatar] fallback generation error:', genErr);
       }
     }
 
-    return null;
+    return cachedAvatarUrls[avatarFilename] || null;
   };
 
   // 3. Resolve cached media files to Object URLs asynchronously
