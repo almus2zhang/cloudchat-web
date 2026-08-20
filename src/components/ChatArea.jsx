@@ -1961,7 +1961,7 @@ export default function ChatArea({
                                 )}
                                 {isTextOrUnknown && (
                                   <span className={`text-[14.5px] whitespace-pre-wrap break-words leading-relaxed select-text font-normal pr-4 ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}>
-                                    {msg.content || (typeof msg === 'string' ? msg : '')}
+                                    {msg.resolvedText || (msg.isTextFile ? (msg.textPreview || msg.content) : (msg.content || (typeof msg === 'string' ? msg : '')))}
                                   </span>
                                 )}
                                 {msgType === 'LOCATION' && (
@@ -2093,7 +2093,7 @@ export default function ChatArea({
                       >
                         {item.type === 'TEXT' && (
                           /* Text message */
-                          <span>{item.content}</span>
+                          <span>{item.resolvedText || (item.isTextFile ? (item.textPreview || item.content) : item.content)}</span>
                         )}
 
                         {item.type === 'LOCATION' && (

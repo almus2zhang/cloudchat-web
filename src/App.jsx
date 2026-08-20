@@ -423,7 +423,38 @@ export default function App() {
     return cachedAvatarUrls[avatarFilename] || null;
   };
 
-  // 3. Resolve cached media files to Object URLs asynchronously
+  const resolveTextMessageUrl = async (msg) => {
+    const isTextFile = msg.isTextFile || (msg.type === 'TEXT' && msg.content && msg.content.startsWith('text_') && msg.content.endsWith('.txt'));
+    if (!isTextFile) return msg.content;
+    if (msg.resolvedText) return msg.resolvedText;
+
+    const fileName = msg.content;
+    const cacheKey1 = `${msg.id}_${fileName}`;
+    const cacheKey2 = msg.id;
+
+    try {
+      let blob = await getCachedFile(cacheKey1) || await getCachedFile(cacheKey2);
+      if (blob) {
+        const text = await blob.text();
+        return text;
+      }
+
+      const client = activeClientRef.current;
+      if (client) {
+        const text = typeof client.downloadText === 'function' ? await client.downloadText(fileName) : await (await client.downloadFile(fileName)).text();
+        if (text) {
+          const textBlob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+          cacheFile(cacheKey1, textBlob);
+          return text;
+        }
+      }
+    } catch (e) {
+      console.warn('[Text] Failed to download text file:', fileName, e);
+    }
+    return msg.textPreview || msg.content;
+  };
+
+  // 3. Resolve cached media files & offloaded text files asynchronously
   const resolveLocalMediaUrls = async (msgs) => {
     let changed = false;
     const updated = await Promise.all(msgs.map(async (msg) => {
@@ -432,6 +463,12 @@ export default function App() {
         const url = await resolveMediaMessageUrl(msg);
         if (url) {
           msg.url = url;
+          changed = true;
+        }
+      } else if ((msgType === 'TEXT' || msg.isTextFile) && (msg.isTextFile || (msg.content && msg.content.startsWith('text_') && msg.content.endsWith('.txt'))) && !msg.resolvedText) {
+        const text = await resolveTextMessageUrl(msg);
+        if (text && text !== msg.content) {
+          msg.resolvedText = text;
           changed = true;
         }
       }
@@ -988,20 +1025,35 @@ export default function App() {
       })();
 
     } else if (text.trim()) {
+      const isTextOffload = text.length >= 500;
+      const fileName = isTextOffload ? `text_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.txt` : null;
+
       const newMsg = {
         id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
         sender: currentProfile.username,
         senderName: currentProfile.username,
         senderAvatar: currentProfile.avatar || '',
-        content: text,
+        content: isTextOffload ? fileName : text,
         timestamp: Date.now(),
         type: (text.startsWith('[位置] ')) ? 'LOCATION' : 'TEXT',
         isOutgoing: true,
         status: 'SUCCESS',
         folderId: folderId || undefined,
         categories: activeCategory !== 'all' ? [activeCategory] : [],
-        lastModified: Date.now()
+        lastModified: Date.now(),
+        isTextFile: isTextOffload,
+        textPreview: isTextOffload ? text.slice(0, 100) : undefined,
+        resolvedText: text
       };
+
+      if (isTextOffload && activeClientRef.current) {
+        activeClientRef.current.uploadText(text, fileName).catch(err => {
+          console.warn('[Text File Upload Warning]:', err);
+        });
+        const textBlob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        cacheFile(`${newMsg.id}_${fileName}`, textBlob);
+        cacheFile(newMsg.id, textBlob);
+      }
 
       let updatedList = [];
       setMessages(prev => {
