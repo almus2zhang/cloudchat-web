@@ -1963,7 +1963,8 @@ export default function ChatArea({
                                 {isTextOrUnknown && (() => {
                                   const fullText = msg.resolvedText || (msg.isTextFile ? (msg.textPreview || msg.content) : (msg.content || (typeof msg === 'string' ? msg : '')));
                                   const lineCount = (fullText.match(/\n/g) || []).length + 1;
-                                  const isLong = lineCount >= 10 || fullText.length >= 400;
+                                  const estimatedLines = Math.floor(fullText.length / 30);
+                                  const isLong = lineCount >= 10 || estimatedLines >= 10 || fullText.length >= 250;
                                   const isExpanded = expandedTextIds.has(msg.id);
 
                                   return (
@@ -1986,11 +1987,13 @@ export default function ChatArea({
                                               return new Set(next);
                                             });
                                           }}
-                                          className={`text-[12px] font-semibold hover:underline cursor-pointer mt-1 ${
-                                            item.isOutgoing ? 'text-white/90 hover:text-white' : 'text-accentColor hover:opacity-80'
+                                          className={`text-[12px] font-bold cursor-pointer mt-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full transition-all ${
+                                            item.isOutgoing 
+                                              ? 'text-amber-300 hover:text-amber-200 bg-black/25' 
+                                              : 'text-blue-600 hover:text-blue-700 dark:text-amber-400 dark:hover:text-amber-300 bg-blue-500/10 dark:bg-amber-400/10'
                                           }`}
                                         >
-                                          {isExpanded ? '收起' : '展开全文'}
+                                          {isExpanded ? '▲ 收起' : '▼ 展开全文'}
                                         </button>
                                       )}
                                     </div>
@@ -2126,7 +2129,8 @@ export default function ChatArea({
                         {item.type === 'TEXT' && (() => {
                           const fullText = item.resolvedText || (item.isTextFile ? (item.textPreview || item.content) : item.content);
                           const lineCount = (fullText.match(/\n/g) || []).length + 1;
-                          const isLong = lineCount >= 10 || fullText.length >= 400;
+                          const estimatedLines = Math.floor(fullText.length / 30);
+                          const isLong = lineCount >= 10 || estimatedLines >= 10 || fullText.length >= 250;
                           const isExpanded = expandedTextIds.has(item.id);
 
                           return (
@@ -2149,11 +2153,13 @@ export default function ChatArea({
                                       return new Set(next);
                                     });
                                   }}
-                                  className={`text-[12px] font-semibold hover:underline cursor-pointer mt-1 ${
-                                    item.isOutgoing ? 'text-white/90 hover:text-white' : 'text-accentColor hover:opacity-80'
+                                  className={`text-[12px] font-bold cursor-pointer mt-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full transition-all ${
+                                    item.isOutgoing 
+                                      ? 'text-amber-300 hover:text-amber-200 bg-black/25' 
+                                      : 'text-blue-600 hover:text-blue-700 dark:text-amber-400 dark:hover:text-amber-300 bg-blue-500/10 dark:bg-amber-400/10'
                                   }`}
                                 >
-                                  {isExpanded ? '收起' : '展开全文'}
+                                  {isExpanded ? '▲ 收起' : '▼ 展开全文'}
                                 </button>
                               )}
                             </div>
