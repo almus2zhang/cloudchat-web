@@ -43,12 +43,27 @@ export default function DebugLogsModal({ isOpen, onClose, logs = [], onClear, on
               {logs.length} 条记录
             </span>
           </div>
-          <button 
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-bgPrimary text-textMuted hover:text-textPrimary transition-all"
-          >
-            <i className="fa-solid fa-xmark"></i>
-          </button>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-textSecondary font-medium cursor-pointer bg-bgPrimary px-2.5 py-1 rounded-lg border border-borderColor hover:border-accentColor transition-all" title="勾选开启日志，取消勾选停止日志记录">
+              <input 
+                type="checkbox"
+                defaultChecked={localStorage.getItem('cloudchat_web_debug_log_enabled') !== 'false'}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  localStorage.setItem('cloudchat_web_debug_log_enabled', enabled ? 'true' : 'false');
+                  if (window.__setDebugLogsEnabled) window.__setDebugLogsEnabled(enabled);
+                }}
+                className="w-3.5 h-3.5 accent-accentColor cursor-pointer"
+              />
+              <span>记录日志</span>
+            </label>
+            <button 
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-bgPrimary text-textMuted hover:text-textPrimary transition-all"
+            >
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+          </div>
         </div>
 
         {/* Modal Content - Terminal Box */}
