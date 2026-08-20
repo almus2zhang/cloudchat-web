@@ -105,22 +105,11 @@ export default function GuideModal({ isOpen, onClose }) {
               {/* 范围 */}
               <div className="p-3 bg-bgPrimary/40 border border-borderColor/60 rounded-xl flex items-start gap-3">
                 <div className="px-2.5 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
-                  <i className="fa-solid fa-[#00d2ff]"></i> ✓ 范围
+                  <i className="fa-solid fa-square-check"></i> ✓ 范围
                 </div>
                 <div>
                   <p className="font-semibold text-textPrimary">智能区间连续框选</p>
                   <p className="text-[11px] text-textMuted mt-0.5">选中起始消息后，点击“范围”并点击终点消息，智能一次性选中整个区间。</p>
-                </div>
-              </div>
-
-              {/* 隐私/隐藏 */}
-              <div className="p-3 bg-bgPrimary/40 border border-borderColor/60 rounded-xl flex items-start gap-3">
-                <div className="px-2.5 py-1.5 bg-rose-500/10 text-rose-400 border border-rose-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
-                  <i className="fa-solid fa-eye-slash"></i> 隐私
-                </div>
-                <div>
-                  <p className="font-semibold text-textPrimary">移入暗号隐藏空间</p>
-                  <p className="text-[11px] text-textMuted mt-0.5">隐藏选中的敏感内容，需在输入框键入 PIN 码暗号（如 ##1234##）解锁查看。</p>
                 </div>
               </div>
 
