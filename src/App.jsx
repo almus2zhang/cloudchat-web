@@ -9,6 +9,7 @@ import MediaViewer from './components/MediaViewer';
 import DiaryExportModal from './components/DiaryExportModal';
 import InputModal from './components/InputModal';
 import DebugLogsModal from './components/DebugLogsModal';
+import GuideModal from './components/GuideModal';
 import { StorageClient, checkWebLanStatus } from './services/storage';
 import { initDB, cacheFile, getCachedFile, clearAllCache, deleteCachedFile } from './services/db';
 import { generateInitialAvatarBlob } from './utils/avatar';
@@ -48,6 +49,7 @@ export default function App() {
   // Debug Log States
   const [debugLogs, setDebugLogs] = useState([]);
   const [debugModalOpen, setDebugModalOpen] = useState(false);
+  const [guideModalOpen, setGuideModalOpen] = useState(false);
 
   const addDebugLog = (msg) => {
     const timeStr = new Date().toLocaleTimeString();
@@ -1989,6 +1991,7 @@ export default function App() {
         statusDotClass={statusDotClass}
         resolveAvatarUrl={resolveAvatarUrl}
         onOpenDebugLogs={() => setDebugModalOpen(true)}
+        onOpenGuide={() => setGuideModalOpen(true)}
       />
 
       {/* Main Chat Area */}
@@ -2157,6 +2160,12 @@ export default function App() {
         logs={debugLogs}
         onClear={() => setDebugLogs([])}
         onForceSync={() => syncHistory(true)}
+      />
+
+      {/* Guide & Icon Manual Modal */}
+      <GuideModal
+        isOpen={guideModalOpen}
+        onClose={() => setGuideModalOpen(false)}
       />
 
     </div>

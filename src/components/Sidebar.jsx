@@ -18,7 +18,8 @@ export default function Sidebar({
   statusText,
   statusDotClass,
   resolveAvatarUrl,
-  onOpenDebugLogs
+  onOpenDebugLogs,
+  onOpenGuide
 }) {
   const [avatarUrl, setAvatarUrl] = React.useState(null);
 
@@ -139,6 +140,19 @@ export default function Sidebar({
                 activeCategory === 'diary' ? 'bg-accentColor/20 text-accentColor' : 'bg-borderColor/50 text-textMuted'
               }`}>
                 {diaryCount}
+              </span>
+            </li>
+
+            {/* 说明 (Guide) tab */}
+            <li 
+              onClick={() => { onOpenGuide && onOpenGuide(); onClose(); }}
+              className="flex items-center justify-between px-4 py-2.5 text-xs font-medium text-textSecondary hover:bg-white/5 border-l-2 border-transparent cursor-pointer transition-all"
+            >
+              <span className="flex items-center gap-2.5">
+                <i className="fa-solid fa-circle-question text-sm text-accentColor"></i> 说明
+              </span>
+              <span className="text-[10px] font-medium text-accentColor bg-accentColor/10 px-2 py-0.5 rounded-full">
+                指南
               </span>
             </li>
           </ul>
