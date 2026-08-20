@@ -695,42 +695,64 @@ class WebDavStorageClient {
 
     async getLastModified(fileName) {
         const url = this.getUrl(fileName);
+
+        const parseDate = (val) => {
+            if (!val) return 0;
+            const t = new Date(val).getTime();
+            return (t > 0 && !isNaN(t)) ? t : 0;
+        };
+
+        const getHeaderVal = (hObj, key) => {
+            if (!hObj) return null;
+            try {
+                if (typeof hObj.get === 'function') {
+                    return hObj.get(key) || hObj.get(key.toLowerCase()) || hObj.get(key.toUpperCase());
+                }
+                return hObj[key] || hObj[key.toLowerCase()] || hObj[key.toUpperCase()] || null;
+            } catch (_) {
+                return null;
+            }
+        };
+
+        // 1. 首选 PROPFIND XML 属性查询 (权威 RFC 4918 方法，完全避开 CORS Header 剥离问题)
+        try {
+            const propBody = '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:getlastmodified/></D:prop></D:propfind>';
+            const response = await fetchWithTimeout(url, {
+                method: 'PROPFIND',
+                headers: { 
+                    'Authorization': this.getAuthHeader(), 
+                    'Depth': '0',
+                    'Content-Type': 'application/xml; charset=utf-8'
+                },
+                body: propBody
+            }, 8000);
+
+            if (response.ok || response.status === 207) {
+                const text = await response.text();
+                const match = text.match(/<[a-zA-Z0-9:]*getlastmodified[^>]*>(.*?)<\/[a-zA-Z0-9:]*getlastmodified>/i);
+                if (match && match[1]) {
+                    const tXml = parseDate(match[1].trim());
+                    if (tXml > 0) return tXml;
+                }
+                const lmHeader = getHeaderVal(response.headers, 'Last-Modified');
+                const tHeader = parseDate(lmHeader);
+                if (tHeader > 0) return tHeader;
+            }
+        } catch (e) {}
+
+        // 2. 备用 HEAD 请求
         try {
             const headRes = await fetchWithTimeout(url, {
                 method: 'HEAD',
                 headers: { 'Authorization': this.getAuthHeader() }
             }, 6000);
             if (headRes.ok) {
-                const lm = headRes.headers.get('Last-Modified') || headRes.headers.get('last-modified');
-                if (lm) {
-                    const t = new Date(lm).getTime();
-                    if (t > 0) return t;
-                }
-                return Date.now();
+                const lm = getHeaderVal(headRes.headers, 'Last-Modified');
+                const t = parseDate(lm);
+                if (t > 0) return t;
             }
         } catch (e) {}
 
-        try {
-            const response = await fetchWithTimeout(url, {
-                method: 'PROPFIND',
-                headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
-            }, 8000);
-            if (response.ok) {
-                const lmHeader = response.headers.get('Last-Modified') || response.headers.get('last-modified');
-                if (lmHeader) {
-                    const t = new Date(lmHeader).getTime();
-                    if (t > 0) return t;
-                }
-                const text = await response.text();
-                const match = text.match(/<[a-zA-Z0-9:]*getlastmodified[^>]*>(.*?)<\/[a-zA-Z0-9:]*getlastmodified>/i);
-                if (match && match[1]) {
-                    const dateStr = match[1];
-                    const t = new Date(dateStr).getTime();
-                    if (t > 0) return t;
-                }
-                return Date.now();
-            }
-        } catch (e) {}
         return 0;
     }
 
