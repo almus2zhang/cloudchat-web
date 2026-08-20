@@ -76,6 +76,7 @@ export default function ChatArea({
   // Cache of resolved avatar blob URLs keyed by raw avatar value (filename or data: URL)
   const [avatarBlobUrls, setAvatarBlobUrls] = useState({});
   const [expandedFileIds, setExpandedFileIds] = useState(new Set());
+  const [expandedTextIds, setExpandedTextIds] = useState(new Set());
 
   // Resolve all unique avatar values in current messages to displayable URLs
   useEffect(() => {
@@ -1959,11 +1960,42 @@ export default function ChatArea({
                                     <i className={`fa-solid fa-circle-check ${item.isOutgoing ? 'text-white' : 'text-accentColor'}`}></i>
                                   </div>
                                 )}
-                                {isTextOrUnknown && (
-                                  <span className={`text-[14.5px] whitespace-pre-wrap break-words leading-relaxed select-text font-normal pr-4 ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}>
-                                    {msg.resolvedText || (msg.isTextFile ? (msg.textPreview || msg.content) : (msg.content || (typeof msg === 'string' ? msg : '')))}
-                                  </span>
-                                )}
+                                {isTextOrUnknown && (() => {
+                                  const fullText = msg.resolvedText || (msg.isTextFile ? (msg.textPreview || msg.content) : (msg.content || (typeof msg === 'string' ? msg : '')));
+                                  const lineCount = (fullText.match(/\n/g) || []).length + 1;
+                                  const isLong = lineCount >= 10 || fullText.length >= 400;
+                                  const isExpanded = expandedTextIds.has(msg.id);
+
+                                  return (
+                                    <div className="flex flex-col items-start pr-4">
+                                      <span
+                                        style={isLong && !isExpanded ? { display: '-webkit-box', WebkitLineClamp: 10, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}}
+                                        className={`text-[14.5px] whitespace-pre-wrap break-words leading-relaxed select-text font-normal ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}
+                                      >
+                                        {fullText}
+                                      </span>
+                                      {isLong && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setExpandedTextIds(prev => {
+                                              const next = new Set(prev);
+                                              if (next.has(msg.id)) next.delete(msg.id);
+                                              else next.add(msg.id);
+                                              return new Set(next);
+                                            });
+                                          }}
+                                          className={`text-[12px] font-semibold hover:underline cursor-pointer mt-1 ${
+                                            item.isOutgoing ? 'text-white/90 hover:text-white' : 'text-accentColor hover:opacity-80'
+                                          }`}
+                                        >
+                                          {isExpanded ? '收起' : '展开全文'}
+                                        </button>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                                 {msgType === 'LOCATION' && (
                                   <div className={`flex items-center gap-1.5 text-xs py-0.5 pr-4 ${item.isOutgoing ? 'text-white/90' : 'text-textSecondary'}`}>
                                     <i className={`fa-solid fa-location-dot text-sm shrink-0 ${item.isOutgoing ? 'text-white' : 'text-red-500'}`}></i>
@@ -2091,10 +2123,42 @@ export default function ChatArea({
                               }`
                         }`}
                       >
-                        {item.type === 'TEXT' && (
-                          /* Text message */
-                          <span>{item.resolvedText || (item.isTextFile ? (item.textPreview || item.content) : item.content)}</span>
-                        )}
+                        {item.type === 'TEXT' && (() => {
+                          const fullText = item.resolvedText || (item.isTextFile ? (item.textPreview || item.content) : item.content);
+                          const lineCount = (fullText.match(/\n/g) || []).length + 1;
+                          const isLong = lineCount >= 10 || fullText.length >= 400;
+                          const isExpanded = expandedTextIds.has(item.id);
+
+                          return (
+                            <div className="flex flex-col items-start">
+                              <span
+                                style={isLong && !isExpanded ? { display: '-webkit-box', WebkitLineClamp: 10, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}}
+                                className="whitespace-pre-wrap break-words leading-relaxed select-text font-normal"
+                              >
+                                {fullText}
+                              </span>
+                              {isLong && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedTextIds(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(item.id)) next.delete(item.id);
+                                      else next.add(item.id);
+                                      return new Set(next);
+                                    });
+                                  }}
+                                  className={`text-[12px] font-semibold hover:underline cursor-pointer mt-1 ${
+                                    item.isOutgoing ? 'text-white/90 hover:text-white' : 'text-accentColor hover:opacity-80'
+                                  }`}
+                                >
+                                  {isExpanded ? '收起' : '展开全文'}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {item.type === 'LOCATION' && (
                           /* Location Card */
