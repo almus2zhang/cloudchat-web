@@ -5,6 +5,7 @@ import { getCachedFile, cacheFile } from '../services/db';
 import CalendarModal from './CalendarModal';
 import InputModal from './InputModal';
 import { getInitialAvatar } from '../utils/avatar';
+import { openExternalLink } from '../utils/openLink';
 
 const logDebug = (msg) => {
   if (typeof window !== 'undefined' && window.__addDebugLog) {
@@ -1623,15 +1624,13 @@ export default function ChatArea({
                     </div>
 
                     <div className="flex items-center gap-2 pt-1">
-                      <a
-                        href={file.webUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 py-1 px-2.5 rounded-lg text-[11px] font-medium bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/25 transition-all text-center flex items-center justify-center gap-1.5"
+                      <button
+                        onClick={() => openExternalLink(file.webUrl)}
+                        className="flex-1 py-1 px-2.5 rounded-lg text-[11px] font-medium bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/25 transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <i className="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
                         <span>打开页面</span>
-                      </a>
+                      </button>
                       <button
                         onClick={() => setPreviewWebUrl(file.webUrl)}
                         className="py-1 px-2.5 rounded-lg text-[11px] font-medium bg-bgPrimary border border-borderColor text-textSecondary hover:text-textPrimary hover:bg-white/5 transition-all flex items-center gap-1"

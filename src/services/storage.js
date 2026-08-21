@@ -776,7 +776,7 @@ class WebDavStorageClient {
 
         for (const targetUrl of diaryDirUrls) {
             try {
-                const response = await fetch(targetUrl, {
+                const response = await fetchWithTimeout(targetUrl, {
                     method: 'PROPFIND',
                     headers: { 
                         'Authorization': this.getAuthHeader(), 
@@ -819,7 +819,7 @@ class WebDavStorageClient {
                         let foundIndex = false;
 
                         try {
-                            const subRes = await fetch(subDirUrl, {
+                            const subRes = await fetchWithTimeout(subDirUrl, {
                                 method: 'PROPFIND',
                                 headers: { 'Authorization': this.getAuthHeader(), 'Depth': '1' }
                             });

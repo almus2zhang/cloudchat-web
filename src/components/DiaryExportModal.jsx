@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { generateDiaryHtml } from '../utils/diaryGenerator';
+import { openExternalLink } from '../utils/openLink';
 
 export default function DiaryExportModal({
   isOpen,
@@ -229,14 +230,12 @@ export default function DiaryExportModal({
               </div>
 
               <div className="flex items-center justify-center gap-3 pt-2 flex-wrap">
-                <a
-                  href={resultUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-5 py-2.5 bg-accentColor hover:bg-accentColor/90 text-white font-semibold text-xs rounded-xl shadow-lg transition-all flex items-center gap-2"
+                <button
+                  onClick={() => openExternalLink(resultUrl)}
+                  className="px-5 py-2.5 bg-accentColor hover:bg-accentColor/90 text-white font-semibold text-xs rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer"
                 >
                   <i className="fa-solid fa-arrow-up-right-from-square"></i> 打开预览日记网页
-                </a>
+                </button>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(resultUrl);
