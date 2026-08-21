@@ -67,7 +67,7 @@ export default function Sidebar({
         {/* Header / Logo */}
         <div className="h-14 border-b border-borderColor flex items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <i className="fa-solid fa-cloud-arrow-up text-accentColor text-lg"></i>
+            <img src="/favicon.png" alt="CloudChat Logo" className="w-6 h-6 rounded-md object-contain" />
             <h1 className="font-bold text-textPrimary tracking-tight text-base">CloudChat</h1>
           </div>
           <button 
