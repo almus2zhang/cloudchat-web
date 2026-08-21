@@ -1,0 +1,49 @@
+name: Build & Deploy Web Dist to GitHub Pages
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+# 设置 GITHUB_TOKEN 权限以允许部署到 GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 限制同一时间内只有一个部署任务运行
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 检出代码 (Checkout)
+        uses: actions/checkout@v4
+
+      - name: 🟢 设置 Node.js (Setup Node.js)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 安装依赖 (Install dependencies)
+        run: npm ci
+
+      - name: 🛠️ 编译打包 (Build Web Dist)
+        run: npm run build
+
+      - name: 📤 配置 GitHub Pages 上传产物 (Upload artifact for Pages)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+      - name: 🚀 部署到 GitHub Pages (Deploy to GitHub Pages)
+        id: deployment
+        uses: actions/deploy-pages@v4
