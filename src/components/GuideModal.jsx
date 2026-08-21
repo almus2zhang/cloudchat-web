@@ -14,7 +14,7 @@ export default function GuideModal({ isOpen, onClose }) {
             </div>
             <div>
               <h2 className="font-bold text-textPrimary text-sm">CloudChat 多选工具栏图标使用说明</h2>
-              <p className="text-[11px] text-textMuted">批量操作与图标含义速查</p>
+              <p className="text-[11px] text-textMuted">批量操作与工具栏图标一览表</p>
             </div>
           </div>
           <button 
@@ -31,7 +31,7 @@ export default function GuideModal({ isOpen, onClose }) {
             
             {/* 打包 */}
             <div className="p-3 bg-bgPrimary/40 border border-borderColor/60 rounded-xl flex items-start gap-3">
-              <div className="px-2.5 py-1.5 bg-sky-500/10 text-sky-400 border border-sky-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
+              <div className="h-8 px-2.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
                 <i className="fa-solid fa-folder-plus"></i> 打包
               </div>
               <div>
@@ -42,8 +42,8 @@ export default function GuideModal({ isOpen, onClose }) {
 
             {/* 移入 */}
             <div className="p-3 bg-bgPrimary/40 border border-borderColor/60 rounded-xl flex items-start gap-3">
-              <div className="px-2.5 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
-                <i className="fa-solid fa-folder-arrow-right"></i> 移入
+              <div className="h-8 px-2.5 bg-sky-500/10 text-sky-400 border border-sky-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
+                <i className="fa-solid fa-folder-open"></i> 移入
               </div>
               <div>
                 <p className="font-semibold text-textPrimary">移入已有文件夹</p>
@@ -53,7 +53,7 @@ export default function GuideModal({ isOpen, onClose }) {
 
             {/* 合并 */}
             <div className="p-3 bg-bgPrimary/40 border border-borderColor/60 rounded-xl flex items-start gap-3">
-              <div className="px-2.5 py-1.5 bg-purple-500/10 text-purple-400 border border-purple-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
+              <div className="h-8 px-2.5 bg-purple-500/10 text-purple-400 border border-purple-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
                 <i className="fa-solid fa-object-group"></i> 合并
               </div>
               <div>
@@ -64,7 +64,7 @@ export default function GuideModal({ isOpen, onClose }) {
 
             {/* 拆散 */}
             <div className="p-3 bg-bgPrimary/40 border border-borderColor/60 rounded-xl flex items-start gap-3">
-              <div className="px-2.5 py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
+              <div className="h-8 px-2.5 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
                 <i className="fa-solid fa-object-ungroup"></i> 拆散
               </div>
               <div>
@@ -75,7 +75,7 @@ export default function GuideModal({ isOpen, onClose }) {
 
             {/* 日记 */}
             <div className="p-3 bg-bgPrimary/40 border border-borderColor/60 rounded-xl flex items-start gap-3">
-              <div className="px-2.5 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
+              <div className="h-8 px-2.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
                 <i className="fa-solid fa-book-bookmark"></i> 日记
               </div>
               <div>
@@ -86,7 +86,7 @@ export default function GuideModal({ isOpen, onClose }) {
 
             {/* 下载 */}
             <div className="p-3 bg-bgPrimary/40 border border-borderColor/60 rounded-xl flex items-start gap-3">
-              <div className="px-2.5 py-1.5 bg-teal-500/10 text-teal-400 border border-teal-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
+              <div className="h-8 px-2.5 bg-teal-500/10 text-teal-400 border border-teal-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
                 <i className="fa-solid fa-download"></i> 下载
               </div>
               <div>
@@ -97,7 +97,7 @@ export default function GuideModal({ isOpen, onClose }) {
 
             {/* 范围 */}
             <div className="p-3 bg-bgPrimary/40 border border-borderColor/60 rounded-xl flex items-start gap-3">
-              <div className="px-2.5 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
+              <div className="h-8 px-2.5 bg-accentColor/10 text-accentColor border border-accentColor/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
                 <i className="fa-solid fa-square-check"></i> ✓ 范围
               </div>
               <div>
@@ -108,7 +108,7 @@ export default function GuideModal({ isOpen, onClose }) {
 
             {/* 删除 */}
             <div className="p-3 bg-bgPrimary/40 border border-borderColor/60 rounded-xl flex items-start gap-3">
-              <div className="px-2.5 py-1.5 bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
+              <div className="h-8 px-2.5 bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
                 <i className="fa-solid fa-trash-can"></i> 删除
               </div>
               <div>
@@ -119,7 +119,7 @@ export default function GuideModal({ isOpen, onClose }) {
 
             {/* 取消 */}
             <div className="p-3 bg-bgPrimary/40 border border-borderColor/60 rounded-xl flex items-start gap-3">
-              <div className="px-2.5 py-1.5 bg-gray-500/10 text-gray-400 border border-gray-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
+              <div className="h-8 px-2.5 bg-gray-500/10 text-gray-400 border border-gray-500/30 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5">
                 <i className="fa-solid fa-xmark"></i> 取消
               </div>
               <div>

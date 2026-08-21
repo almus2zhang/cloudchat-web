@@ -52,6 +52,7 @@ export default function App() {
   const [guideModalOpen, setGuideModalOpen] = useState(false);
 
   const addDebugLog = (msg) => {
+    if (localStorage.getItem('cloudchat_web_debug_log_enabled') === 'false') return;
     const timeStr = new Date().toLocaleTimeString();
     const logLine = `[${timeStr}] ${msg}`;
     console.log(`[CloudChat Debug] ${logLine}`);
