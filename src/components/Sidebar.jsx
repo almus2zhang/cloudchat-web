@@ -1,5 +1,6 @@
 import React from 'react';
 import { getInitialAvatar } from '../utils/avatar';
+import logoImg from '../assets/icon.png';
 
 export default function Sidebar({ 
   isOpen, 
@@ -67,7 +68,7 @@ export default function Sidebar({
         {/* Header / Logo */}
         <div className="h-14 border-b border-borderColor flex items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <img src="/favicon.png" alt="CloudChat Logo" className="w-6 h-6 rounded-md object-contain" />
+            <img src={logoImg} alt="CloudChat Logo" className="w-6 h-6 rounded-md object-contain" />
             <h1 className="font-bold text-textPrimary tracking-tight text-base">CloudChat</h1>
           </div>
           <button 
