@@ -8,6 +8,7 @@ export default function Sidebar({
   profiles,
   activeProfileId,
   currentProfile,
+  onSwitchProfile,
   activeCategory,
   onSwitchCategory,
   onOpenSettings,
@@ -106,24 +107,61 @@ export default function Sidebar({
         {/* Main Section Navigation Items */}
         <div className="flex-1 overflow-y-auto py-2">
           <ul className="flex flex-col">
-            {/* All Messages tab */}
-            <li 
-              onClick={() => { onSwitchCategory('all'); onClose(); }}
-              className={`flex items-center justify-between px-4 py-2.5 text-xs font-medium cursor-pointer transition-all ${
-                activeCategory === 'all' 
-                  ? 'bg-accentColor/10 text-accentColor border-l-2 border-accentColor font-semibold' 
-                  : 'text-textSecondary hover:bg-white/5 border-l-2 border-transparent'
-              }`}
-            >
-              <span className="flex items-center gap-2.5">
-                <i className="fa-solid fa-layer-group text-sm"></i> 全部消息
-              </span>
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                activeCategory === 'all' ? 'bg-accentColor/20 text-accentColor' : 'bg-borderColor/50 text-textMuted'
-              }`}>
-                {allVisibleCount}
-              </span>
-            </li>
+            {/* 配置名列表 (Replaces 全部消息) */}
+            {Array.isArray(profiles) && profiles.length > 0 ? (
+              profiles.map(p => {
+                const isCurrent = p.id === activeProfileId;
+                const displayName = p.name || p.username || '未命名配置';
+                return (
+                  <li 
+                    key={p.id}
+                    onClick={() => {
+                      if (onSwitchProfile) onSwitchProfile(p.id);
+                      if (onSwitchCategory) onSwitchCategory('all');
+                      onClose();
+                    }}
+                    className={`flex items-center justify-between px-4 py-2.5 text-xs font-medium cursor-pointer transition-all ${
+                      isCurrent && activeCategory === 'all'
+                        ? 'bg-accentColor/10 text-accentColor border-l-2 border-accentColor font-semibold' 
+                        : isCurrent
+                          ? 'bg-white/5 text-textPrimary border-l-2 border-accentColor/50 font-medium'
+                          : 'text-textSecondary hover:bg-white/5 border-l-2 border-transparent'
+                    }`}
+                    title={`切换到配置: ${displayName}`}
+                  >
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
+                      <i className={`fa-solid fa-server text-sm shrink-0 ${isCurrent ? 'text-accentColor' : 'text-textMuted'}`}></i>
+                      <span className="truncate">{displayName}</span>
+                    </span>
+                    {isCurrent && (
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                        activeCategory === 'all' ? 'bg-accentColor/20 text-accentColor' : 'bg-borderColor/50 text-textMuted'
+                      }`}>
+                        {allVisibleCount}
+                      </span>
+                    )}
+                  </li>
+                );
+              })
+            ) : (
+              <li 
+                onClick={() => { onSwitchCategory('all'); onClose(); }}
+                className={`flex items-center justify-between px-4 py-2.5 text-xs font-medium cursor-pointer transition-all ${
+                  activeCategory === 'all' 
+                    ? 'bg-accentColor/10 text-accentColor border-l-2 border-accentColor font-semibold' 
+                    : 'text-textSecondary hover:bg-white/5 border-l-2 border-transparent'
+                }`}
+              >
+                <span className="flex items-center gap-2.5">
+                  <i className="fa-solid fa-layer-group text-sm"></i> 全部消息
+                </span>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                  activeCategory === 'all' ? 'bg-accentColor/20 text-accentColor' : 'bg-borderColor/50 text-textMuted'
+                }`}>
+                  {allVisibleCount}
+                </span>
+              </li>
+            )}
 
             {/* 日记 (Diary) tab */}
             <li 

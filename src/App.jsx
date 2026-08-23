@@ -1971,6 +1971,16 @@ export default function App() {
     document.querySelectorAll('video').forEach(v => v.pause());
   };
 
+  const handleSwitchProfile = (profileId) => {
+    if (profileId === activeProfileId) {
+      setActiveCategory('all');
+      return;
+    }
+    setActiveProfileId(profileId);
+    localStorage.setItem('cloudchat_web_active_profile_id', profileId);
+    setActiveCategory('all');
+  };
+
   return (
     <div className="flex h-[100dvh] w-screen overflow-hidden bg-bgPrimary select-none relative">
         {/* Sidebar Component */}
@@ -1980,6 +1990,7 @@ export default function App() {
         profiles={profiles}
         activeProfileId={activeProfileId}
         currentProfile={currentProfile}
+        onSwitchProfile={handleSwitchProfile}
         activeCategory={activeCategory}
         onSwitchCategory={setActiveCategory}
         onOpenSettings={() => setSettingsOpen(true)}
