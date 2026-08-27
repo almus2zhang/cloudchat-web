@@ -1071,6 +1071,46 @@ export default function App() {
     }
   };
 
+  const handleInsertGroupedMessage = async (targetAudioMsg, textContent) => {
+    if (!currentProfile || !targetAudioMsg) return;
+
+    const targetGroupId = targetAudioMsg.groupId || `group_${targetAudioMsg.timestamp || Date.now()}`;
+    const newTextMsg = {
+      id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
+      sender: targetAudioMsg.sender || currentProfile.username,
+      senderName: targetAudioMsg.senderName || currentProfile.username,
+      senderAvatar: targetAudioMsg.senderAvatar || currentProfile.avatar || '',
+      content: textContent,
+      timestamp: targetAudioMsg.timestamp || Date.now(),
+      type: 'TEXT',
+      isOutgoing: targetAudioMsg.isOutgoing,
+      status: 'SUCCESS',
+      folderId: targetAudioMsg.folderId,
+      categories: targetAudioMsg.categories || [],
+      groupId: targetGroupId,
+      lastModified: Date.now()
+    };
+
+    setMessages(prev => {
+      const updatedList = prev.map(m => {
+        if (m.id === targetAudioMsg.id) {
+          return { ...m, groupId: targetGroupId, lastModified: Date.now() };
+        }
+        return m;
+      });
+
+      const audioIdx = updatedList.findIndex(m => m.id === targetAudioMsg.id);
+      if (audioIdx !== -1) {
+        updatedList.splice(audioIdx + 1, 0, newTextMsg);
+      } else {
+        updatedList.push(newTextMsg);
+      }
+
+      pushHistoryToCloud(updatedList);
+      return [...updatedList];
+    });
+  };
+
   const handleRetryMessage = async (messageId) => {
     if (!currentProfile || !activeClientRef.current) return;
     const client = activeClientRef.current;
@@ -2045,6 +2085,7 @@ export default function App() {
         resolveAvatarUrl={resolveAvatarUrl}
         isSyncing={isSyncing}
         onOpenDebugLogs={() => setDebugModalOpen(true)}
+        onInsertGroupedMessage={handleInsertGroupedMessage}
       />
 
       {/* Settings Modal */}

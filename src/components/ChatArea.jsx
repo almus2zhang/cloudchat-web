@@ -4,8 +4,10 @@ import { createDownloadState } from '../services/storage';
 import { getCachedFile, cacheFile } from '../services/db';
 import CalendarModal from './CalendarModal';
 import InputModal from './InputModal';
+import MarkdownView from './MarkdownView';
 import { getInitialAvatar } from '../utils/avatar';
 import { openExternalLink } from '../utils/openLink';
+import { getAiConfig, transcribeAndSummarizeAudio } from '../services/aiService';
 
 const logDebug = (msg) => {
   if (typeof window !== 'undefined' && window.__addDebugLog) {
@@ -68,7 +70,8 @@ export default function ChatArea({
   storageClient,
   resolveAvatarUrl,
   isSyncing,
-  activeUploads
+  activeUploads,
+  onInsertGroupedMessage
 }) {
   const [inputText, setInputText] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -78,6 +81,95 @@ export default function ChatArea({
   const [avatarBlobUrls, setAvatarBlobUrls] = useState({});
   const [expandedFileIds, setExpandedFileIds] = useState(new Set());
   const [expandedTextIds, setExpandedTextIds] = useState(new Set());
+
+  // AI Voice Transcription & Summary State
+  const [aiProcessingMsgId, setAiProcessingMsgId] = useState(null);
+  const [aiProgressText, setAiProgressText] = useState('');
+  const [aiMenuMsgId, setAiMenuMsgId] = useState(null);
+  const aiAbortControllerRef = useRef(null);
+
+  const handleStartAi = async (msg, transcribeOnly = false) => {
+    const config = getAiConfig();
+    const isGemini = (config.provider || '').toLowerCase() === 'gemini';
+    const hasKey = isGemini ? !!config.geminiApiKey : !!config.openaiApiKey;
+
+    if (!hasKey) {
+      alert('请先前往【设置】->【AI 大模型】配置 API Key 后再使用语音识别与总结功能。');
+      return;
+    }
+
+    // Resolve audio blob
+    let audioBlob = null;
+    try {
+      if (msg.url && (msg.url.startsWith('blob:') || msg.url.startsWith('data:'))) {
+        const res = await fetch(msg.url);
+        audioBlob = await res.blob();
+      }
+    } catch (_) {}
+
+    if (!audioBlob && msg.id) {
+      try {
+        const cached = await getCachedFile(msg.id);
+        if (cached) audioBlob = cached;
+      } catch (_) {}
+    }
+
+    if (!audioBlob && storageClient && msg.content) {
+      try {
+        audioBlob = await storageClient.downloadFile(msg.content);
+      } catch (_) {}
+    }
+
+    if (!audioBlob || audioBlob.size === 0) {
+      alert('未能获取到音频文件数据，请稍后重试');
+      return;
+    }
+
+    const controller = new AbortController();
+    aiAbortControllerRef.current = controller;
+    setAiProcessingMsgId(msg.id);
+    setAiProgressText(transcribeOnly ? '1/2 正在语音识别转写...' : '1/2 正在语音识别转写...');
+
+    try {
+      const summaryResult = await transcribeAndSummarizeAudio({
+        audioBlob,
+        config,
+        transcribeOnly,
+        onProgress: (txt) => setAiProgressText(txt),
+        signal: controller.signal
+      });
+
+      if (summaryResult && summaryResult.trim() && onInsertGroupedMessage) {
+        onInsertGroupedMessage(msg, summaryResult.trim());
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        alert(`AI 处理失败: ${err.message}`);
+      }
+    } finally {
+      setAiProcessingMsgId(null);
+      setAiProgressText('');
+      aiAbortControllerRef.current = null;
+    }
+  };
+
+  const handleCancelAi = () => {
+    if (aiAbortControllerRef.current) {
+      aiAbortControllerRef.current.abort();
+    }
+    setAiProcessingMsgId(null);
+    setAiProgressText('');
+    aiAbortControllerRef.current = null;
+  };
+
+  // Close AI Menu on outside click
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setAiMenuMsgId(null);
+    };
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, []);
 
   // Resolve all unique avatar values in current messages to displayable URLs
   useEffect(() => {
@@ -1961,19 +2053,27 @@ export default function ChatArea({
                                 )}
                                 {isTextOrUnknown && (() => {
                                   const fullText = msg.resolvedText || (msg.isTextFile ? (msg.textPreview || msg.content) : (msg.content || (typeof msg === 'string' ? msg : '')));
-                                  const lineCount = (fullText.match(/\n/g) || []).length + 1;
-                                  const estimatedLines = Math.floor(fullText.length / 30);
-                                  const isLong = lineCount >= 10 || estimatedLines >= 10 || fullText.length >= 250;
+                                  const isMarkdown = fullText.startsWith('<!--md-->') || fullText.startsWith('[MD]');
+                                  const cleanText = fullText.replace(/^<!--md-->/, '').replace(/^\[MD\]/, '');
+                                  const lineCount = (cleanText.match(/\n/g) || []).length + 1;
+                                  const estimatedLines = Math.floor(cleanText.length / 30);
+                                  const isLong = lineCount > 3 || estimatedLines > 3 || cleanText.length > 80;
                                   const isExpanded = expandedTextIds.has(msg.id);
 
                                   return (
-                                    <div className="flex flex-col items-start pr-4">
-                                      <span
-                                        style={isLong && !isExpanded ? { display: '-webkit-box', WebkitLineClamp: 10, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}}
-                                        className={`text-[14.5px] whitespace-pre-wrap break-words leading-relaxed select-text font-normal ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}
-                                      >
-                                        {fullText}
-                                      </span>
+                                    <div className="flex flex-col items-start pr-4 w-full">
+                                      {isMarkdown ? (
+                                        <div className={`w-full select-text ${isLong && !isExpanded ? 'max-h-[4.8rem] overflow-hidden relative' : ''}`}>
+                                          <MarkdownView content={fullText} isOutgoing={item.isOutgoing} />
+                                        </div>
+                                      ) : (
+                                        <span
+                                          style={isLong && !isExpanded ? { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}}
+                                          className={`text-[14.5px] whitespace-pre-wrap break-words leading-relaxed select-text font-normal ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}
+                                        >
+                                          {fullText}
+                                        </span>
+                                      )}
                                       {isLong && (
                                         <button
                                           type="button"
@@ -2014,26 +2114,107 @@ export default function ChatArea({
                                   const loadedDur = audioProgress[msg.id]?.duration;
                                   const fallbackDur = getDurationFromMsg(msg);
                                   const totalDuration = (loadedDur && !isNaN(loadedDur) && isFinite(loadedDur) && loadedDur > 0) ? loadedDur : fallbackDur;
+                                  const isAiProcessing = aiProcessingMsgId === msg.id;
+
                                   return (
-                                    <div className="flex items-center gap-2 text-xs my-0.5 pr-4">
-                                      <audio 
-                                        ref={el => audioRefs.current[msg.id] = el}
-                                        src={msg.url}
-                                        onLoadedMetadata={(e) => handleLoadedAudioMetadata(msg.id, e)}
-                                        onTimeUpdate={() => handleAudioTimeUpdate(msg.id)}
-                                        onEnded={() => setAudioPlayingId(null)}
-                                        preload="metadata"
-                                      />
-                                      <button 
-                                        onClick={(e) => { e.stopPropagation(); handleToggleAudio(msg.id); }}
-                                        className={`px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shrink-0 shadow-sm hover:opacity-90 cursor-pointer font-medium text-xs ${
-                                          item.isOutgoing ? 'bg-white text-accentColor' : 'bg-[#07C160] text-white'
-                                        }`}
-                                      >
-                                        <i className={`fa-solid ${audioPlayingId === msg.id ? 'fa-pause text-xs' : 'fa-play text-xs'}`}></i>
-                                        <span>{totalDuration ? `${Math.round(totalDuration)}s` : '语音'}</span>
-                                      </button>
-                                      {msg.caption && <span className={`text-[11px] ml-1 truncate ${item.isOutgoing ? 'text-white/80' : 'text-textMuted'}`}>{msg.caption}</span>}
+                                    <div className="flex flex-col gap-1.5 my-0.5 pr-4 w-full">
+                                      <div className="flex items-center gap-2 text-xs">
+                                        <audio 
+                                          ref={el => audioRefs.current[msg.id] = el}
+                                          src={msg.url}
+                                          onLoadedMetadata={(e) => handleLoadedAudioMetadata(msg.id, e)}
+                                          onTimeUpdate={() => handleAudioTimeUpdate(msg.id)}
+                                          onEnded={() => setAudioPlayingId(null)}
+                                          preload="metadata"
+                                        />
+                                        <button 
+                                          onClick={(e) => { e.stopPropagation(); handleToggleAudio(msg.id); }}
+                                          className={`px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shrink-0 shadow-sm hover:opacity-90 cursor-pointer font-medium text-xs ${
+                                            item.isOutgoing ? 'bg-white text-accentColor' : 'bg-[#07C160] text-white'
+                                          }`}
+                                        >
+                                          <i className={`fa-solid ${audioPlayingId === msg.id ? 'fa-pause text-xs' : 'fa-play text-xs'}`}></i>
+                                          <span>{totalDuration ? `${Math.round(totalDuration)}s` : '语音'}</span>
+                                        </button>
+
+                                        {/* AI Action Menu Button */}
+                                        <div className="relative">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setAiMenuMsgId(aiMenuMsgId === msg.id ? null : msg.id);
+                                            }}
+                                            disabled={isAiProcessing}
+                                            className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all ${
+                                              item.isOutgoing
+                                                ? 'bg-white/20 hover:bg-white/30 text-amber-200'
+                                                : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 dark:text-amber-400 border border-amber-500/30'
+                                            }`}
+                                            title="AI 语音识别与总结"
+                                          >
+                                            <i className="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
+                                            <span>AI 总结</span>
+                                          </button>
+
+                                          {/* AI Menu Popover */}
+                                          {aiMenuMsgId === msg.id && (
+                                            <div 
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="absolute left-0 top-full mt-1 z-30 bg-bgSecondary border border-borderColor rounded-xl shadow-xl py-1 min-w-[140px] animate-scale-in"
+                                            >
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setAiMenuMsgId(null);
+                                                  handleStartAi(msg, false);
+                                                }}
+                                                className="w-full px-3 py-2 text-left text-xs font-semibold text-textPrimary hover:bg-white/5 flex items-center gap-2 transition-colors"
+                                              >
+                                                <i className="fa-solid fa-wand-magic-sparkles text-amber-400"></i>
+                                                <span>✨ AI 语音总结</span>
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setAiMenuMsgId(null);
+                                                  handleStartAi(msg, true);
+                                                }}
+                                                className="w-full px-3 py-2 text-left text-xs font-semibold text-textPrimary hover:bg-white/5 flex items-center gap-2 transition-colors border-t border-borderColor/40"
+                                              >
+                                                <i className="fa-solid fa-file-lines text-cyan-400"></i>
+                                                <span>📝 仅转文字</span>
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {msg.caption && <span className={`text-[11px] ml-1 truncate ${item.isOutgoing ? 'text-white/80' : 'text-textMuted'}`}>{msg.caption}</span>}
+                                      </div>
+
+                                      {/* Real-time AI Progress Box */}
+                                      {isAiProcessing && (
+                                        <div className={`p-2 rounded-lg border text-xs flex items-center justify-between gap-2 animate-fade-in ${
+                                          item.isOutgoing ? 'bg-black/20 border-white/20 text-white' : 'bg-amber-500/10 border-amber-500/30 text-textPrimary'
+                                        }`}>
+                                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                                            <i className="fa-solid fa-spinner animate-spin text-amber-400 shrink-0 text-xs"></i>
+                                            <span className="font-medium text-[11px] break-words whitespace-pre-wrap leading-tight">
+                                              {aiProgressText || '正在处理中...'}
+                                            </span>
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleCancelAi();
+                                            }}
+                                            className="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 shrink-0 transition-all"
+                                          >
+                                            取消
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })()}
@@ -2127,19 +2308,27 @@ export default function ChatArea({
                       >
                         {item.type === 'TEXT' && (() => {
                           const fullText = item.resolvedText || (item.isTextFile ? (item.textPreview || item.content) : item.content);
-                          const lineCount = (fullText.match(/\n/g) || []).length + 1;
-                          const estimatedLines = Math.floor(fullText.length / 30);
-                          const isLong = lineCount >= 10 || estimatedLines >= 10 || fullText.length >= 250;
+                          const isMarkdown = fullText.startsWith('<!--md-->') || fullText.startsWith('[MD]');
+                          const cleanText = fullText.replace(/^<!--md-->/, '').replace(/^\[MD\]/, '');
+                          const lineCount = (cleanText.match(/\n/g) || []).length + 1;
+                          const estimatedLines = Math.floor(cleanText.length / 30);
+                          const isLong = lineCount > 3 || estimatedLines > 3 || cleanText.length > 80;
                           const isExpanded = expandedTextIds.has(item.id);
 
                           return (
-                            <div className="flex flex-col items-start">
-                              <span
-                                style={isLong && !isExpanded ? { display: '-webkit-box', WebkitLineClamp: 10, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}}
-                                className="whitespace-pre-wrap break-words leading-relaxed select-text font-normal"
-                              >
-                                {fullText}
-                              </span>
+                            <div className="flex flex-col items-start w-full">
+                              {isMarkdown ? (
+                                <div className={`w-full select-text ${isLong && !isExpanded ? 'max-h-[4.8rem] overflow-hidden relative' : ''}`}>
+                                  <MarkdownView content={fullText} isOutgoing={item.isOutgoing} />
+                                </div>
+                              ) : (
+                                <span
+                                  style={isLong && !isExpanded ? { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}}
+                                  className="whitespace-pre-wrap break-words leading-relaxed select-text font-normal text-[14.5px]"
+                                >
+                                  {fullText}
+                                </span>
+                              )}
                               {isLong && (
                                 <button
                                   type="button"
@@ -2195,46 +2384,125 @@ export default function ChatArea({
                             ? loadedDur 
                             : fallbackDur;
                           const currentAudioTime = audioProgress[item.id]?.currentTime || 0;
+                          const isAiProcessing = aiProcessingMsgId === item.id;
 
                           return (
                             /* Audio Player Card */
-                            <div className="flex items-center gap-3.5 min-w-[210px] font-sans">
-                              <audio 
-                                ref={el => audioRefs.current[item.id] = el}
-                                src={item.url}
-                                onLoadedMetadata={(e) => handleLoadedAudioMetadata(item.id, e)}
-                                onLoadedData={(e) => handleLoadedAudioMetadata(item.id, e)}
-                                onTimeUpdate={() => handleAudioTimeUpdate(item.id)}
-                                onEnded={() => setAudioPlayingId(null)}
-                                preload="metadata"
-                              />
-                              <button 
-                                onClick={() => handleToggleAudio(item.id)}
-                                className={`w-9 h-9 rounded-full flex items-center justify-center text-sm transition-all shrink-0 ${
-                                  item.isOutgoing 
-                                    ? 'bg-white text-accentColor shadow-sm' 
-                                    : 'bg-accentColor text-white shadow-sm'
-                                }`}
-                              >
-                                <i className={`fa-solid ${audioPlayingId === item.id ? 'fa-pause' : 'fa-play'}`}></i>
-                              </button>
-                              <div className="flex-1 flex flex-col gap-1.5 min-w-[120px]">
-                                <div 
-                                  className="h-2 bg-black/20 hover:bg-black/35 rounded-full overflow-hidden cursor-pointer relative"
-                                  onClick={(e) => handleAudioSeek(item.id, e)}
+                            <div className="flex flex-col gap-2 font-sans min-w-[220px]">
+                              <div className="flex items-center gap-3.5">
+                                <audio 
+                                  ref={el => audioRefs.current[item.id] = el}
+                                  src={item.url}
+                                  onLoadedMetadata={(e) => handleLoadedAudioMetadata(item.id, e)}
+                                  onLoadedData={(e) => handleLoadedAudioMetadata(item.id, e)}
+                                  onTimeUpdate={() => handleAudioTimeUpdate(item.id)}
+                                  onEnded={() => setAudioPlayingId(null)}
+                                  preload="metadata"
+                                />
+                                <button 
+                                  onClick={() => handleToggleAudio(item.id)}
+                                  className={`w-9 h-9 rounded-full flex items-center justify-center text-sm transition-all shrink-0 ${
+                                    item.isOutgoing 
+                                      ? 'bg-white text-accentColor shadow-sm' 
+                                      : 'bg-accentColor text-white shadow-sm'
+                                  }`}
                                 >
+                                  <i className={`fa-solid ${audioPlayingId === item.id ? 'fa-pause' : 'fa-play'}`}></i>
+                                </button>
+                                <div className="flex-1 flex flex-col gap-1.5 min-w-[100px]">
                                   <div 
-                                    className={`h-full transition-all ${item.isOutgoing ? 'bg-white' : 'bg-accentColor'}`}
-                                    style={{ width: `${audioProgress[item.id]?.progress || 0}%` }}
-                                  />
+                                    className="h-2 bg-black/20 hover:bg-black/35 rounded-full overflow-hidden cursor-pointer relative"
+                                    onClick={(e) => handleAudioSeek(item.id, e)}
+                                  >
+                                    <div 
+                                      className={`h-full transition-all ${item.isOutgoing ? 'bg-white' : 'bg-accentColor'}`}
+                                      style={{ width: `${audioProgress[item.id]?.progress || 0}%` }}
+                                    />
+                                  </div>
+                                  <div className={`flex items-center justify-between text-[10px] font-mono leading-none ${
+                                    item.isOutgoing ? 'text-white/80' : 'text-textSecondary'
+                                  }`}>
+                                    <span>{formatAudioTime(currentAudioTime)}</span>
+                                    <span className="font-semibold">{formatAudioTime(totalDuration)}</span>
+                                  </div>
                                 </div>
-                                <div className={`flex items-center justify-between text-[10px] font-mono leading-none ${
-                                  item.isOutgoing ? 'text-white/80' : 'text-textSecondary'
-                                }`}>
-                                  <span>{formatAudioTime(currentAudioTime)}</span>
-                                  <span className="font-semibold">{formatAudioTime(totalDuration)}</span>
+
+                                {/* AI Action Menu Button */}
+                                <div className="relative shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setAiMenuMsgId(aiMenuMsgId === item.id ? null : item.id);
+                                    }}
+                                    disabled={isAiProcessing}
+                                    className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all shadow-sm ${
+                                      item.isOutgoing
+                                        ? 'bg-white/20 hover:bg-white/30 text-amber-200'
+                                        : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 dark:text-amber-400 border border-amber-500/30'
+                                    }`}
+                                    title="AI 语音识别与总结"
+                                  >
+                                    <i className="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
+                                    <span>AI 总结</span>
+                                  </button>
+
+                                  {/* AI Menu Popover */}
+                                  {aiMenuMsgId === item.id && (
+                                    <div 
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="absolute right-0 top-full mt-1 z-30 bg-bgSecondary border border-borderColor rounded-xl shadow-xl py-1 min-w-[140px] animate-scale-in"
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setAiMenuMsgId(null);
+                                          handleStartAi(item, false);
+                                        }}
+                                        className="w-full px-3 py-2 text-left text-xs font-semibold text-textPrimary hover:bg-white/5 flex items-center gap-2 transition-colors"
+                                      >
+                                        <i className="fa-solid fa-wand-magic-sparkles text-amber-400"></i>
+                                        <span>✨ AI 语音总结</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setAiMenuMsgId(null);
+                                          handleStartAi(item, true);
+                                        }}
+                                        className="w-full px-3 py-2 text-left text-xs font-semibold text-textPrimary hover:bg-white/5 flex items-center gap-2 transition-colors border-t border-borderColor/40"
+                                      >
+                                        <i className="fa-solid fa-file-lines text-cyan-400"></i>
+                                        <span>📝 仅转文字</span>
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
+
+                              {/* Real-time AI Progress Box */}
+                              {isAiProcessing && (
+                                <div className={`p-2.5 rounded-lg border text-xs flex items-center justify-between gap-2 animate-fade-in ${
+                                  item.isOutgoing ? 'bg-black/20 border-white/20 text-white' : 'bg-amber-500/10 border-amber-500/30 text-textPrimary'
+                                }`}>
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <i className="fa-solid fa-spinner animate-spin text-amber-400 shrink-0 text-xs"></i>
+                                    <span className="font-medium text-[11px] break-words whitespace-pre-wrap leading-tight">
+                                      {aiProgressText || '正在处理中...'}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleCancelAi();
+                                    }}
+                                    className="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 shrink-0 transition-all"
+                                  >
+                                    取消
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           );
                         })()}
@@ -2681,7 +2949,9 @@ export default function ChatArea({
             <>
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(contextMenu.msg.content).catch(() => {});
+                  const raw = contextMenu.msg.content || '';
+                  const clean = raw.replace(/^<!--md-->/, '').replace(/^\[MD\]/, '');
+                  navigator.clipboard.writeText(clean).catch(() => {});
                   setContextMenu(null);
                 }}
                 className="w-full px-4 py-2 text-xs text-textPrimary hover:bg-white/5 transition-colors flex items-center gap-2.5"
