@@ -25,7 +25,7 @@ function validateUserDir(profile) {
 
 export default function SettingsModal({ 
   isOpen, 
-  profiles, 
+  profiles = [], 
   activeProfileId, 
   onClose, 
   onSaveProfile, 
@@ -35,45 +35,55 @@ export default function SettingsModal({
   resolveAvatarUrl
 }) {
   const [activeTab, setActiveTab] = useState('storage'); // 'storage' | 'ai'
-  const [editingProfile, setEditingProfile] = useState(null);
+  
+  const handleInitNewProfileData = () => ({
+    id: 'profile_' + Date.now(),
+    name: 'Jianguoyun WebDAV',
+    type: 'WEBDAV',
+    preset: 'jianguoyun',
+    username: 'WebUser',
+    avatar: PRESET_AVATARS[0],
+    syncInterval: 5,
+    serverPath: 'CloudChat',
+    saveDir: 'user_default',
+    diaryBaseUrl: '',
+    webDavUrl: 'https://dav.jianguoyun.com/dav/',
+    webDavUser: '',
+    webDavPass: '',
+    webDavChunkSize: 64 * 1024 * 1024, // bytes (64MB)
+    webDavFallbackUrl: '',
+    endpoint: '',
+    bucket: '',
+    region: '',
+    accessKey: '',
+    secretKey: ''
+  });
+
+  const [editingProfile, setEditingProfile] = useState(() => {
+    const active = (profiles || []).find(p => p.id === activeProfileId) || (profiles || [])[0] || null;
+    return active ? { ...active } : handleInitNewProfileData();
+  });
+
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isTestingConn, setIsTestingConn] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
   // AI Configuration State
-  const [aiConfig, setAiConfig] = useState(DEFAULT_AI_CONFIG);
+  const [aiConfig, setAiConfig] = useState(() => getAiConfig());
   const [isTestingAi, setIsTestingAi] = useState(false);
   const [aiTestResult, setAiTestResult] = useState(null);
 
   useEffect(() => {
-    if (isOpen) {
-      setAiConfig(getAiConfig());
-    }
-  }, [isOpen]);
-
-  const handleTestAi = async () => {
-    setIsTestingAi(true);
-    setAiTestResult(null);
-    try {
-      const msg = await testAiConnection(aiConfig);
-      setAiTestResult({ success: true, message: msg });
-    } catch (err) {
-      setAiTestResult({ success: false, message: err.message || '连接失败' });
-    } finally {
-      setIsTestingAi(false);
-    }
-  };
-
-  useEffect(() => {
     if (!isOpen) return;
-    const active = profiles.find(p => p.id === activeProfileId) || profiles[0] || null;
+    const active = (profiles || []).find(p => p.id === activeProfileId) || (profiles || [])[0] || null;
     if (active) {
       setEditingProfile({ ...active });
     } else {
-      handleInitNewProfile();
+      setEditingProfile(handleInitNewProfileData());
     }
-  }, [isOpen, activeProfileId]);
+    setAiConfig(getAiConfig());
+  }, [isOpen, activeProfileId, profiles]);
 
   useEffect(() => {
     if (!editingProfile?.avatar) {
@@ -81,50 +91,57 @@ export default function SettingsModal({
       return;
     }
     const av = editingProfile.avatar;
-    if (av.startsWith('data:') || av.startsWith('https://')) {
+    if (typeof av === 'string' && (av.startsWith('data:') || av.startsWith('https://') || av.startsWith('http://'))) {
       setPreviewUrl(av);
-    } else if (resolveAvatarUrl) {
+    } else if (resolveAvatarUrl && typeof av === 'string') {
       resolveAvatarUrl(av).then(url => {
         if (url) setPreviewUrl(url);
-      });
+      }).catch(() => {});
     }
   }, [editingProfile?.avatar, resolveAvatarUrl]);
 
   if (!isOpen) return null;
 
+  const handleTestConnection = async () => {
+    if (!editingProfile) return;
+    setIsTestingConn(true);
+    setTestResult(null);
+    try {
+      const testService = StorageClient.create(editingProfile);
+      const res = await testService.testConnection();
+      setTestResult({ success: true, message: res.message });
+    } catch (err) {
+      setTestResult({ success: false, message: err?.message || '连接失败' });
+    } finally {
+      setIsTestingConn(false);
+    }
+  };
+
+  const handleTestAi = async () => {
+    setIsTestingAi(true);
+    setAiTestResult(null);
+    try {
+      const msg = await testAiConnection(aiConfig || DEFAULT_AI_CONFIG);
+      setAiTestResult({ success: true, message: msg });
+    } catch (err) {
+      setAiTestResult({ success: false, message: err?.message || '连接失败' });
+    } finally {
+      setIsTestingAi(false);
+    }
+  };
+
   const handleInitNewProfile = () => {
-    setEditingProfile({
-      id: 'profile_' + Date.now(),
-      name: 'Jianguoyun WebDAV',
-      type: 'WEBDAV',
-      preset: 'jianguoyun',
-      username: 'WebUser',
-      avatar: PRESET_AVATARS[0],
-      syncInterval: 5,
-      serverPath: 'CloudChat',
-      saveDir: 'user_default',
-      diaryBaseUrl: '',
-      webDavUrl: 'https://dav.jianguoyun.com/dav/',
-      webDavUser: '',
-      webDavPass: '',
-      webDavChunkSize: 64 * 1024 * 1024, // bytes (64MB)
-      webDavFallbackUrl: '',
-      endpoint: '',
-      bucket: '',
-      region: '',
-      accessKey: '',
-      secretKey: ''
-    });
+    setEditingProfile(handleInitNewProfileData());
   };
 
   const handleProfileSelectChange = (e) => {
     const pId = e.target.value;
-    onSwitchProfile(pId);
+    if (onSwitchProfile) onSwitchProfile(pId);
   };
 
   const handleFieldChange = (field, val) => {
     setEditingProfile(prev => ({
-      ...prev,
+      ...(prev || {}),
       [field]: val
     }));
   };
@@ -153,26 +170,8 @@ export default function SettingsModal({
     img.src = objectUrl;
   };
 
-  const getSafeAvatarFileName = async (username) => {
-    const clean = (username || 'user').trim();
-    const isPureAscii = /^[\x20-\x7E]+$/.test(clean);
-    if (isPureAscii) {
-      const key = clean.replace(/[^a-zA-Z0-9_\-]/g, '_');
-      return `avatar_${key}.jpg`;
-    }
-    try {
-      const msgUint8 = new TextEncoder().encode(clean);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 12);
-      return `avatar_u_${hex}.jpg`;
-    } catch (e) {
-      return `avatar_user.jpg`;
-    }
-  };
-
   const convertAvatarToBlob = async (src) => {
-    if (!src) return null;
+    if (!src || typeof src !== 'string') return null;
     if (src.startsWith('data:')) {
       try {
         const res = await fetch(src);
@@ -200,12 +199,10 @@ export default function SettingsModal({
             else resolve(null);
           }, 'image/jpeg', 0.85);
         } catch (e) {
-          // Canvas tainted by CORS SecurityError -> fallback without export
           resolve(null);
         }
       };
       img.onerror = () => {
-        // Safe fallback on CORS failure
         resolve(null);
       };
       img.src = src;
@@ -213,7 +210,7 @@ export default function SettingsModal({
   };
 
   const handleSave = async () => {
-    if (!editingProfile.name.trim()) return;
+    if (!editingProfile || !editingProfile.name || !editingProfile.name.trim()) return;
 
     // 校验「设定的用户目录」合法性：目录各段只能包含数字、字母、下划线、连字符
     const dirError = validateUserDir(editingProfile);
@@ -225,7 +222,7 @@ export default function SettingsModal({
     let profileToSave = { ...editingProfile };
     delete profileToSave._avatarPendingUpload;
 
-    const rawAvatar = editingProfile.avatar || '';
+    const rawAvatar = typeof editingProfile.avatar === 'string' ? editingProfile.avatar : '';
     const isRemoteFilename = rawAvatar.startsWith('avatar_') || rawAvatar.startsWith('avatar____');
 
     if (!isRemoteFilename && rawAvatar && storageClient) {
@@ -249,15 +246,18 @@ export default function SettingsModal({
       }
     }
 
-    saveAiConfig(aiConfig);
-    onSaveProfile(profileToSave);
+    saveAiConfig(aiConfig || DEFAULT_AI_CONFIG);
+    if (onSaveProfile) onSaveProfile(profileToSave);
   };
 
   const handleDelete = () => {
-    if (confirm(`Are you sure you want to delete profile "${editingProfile.name}"?`)) {
-      onDeleteProfile(editingProfile.id);
+    if (!editingProfile) return;
+    if (confirm(`确定要删除配置方案 "${editingProfile.name || '当前配置'}" 吗？`)) {
+      if (onDeleteProfile) onDeleteProfile(editingProfile.id);
     }
   };
+
+  const safeAiConfig = aiConfig || DEFAULT_AI_CONFIG;
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto animate-fade-in">
@@ -267,6 +267,7 @@ export default function SettingsModal({
         <div className="px-6 py-3.5 border-b border-borderColor flex justify-between items-center bg-white/5">
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => setActiveTab('storage')}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
                 activeTab === 'storage'
@@ -277,6 +278,7 @@ export default function SettingsModal({
               <i className="fa-solid fa-server"></i> 存储与服务
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('ai')}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
                 activeTab === 'ai'
@@ -313,9 +315,9 @@ export default function SettingsModal({
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setAiConfig(prev => ({ ...prev, provider: 'openai' }))}
+                    onClick={() => setAiConfig(prev => ({ ...(prev || DEFAULT_AI_CONFIG), provider: 'openai' }))}
                     className={`py-2 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
-                      aiConfig.provider !== 'gemini'
+                      safeAiConfig.provider !== 'gemini'
                         ? 'bg-indigo-500/15 border-indigo-500 text-indigo-400 ring-1 ring-indigo-500/30'
                         : 'bg-bgPrimary border-borderColor text-textSecondary hover:text-textPrimary'
                     }`}
@@ -324,9 +326,9 @@ export default function SettingsModal({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAiConfig(prev => ({ ...prev, provider: 'gemini' }))}
+                    onClick={() => setAiConfig(prev => ({ ...(prev || DEFAULT_AI_CONFIG), provider: 'gemini' }))}
                     className={`py-2 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
-                      aiConfig.provider === 'gemini'
+                      safeAiConfig.provider === 'gemini'
                         ? 'bg-amber-500/15 border-amber-500 text-amber-400 ring-1 ring-amber-500/30'
                         : 'bg-bgPrimary border-borderColor text-textSecondary hover:text-textPrimary'
                     }`}
@@ -343,7 +345,7 @@ export default function SettingsModal({
                   <button
                     type="button"
                     onClick={() => setAiConfig(prev => ({
-                      ...prev,
+                      ...(prev || DEFAULT_AI_CONFIG),
                       provider: 'openai',
                       openaiBaseUrl: 'https://api.siliconflow.cn/v1',
                       openaiWhisperModel: 'FunAudioLLM/SenseVoiceSmall',
@@ -356,7 +358,7 @@ export default function SettingsModal({
                   <button
                     type="button"
                     onClick={() => setAiConfig(prev => ({
-                      ...prev,
+                      ...(prev || DEFAULT_AI_CONFIG),
                       provider: 'openai',
                       openaiBaseUrl: 'https://api.openai.com/v1',
                       openaiWhisperModel: 'whisper-1',
@@ -369,7 +371,7 @@ export default function SettingsModal({
                   <button
                     type="button"
                     onClick={() => setAiConfig(prev => ({
-                      ...prev,
+                      ...(prev || DEFAULT_AI_CONFIG),
                       provider: 'gemini',
                       geminiBaseUrl: 'https://generativelanguage.googleapis.com',
                       geminiModel: 'gemini-2.5-flash'
@@ -381,15 +383,15 @@ export default function SettingsModal({
                 </div>
               </div>
 
-              {aiConfig.provider !== 'gemini' ? (
+              {safeAiConfig.provider !== 'gemini' ? (
                 /* OpenAI / SiliconFlow Fields */
                 <div className="flex flex-col gap-3.5 pt-1">
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-medium text-textSecondary uppercase">API Base URL</label>
                     <input
                       type="text"
-                      value={aiConfig.openaiBaseUrl || ''}
-                      onChange={(e) => setAiConfig(prev => ({ ...prev, openaiBaseUrl: e.target.value }))}
+                      value={safeAiConfig.openaiBaseUrl || ''}
+                      onChange={(e) => setAiConfig(prev => ({ ...(prev || DEFAULT_AI_CONFIG), openaiBaseUrl: e.target.value }))}
                       placeholder="https://api.siliconflow.cn/v1"
                       className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor w-full"
                     />
@@ -399,8 +401,8 @@ export default function SettingsModal({
                     <label className="text-xs font-medium text-textSecondary uppercase">API Key (密钥)</label>
                     <input
                       type="password"
-                      value={aiConfig.openaiApiKey || ''}
-                      onChange={(e) => setAiConfig(prev => ({ ...prev, openaiApiKey: e.target.value }))}
+                      value={safeAiConfig.openaiApiKey || ''}
+                      onChange={(e) => setAiConfig(prev => ({ ...(prev || DEFAULT_AI_CONFIG), openaiApiKey: e.target.value }))}
                       placeholder="sk-..."
                       className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor w-full font-mono"
                     />
@@ -410,8 +412,8 @@ export default function SettingsModal({
                     <label className="text-xs font-medium text-textSecondary uppercase">语音识别模型 (Whisper / ASR)</label>
                     <input
                       type="text"
-                      value={aiConfig.openaiWhisperModel || ''}
-                      onChange={(e) => setAiConfig(prev => ({ ...prev, openaiWhisperModel: e.target.value }))}
+                      value={safeAiConfig.openaiWhisperModel || ''}
+                      onChange={(e) => setAiConfig(prev => ({ ...(prev || DEFAULT_AI_CONFIG), openaiWhisperModel: e.target.value }))}
                       placeholder="FunAudioLLM/SenseVoiceSmall"
                       className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor w-full"
                     />
@@ -420,9 +422,9 @@ export default function SettingsModal({
                         <button
                           key={m}
                           type="button"
-                          onClick={() => setAiConfig(prev => ({ ...prev, openaiWhisperModel: m }))}
+                          onClick={() => setAiConfig(prev => ({ ...(prev || DEFAULT_AI_CONFIG), openaiWhisperModel: m }))}
                           className={`text-[11px] px-2 py-0.5 rounded border transition-all ${
-                            aiConfig.openaiWhisperModel === m
+                            safeAiConfig.openaiWhisperModel === m
                               ? 'bg-accentColor/20 border-accentColor text-accentColor font-bold'
                               : 'bg-bgPrimary border-borderColor text-textMuted hover:text-textPrimary'
                           }`}
@@ -437,8 +439,8 @@ export default function SettingsModal({
                     <label className="text-xs font-medium text-textSecondary uppercase">对话总结大模型 (Chat Model)</label>
                     <input
                       type="text"
-                      value={aiConfig.openaiChatModel || ''}
-                      onChange={(e) => setAiConfig(prev => ({ ...prev, openaiChatModel: e.target.value }))}
+                      value={safeAiConfig.openaiChatModel || ''}
+                      onChange={(e) => setAiConfig(prev => ({ ...(prev || DEFAULT_AI_CONFIG), openaiChatModel: e.target.value }))}
                       placeholder="deepseek-ai/DeepSeek-V4-Flash"
                       className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor w-full"
                     />
@@ -447,9 +449,9 @@ export default function SettingsModal({
                         <button
                           key={m}
                           type="button"
-                          onClick={() => setAiConfig(prev => ({ ...prev, openaiChatModel: m }))}
+                          onClick={() => setAiConfig(prev => ({ ...(prev || DEFAULT_AI_CONFIG), openaiChatModel: m }))}
                           className={`text-[11px] px-2 py-0.5 rounded border transition-all ${
-                            aiConfig.openaiChatModel === m
+                            safeAiConfig.openaiChatModel === m
                               ? 'bg-accentColor/20 border-accentColor text-accentColor font-bold'
                               : 'bg-bgPrimary border-borderColor text-textMuted hover:text-textPrimary'
                           }`}
@@ -467,8 +469,8 @@ export default function SettingsModal({
                     <label className="text-xs font-medium text-textSecondary uppercase">Gemini Base URL</label>
                     <input
                       type="text"
-                      value={aiConfig.geminiBaseUrl || ''}
-                      onChange={(e) => setAiConfig(prev => ({ ...prev, geminiBaseUrl: e.target.value }))}
+                      value={safeAiConfig.geminiBaseUrl || ''}
+                      onChange={(e) => setAiConfig(prev => ({ ...(prev || DEFAULT_AI_CONFIG), geminiBaseUrl: e.target.value }))}
                       placeholder="https://generativelanguage.googleapis.com"
                       className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor w-full"
                     />
@@ -478,8 +480,8 @@ export default function SettingsModal({
                     <label className="text-xs font-medium text-textSecondary uppercase">Gemini API Key</label>
                     <input
                       type="password"
-                      value={aiConfig.geminiApiKey || ''}
-                      onChange={(e) => setAiConfig(prev => ({ ...prev, geminiApiKey: e.target.value }))}
+                      value={safeAiConfig.geminiApiKey || ''}
+                      onChange={(e) => setAiConfig(prev => ({ ...(prev || DEFAULT_AI_CONFIG), geminiApiKey: e.target.value }))}
                       placeholder="AIzaSy..."
                       className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor w-full font-mono"
                     />
@@ -489,8 +491,8 @@ export default function SettingsModal({
                     <label className="text-xs font-medium text-textSecondary uppercase">Gemini 模型</label>
                     <input
                       type="text"
-                      value={aiConfig.geminiModel || ''}
-                      onChange={(e) => setAiConfig(prev => ({ ...prev, geminiModel: e.target.value }))}
+                      value={safeAiConfig.geminiModel || ''}
+                      onChange={(e) => setAiConfig(prev => ({ ...(prev || DEFAULT_AI_CONFIG), geminiModel: e.target.value }))}
                       placeholder="gemini-2.5-flash"
                       className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor w-full"
                     />
@@ -499,9 +501,9 @@ export default function SettingsModal({
                         <button
                           key={m}
                           type="button"
-                          onClick={() => setAiConfig(prev => ({ ...prev, geminiModel: m }))}
+                          onClick={() => setAiConfig(prev => ({ ...(prev || DEFAULT_AI_CONFIG), geminiModel: m }))}
                           className={`text-[11px] px-2 py-0.5 rounded border transition-all ${
-                            aiConfig.geminiModel === m
+                            safeAiConfig.geminiModel === m
                               ? 'bg-accentColor/20 border-accentColor text-accentColor font-bold'
                               : 'bg-bgPrimary border-borderColor text-textMuted hover:text-textPrimary'
                           }`}
@@ -519,8 +521,8 @@ export default function SettingsModal({
                 <label className="text-xs font-medium text-textSecondary uppercase">自定义总结提示词 (Prompt)</label>
                 <textarea
                   rows={3}
-                  value={aiConfig.summaryPrompt || ''}
-                  onChange={(e) => setAiConfig(prev => ({ ...prev, summaryPrompt: e.target.value }))}
+                  value={safeAiConfig.summaryPrompt || ''}
+                  onChange={(e) => setAiConfig(prev => ({ ...(prev || DEFAULT_AI_CONFIG), summaryPrompt: e.target.value }))}
                   className="bg-bgPrimary text-textPrimary border border-borderColor rounded-lg p-2.5 text-xs focus:outline-none focus:border-accentColor w-full font-mono"
                 />
               </div>
@@ -570,12 +572,12 @@ export default function SettingsModal({
                     onChange={handleProfileSelectChange}
                     className="flex-1 bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor transition-colors"
                   >
-                    {profiles.map(p => (
+                    {(profiles || []).map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
-                    {profiles.length === 0 && <option value="">暂无配置 - 请点击新建配置</option>}
+                    {(profiles || []).length === 0 && <option value="">暂无配置 - 请点击新建配置</option>}
                   </select>
-                  {profiles.length > 0 && (
+                  {(profiles || []).length > 0 && (
                     <button 
                       onClick={handleDelete}
                       className="px-3.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 rounded-lg transition-all"
@@ -617,7 +619,7 @@ export default function SettingsModal({
                           const val = e.target.value;
                           if (val === 'JIANGUOYUN') {
                             setEditingProfile(prev => ({
-                              ...prev,
+                              ...(prev || {}),
                               type: 'WEBDAV',
                               preset: 'jianguoyun',
                               webDavUrl: 'https://dav.jianguoyun.com/dav/',
@@ -627,7 +629,7 @@ export default function SettingsModal({
                             }));
                           } else {
                             setEditingProfile(prev => ({
-                              ...prev,
+                              ...(prev || {}),
                               type: val,
                               preset: undefined
                             }));
@@ -698,7 +700,7 @@ export default function SettingsModal({
                           <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">文件分块传输大小 (MB)</label>
                           <input 
                             type="number" 
-                            value={editingProfile.webDavChunkSize !== undefined ? (editingProfile.webDavChunkSize / (1024 * 1024)) : 64}
+                            value={editingProfile.webDavChunkSize !== undefined ? Math.round(editingProfile.webDavChunkSize / (1024 * 1024)) : 64}
                             onChange={(e) => handleFieldChange('webDavChunkSize', parseInt(e.target.value || '0') * 1024 * 1024)}
                             placeholder="64"
                             min="0"

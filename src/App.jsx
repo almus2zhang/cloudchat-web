@@ -349,7 +349,7 @@ export default function App() {
 
   // 2b. Resolve avatar filename -> blob URL via downloadFile (avoids WebDAV auth popups)
   const resolveAvatarUrl = async (avatarFilename) => {
-    if (!avatarFilename) return null;
+    if (!avatarFilename || typeof avatarFilename !== 'string') return null;
     if (avatarFilename.startsWith('content://') || avatarFilename.startsWith('file://')) return null;
     if (avatarFilename.startsWith('data:') || avatarFilename.startsWith('https://') || avatarFilename.startsWith('http://')) return avatarFilename;
 
