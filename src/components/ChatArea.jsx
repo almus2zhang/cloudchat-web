@@ -2036,7 +2036,7 @@ export default function ChatArea({
                         </div>
                       ) : (
                         /* RENDER COMPOSITE GROUP (MIXED / NON-MEDIA CARD) */
-                        <div className={`p-3 rounded-2xl border shadow-sm max-w-[620px] w-full min-w-[260px] flex flex-col gap-1.5 font-sans ${
+                        <div className={`p-3 rounded-2xl border shadow-sm max-w-[620px] w-fit max-w-full flex flex-col gap-1.5 font-sans ${
                           item.isOutgoing
                             ? 'bg-accentColor border-accentColor/40 text-white rounded-tr-none'
                             : 'bg-bgSecondary border-borderColor text-textPrimary rounded-tl-none'
@@ -2116,10 +2116,10 @@ export default function ChatArea({
                                   ) : null;
 
                                   return (
-                                    <div className="flex flex-col items-start pr-4 w-full">
+                                    <div className="flex flex-col items-start pr-4 max-w-full">
                                       {isLong && <div className="mb-1.5">{toggleBtn}</div>}
                                       {isMarkdown ? (
-                                        <div className={`w-full select-text ${isLong && !isExpanded ? 'max-h-[4.8rem] overflow-hidden relative' : ''}`}>
+                                        <div className={`select-text max-w-full ${isLong && !isExpanded ? 'max-h-[4.8rem] overflow-hidden relative' : ''}`}>
                                           <MarkdownView content={fullText} isOutgoing={item.isOutgoing} />
                                         </div>
                                       ) : (
@@ -2372,10 +2372,10 @@ export default function ChatArea({
                           ) : null;
 
                           return (
-                            <div className="flex flex-col items-start w-full">
+                            <div className="flex flex-col items-start max-w-full">
                               {isLong && <div className="mb-1.5">{toggleBtn}</div>}
                               {isMarkdown ? (
-                                <div className={`w-full select-text ${isLong && !isExpanded ? 'max-h-[4.8rem] overflow-hidden relative' : ''}`}>
+                                <div className={`select-text max-w-full ${isLong && !isExpanded ? 'max-h-[4.8rem] overflow-hidden relative' : ''}`}>
                                   <MarkdownView content={fullText} isOutgoing={item.isOutgoing} />
                                 </div>
                               ) : (
