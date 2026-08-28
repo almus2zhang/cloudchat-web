@@ -1561,6 +1561,18 @@ export default function ChatArea({
               <span className="text-xs hidden md:inline">下载</span>
             </button>
 
+            {/* 远程Share */}
+            <button
+              onClick={() => {
+                if (onRemoteShare) onRemoteShare(messages.filter(m => selectedMessageIds.has(m.id)));
+              }}
+              className="h-8 px-2.5 min-w-[2.25rem] flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-indigo-400 hover:bg-indigo-500/10 border border-indigo-500/20 bg-indigo-500/5 transition-all shrink-0 grow sm:grow-0"
+              title="远程Share（拷贝文件至远程 share 目录）"
+            >
+              <i className="fa-solid fa-cloud-arrow-up text-xs"></i>
+              <span className="text-xs hidden md:inline">Share</span>
+            </button>
+
             {/* 范围选择 */}
             <button
               onClick={handleToggleRangeSelect}
