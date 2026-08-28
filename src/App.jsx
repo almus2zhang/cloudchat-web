@@ -10,6 +10,7 @@ import DiaryExportModal from './components/DiaryExportModal';
 import InputModal from './components/InputModal';
 import DebugLogsModal from './components/DebugLogsModal';
 import GuideModal from './components/GuideModal';
+import ForwardToProfileModal from './components/ForwardToProfileModal';
 import { StorageClient, checkWebLanStatus } from './services/storage';
 import { initDB, cacheFile, getCachedFile, clearAllCache, deleteCachedFile } from './services/db';
 import { generateInitialAvatarBlob } from './utils/avatar';
@@ -119,6 +120,10 @@ export default function App() {
   // Privacy Mode States
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
   const [privacyPin, setPrivacyPin] = useState('1234');
+
+  // Forward to other profile state
+  const [forwardModalOpen, setForwardModalOpen] = useState(false);
+  const [forwardTargetMsgs, setForwardTargetMsgs] = useState([]);
 
   // 日记文件个数（真实 WebDAV 日记文件数，用于 Sidebar 显示）
   const [diaryFileCount, setDiaryFileCount] = useState(0);
@@ -1469,6 +1474,227 @@ export default function App() {
     setSelectedMessageIds(new Set());
   };
 
+  // --- Forward to Other Profile Handlers ---
+  const handleOpenForwardModal = (targetMsgs = null) => {
+    const msgs = targetMsgs || messages.filter(m => selectedMessageIds.has(m.id));
+    if (!msgs || msgs.length === 0) return;
+    setForwardTargetMsgs(msgs);
+    setForwardModalOpen(true);
+  };
+
+  const handleForwardToProfile = async (targetProfileId) => {
+    setForwardModalOpen(false);
+    const targetProfile = profiles.find(p => p.id === targetProfileId);
+    if (!targetProfile) return;
+
+    const msgsToForward = forwardTargetMsgs;
+    if (!msgsToForward || msgsToForward.length === 0) return;
+
+    let targetClient;
+    try {
+      targetClient = StorageClient.create(targetProfile);
+    } catch (e) {
+      setConfirmConfig({
+        title: '转发失败',
+        message: `无法初始化目标配置客户端: ${e.message}`,
+        confirmText: '确定',
+        cancelText: '',
+        isDanger: true,
+        icon: 'fa-solid fa-circle-exclamation',
+        onOk: () => setConfirmOpen(false)
+      });
+      setConfirmOpen(true);
+      return;
+    }
+
+    setStatusText(`正在转发消息至 ${targetProfile.name || targetProfile.username}...`);
+    let successCount = 0;
+    const now = Date.now();
+
+    try {
+      // 1. Fetch target profile's cloud history index and shards
+      let targetIndex = [];
+      try {
+        const indexBlob = await targetClient.downloadFile('chat_index.json');
+        const indexText = await indexBlob.text();
+        targetIndex = JSON.parse(indexText);
+      } catch (e) {
+        targetIndex = [];
+      }
+
+      let targetHistory = [];
+      for (const shardName of targetIndex) {
+        try {
+          const shardBlob = await targetClient.downloadFile(shardName);
+          const shardText = await shardBlob.text();
+          const shardMsgs = JSON.parse(shardText);
+          if (Array.isArray(shardMsgs)) {
+            targetHistory.push(...shardMsgs);
+          }
+        } catch (e) {}
+      }
+
+      // 2. Iterate each message and upload/send to target profile
+      for (let i = 0; i < msgsToForward.length; i++) {
+        const msg = msgsToForward[i];
+        const msgType = String(msg.type || 'TEXT').toUpperCase();
+        const newMsgId = 'msg_' + (now + i) + '_' + Math.random().toString(36).substr(2, 5);
+        const msgTimestamp = now + i;
+
+        if (msgType === 'TEXT' || msgType === '' || !['IMAGE', 'VIDEO', 'AUDIO', 'FILE', 'LOCATION', 'FOLDER'].includes(msgType)) {
+          const rawText = msg.resolvedText || (msg.isTextFile ? (msg.textPreview || msg.content) : msg.content) || '';
+          const isOffload = rawText.length >= 500;
+          let content = rawText;
+          let isTextFile = false;
+          let textPreview = undefined;
+
+          if (isOffload) {
+            const txtFileName = `text_${newMsgId.slice(-8)}.txt`;
+            await targetClient.uploadText(rawText, txtFileName);
+            content = txtFileName;
+            isTextFile = true;
+            textPreview = rawText.slice(0, 100);
+          }
+
+          const newMsg = {
+            id: newMsgId,
+            sender: targetProfile.username || '我',
+            senderName: targetProfile.username || '我',
+            senderAvatar: targetProfile.avatar || '',
+            content: content,
+            timestamp: msgTimestamp,
+            type: 'TEXT',
+            status: 'SUCCESS',
+            isTextFile: isTextFile,
+            textPreview: textPreview,
+            categories: msg.categories || [],
+            lastModified: msgTimestamp
+          };
+          targetHistory.push(newMsg);
+          successCount++;
+        } else if (msgType === 'LOCATION') {
+          const newMsg = {
+            id: newMsgId,
+            sender: targetProfile.username || '我',
+            senderName: targetProfile.username || '我',
+            senderAvatar: targetProfile.avatar || '',
+            content: msg.content || '',
+            timestamp: msgTimestamp,
+            type: 'LOCATION',
+            locationAddress: msg.locationAddress || undefined,
+            status: 'SUCCESS',
+            categories: msg.categories || [],
+            lastModified: msgTimestamp
+          };
+          targetHistory.push(newMsg);
+          successCount++;
+        } else if (['IMAGE', 'VIDEO', 'AUDIO', 'FILE'].includes(msgType)) {
+          // Extract file Blob
+          let fileBlob = null;
+          try {
+            fileBlob = await getCachedFile(msg.id) || await getCachedFile(msg.content);
+          } catch (e) {}
+
+          if (!fileBlob && activeClientRef.current && msg.content) {
+            try {
+              fileBlob = await activeClientRef.current.downloadFile(msg.content);
+            } catch (e) {
+              console.warn('[Forward] Failed to download source file:', msg.content, e);
+            }
+          }
+
+          if (fileBlob) {
+            const origFileName = (msg.fileName || msg.content || 'attachment').replace(/^\d+_/, '');
+            const newFileName = `${Date.now()}_${origFileName}`;
+
+            if (msgType === 'IMAGE') {
+              try {
+                const thumbBlob = await generateThumbnail(fileBlob);
+                if (thumbBlob) {
+                  await targetClient.uploadFile(thumbBlob, `thumb_${newFileName}`, 'image/jpeg', () => {});
+                }
+              } catch (e) {}
+            }
+
+            await targetClient.uploadFile(fileBlob, newFileName, fileBlob.type || 'application/octet-stream', () => {});
+
+            const newMsg = {
+              id: newMsgId,
+              sender: targetProfile.username || '我',
+              senderName: targetProfile.username || '我',
+              senderAvatar: targetProfile.avatar || '',
+              content: newFileName,
+              timestamp: msgTimestamp,
+              type: msgType,
+              remoteUrl: newFileName,
+              thumbnailUrl: msgType === 'IMAGE' ? `thumb_${newFileName}` : undefined,
+              fileSize: fileBlob.size || msg.fileSize || 0,
+              videoDuration: msg.videoDuration || 0,
+              status: 'SUCCESS',
+              categories: msg.categories || [],
+              caption: msg.caption || undefined,
+              lastModified: msgTimestamp
+            };
+            targetHistory.push(newMsg);
+            successCount++;
+          }
+        }
+      }
+
+      // 3. Shard and push history to target cloud storage
+      const shards = {};
+      targetHistory.forEach(m => {
+        const date = new Date(m.timestamp);
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const shardName = `chat_history_${yyyy}_${mm}.json`;
+        if (!shards[shardName]) shards[shardName] = [];
+        const { isOutgoing, url, ...clean } = m;
+        shards[shardName].push(clean);
+      });
+
+      const newIndexData = Object.keys(shards);
+      for (const shardName of newIndexData) {
+        const cleanJson = JSON.stringify(shards[shardName]);
+        await targetClient.uploadText(cleanJson, shardName);
+      }
+      await targetClient.uploadText(JSON.stringify(newIndexData), 'chat_index.json');
+      cacheFile(`history_array_${targetProfile.id}`, targetHistory);
+
+      // If forwarding to current active profile, update local messages state
+      if (targetProfile.id === activeProfileId) {
+        setMessages(targetHistory);
+      }
+
+      setSelectedMessageIds(new Set());
+      setStatusText('Synchronized');
+
+      setConfirmConfig({
+        title: '转发完成',
+        message: `已成功将 ${successCount} 条消息逐条转发至配置【${targetProfile.name || targetProfile.username}】。`,
+        confirmText: '确定',
+        cancelText: '',
+        isDanger: false,
+        icon: 'fa-solid fa-circle-check',
+        onOk: () => setConfirmOpen(false)
+      });
+      setConfirmOpen(true);
+
+    } catch (err) {
+      console.error('[Forward Error]:', err);
+      setConfirmConfig({
+        title: '转发失败',
+        message: `转发过程中发生错误: ${err.message || err}`,
+        confirmText: '确定',
+        cancelText: '',
+        isDanger: true,
+        icon: 'fa-solid fa-circle-exclamation',
+        onOk: () => setConfirmOpen(false)
+      });
+      setConfirmOpen(true);
+    }
+  };
+
   // --- Folder Action Handlers ---
   const handlePackFolder = (currentFolderId, folderName = '') => {
     if (selectedMessageIds.size === 0) return;
@@ -2177,6 +2403,17 @@ export default function App() {
         onOpenDebugLogs={() => setDebugModalOpen(true)}
         onInsertGroupedMessage={handleInsertGroupedMessage}
         onRemoteShare={handleRemoteShare}
+        onOpenForwardModal={handleOpenForwardModal}
+      />
+
+      {/* Forward to Other Profile Modal */}
+      <ForwardToProfileModal
+        isOpen={forwardModalOpen}
+        profiles={profiles}
+        activeProfileId={activeProfileId}
+        messageCount={forwardTargetMsgs.length}
+        onConfirm={handleForwardToProfile}
+        onCancel={() => setForwardModalOpen(false)}
       />
 
       {/* Settings Modal */}

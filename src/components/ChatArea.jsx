@@ -81,7 +81,8 @@ export default function ChatArea({
   isSyncing,
   activeUploads,
   onInsertGroupedMessage,
-  onRemoteShare
+  onRemoteShare,
+  onOpenForwardModal
 }) {
   const [inputText, setInputText] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -1571,6 +1572,18 @@ export default function ChatArea({
             >
               <i className="fa-solid fa-cloud-arrow-up text-xs"></i>
               <span className="text-xs hidden md:inline">Share</span>
+            </button>
+
+            {/* 转发到其他配置 */}
+            <button
+              onClick={() => {
+                if (onOpenForwardModal) onOpenForwardModal(messages.filter(m => selectedMessageIds.has(m.id)));
+              }}
+              className="h-8 px-2.5 min-w-[2.25rem] flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-purple-400 hover:bg-purple-500/10 border border-purple-500/20 bg-purple-500/5 transition-all shrink-0 grow sm:grow-0"
+              title="转发到其他配置（逐条发送）"
+            >
+              <i className="fa-solid fa-paper-plane text-xs"></i>
+              <span className="text-xs hidden md:inline">转发</span>
             </button>
 
             {/* 范围选择 */}
@@ -3130,6 +3143,19 @@ export default function ChatArea({
                 <i className="fa-solid fa-note-sticky w-4 text-center"></i> {contextMenu.msg.caption ? '修改注释' : '添加注释'}
               </button>
             </>
+          )}
+
+          {/* Forward to other profile */}
+          {selectedMessageIds.size <= 1 && contextMenu.msg.type !== 'FOLDER' && (
+            <button
+              onClick={() => {
+                if (onOpenForwardModal) onOpenForwardModal(contextMenu.msgs);
+                setContextMenu(null);
+              }}
+              className="w-full px-4 py-2 text-xs text-purple-400 hover:bg-purple-500/10 transition-colors flex items-center gap-2.5 font-semibold"
+            >
+              <i className="fa-solid fa-paper-plane text-purple-400 w-4 text-center"></i> 转发到其他配置
+            </button>
           )}
 
           {/* Select — enter multi-select mode */}
