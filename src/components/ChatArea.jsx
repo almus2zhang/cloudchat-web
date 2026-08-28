@@ -71,7 +71,8 @@ export default function ChatArea({
   resolveAvatarUrl,
   isSyncing,
   activeUploads,
-  onInsertGroupedMessage
+  onInsertGroupedMessage,
+  onRemoteShare
 }) {
   const [inputText, setInputText] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -2932,6 +2933,17 @@ export default function ChatArea({
                 <i className="fa-solid fa-download w-4 text-center"></i> 下载所选 ({selectedMessageIds.size})
               </button>
 
+              <button
+                onClick={() => {
+                  const selectedMsgs = messages.filter(m => selectedMessageIds.has(m.id));
+                  if (onRemoteShare) onRemoteShare(selectedMsgs);
+                  setContextMenu(null);
+                }}
+                className="w-full px-4 py-2 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center gap-2.5"
+              >
+                <i className="fa-solid fa-cloud-arrow-up w-4 text-center"></i> 远程Share ({selectedMessageIds.size})
+              </button>
+
               <div className="my-1 border-t border-borderColor"></div>
 
               <button
@@ -3057,6 +3069,16 @@ export default function ChatArea({
                 className="w-full px-4 py-2 text-xs text-teal-400 hover:bg-teal-500/10 transition-colors flex items-center gap-2.5 font-semibold"
               >
                 <i className="fa-solid fa-download text-teal-400 w-4 text-center"></i> 下载文件/消息
+              </button>
+
+              <button
+                onClick={() => {
+                  if (onRemoteShare) onRemoteShare([contextMenu.msg]);
+                  setContextMenu(null);
+                }}
+                className="w-full px-4 py-2 text-xs text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center gap-2.5 font-semibold"
+              >
+                <i className="fa-solid fa-cloud-arrow-up text-indigo-400 w-4 text-center"></i> 远程Share
               </button>
 
               <button

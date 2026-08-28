@@ -1379,6 +1379,41 @@ export default function App() {
     pushHistoryToCloud(updated);
   };
 
+  const handleRemoteShare = async (targetMsgs = null) => {
+    const client = activeClientRef.current;
+    if (!client) {
+      alert('存储服务未连接，请先检查连接配置');
+      return;
+    }
+    const msgsToShare = targetMsgs || messages.filter(m => selectedMessageIds.has(m.id));
+    if (!msgsToShare || msgsToShare.length === 0) return;
+
+    let successCount = 0;
+    let failedCount = 0;
+    for (const msg of msgsToShare) {
+      try {
+        const fileName = msg.fileName || (msg.type !== 'TEXT' && msg.type !== 'FOLDER' ? msg.content : null);
+        const textContent = msg.type === 'TEXT' ? (msg.resolvedText || msg.content) : null;
+        if (fileName || textContent) {
+          if (client.copyToShare) {
+            await client.copyToShare(fileName, textContent);
+            successCount++;
+          }
+        }
+      } catch (err) {
+        console.warn('[Remote Share Error]:', err);
+        failedCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      alert(`已成功将 ${successCount} 个条目的文件拷贝至远程 share 目录`);
+    } else {
+      alert('未找到可拷贝的文件或拷贝失败');
+    }
+    setSelectedMessageIds(new Set());
+  };
+
   // --- Folder Action Handlers ---
   const handlePackFolder = (currentFolderId, folderName = '') => {
     if (selectedMessageIds.size === 0) return;
@@ -2086,6 +2121,7 @@ export default function App() {
         isSyncing={isSyncing}
         onOpenDebugLogs={() => setDebugModalOpen(true)}
         onInsertGroupedMessage={handleInsertGroupedMessage}
+        onRemoteShare={handleRemoteShare}
       />
 
       {/* Settings Modal */}

@@ -679,6 +679,42 @@ class WebDavStorageClient {
         return false;
     }
 
+    async copyToShare(fileName, textContent) {
+        if (!this.isValidUserDir()) {
+            throw new Error('非法的用户目录名');
+        }
+        await this.ensureFolderPathExist('share');
+
+        if (fileName && typeof fileName === 'string' && fileName.trim()) {
+            const cleanName = fileName.trim();
+            if (!this.validateSafeName(cleanName)) {
+                throw new Error('非法的文件名');
+            }
+            const baseName = cleanName.split('/').pop();
+            const sourceUrl = this.getUrl(cleanName);
+            const destUrl = this.getUrl('share/' + baseName);
+
+            const response = await fetch(sourceUrl, {
+                method: 'COPY',
+                headers: {
+                    'Authorization': this.getAuthHeader(),
+                    'Destination': destUrl,
+                    'Overwrite': 'T'
+                }
+            });
+            if (response.ok || response.status === 201 || response.status === 204) {
+                return true;
+            }
+            throw new Error(`WebDAV COPY failed: ${response.status}`);
+        } else if (textContent) {
+            const timestamp = Date.now();
+            const textFileName = `text_${timestamp}.txt`;
+            await this.uploadText(textContent, 'share/' + textFileName);
+            return true;
+        }
+        return false;
+    }
+
     async getFileSize(fileName) {
         const url = this.getUrl(fileName);
         try {
@@ -1069,6 +1105,22 @@ class S3StorageClient {
             if (response.ok) return true;
         } catch (e) {
             console.warn('S3 COPY failed:', e);
+        }
+        return false;
+    }
+
+    async copyToShare(fileName, textContent) {
+        if (fileName && typeof fileName === 'string' && fileName.trim()) {
+            const cleanName = fileName.trim();
+            const baseName = cleanName.split('/').pop();
+            const success = await this.copyFile(cleanName, 'share/' + baseName);
+            if (!success) throw new Error('S3 COPY failed');
+            return true;
+        } else if (textContent) {
+            const timestamp = Date.now();
+            const textFileName = `text_${timestamp}.txt`;
+            await this.uploadText(textContent, 'share/' + textFileName);
+            return true;
         }
         return false;
     }
