@@ -11,6 +11,7 @@ import InputModal from './components/InputModal';
 import DebugLogsModal from './components/DebugLogsModal';
 import GuideModal from './components/GuideModal';
 import ForwardToProfileModal from './components/ForwardToProfileModal';
+import ForwardProgressModal from './components/ForwardProgressModal';
 import { StorageClient, checkWebLanStatus } from './services/storage';
 import { initDB, cacheFile, getCachedFile, clearAllCache, deleteCachedFile } from './services/db';
 import { generateInitialAvatarBlob } from './utils/avatar';
@@ -124,6 +125,17 @@ export default function App() {
   // Forward to other profile state
   const [forwardModalOpen, setForwardModalOpen] = useState(false);
   const [forwardTargetMsgs, setForwardTargetMsgs] = useState([]);
+  const [forwardProgress, setForwardProgress] = useState({
+    isOpen: false,
+    isCompleted: false,
+    isCancelled: false,
+    current: 0,
+    total: 0,
+    currentDetail: '',
+    targetProfileName: '',
+    successCount: 0
+  });
+  const forwardCancelledRef = useRef(false);
 
   // 日记文件个数（真实 WebDAV 日记文件数，用于 Sidebar 显示）
   const [diaryFileCount, setDiaryFileCount] = useState(0);
@@ -1507,9 +1519,22 @@ export default function App() {
       return;
     }
 
-    setStatusText(`正在转发消息至 ${targetProfile.name || targetProfile.username}...`);
+    forwardCancelledRef.current = false;
+    const targetDisplayName = targetProfile.name || targetProfile.username || '目标配置';
+    setForwardProgress({
+      isOpen: true,
+      isCompleted: false,
+      isCancelled: false,
+      current: 0,
+      total: msgsToForward.length,
+      currentDetail: '正在连接目标服务器...',
+      targetProfileName: targetDisplayName,
+      successCount: 0
+    });
+
     let successCount = 0;
     const now = Date.now();
+    let isCancelled = false;
 
     try {
       // 1. Fetch target profile's cloud history index and shards
@@ -1536,10 +1561,28 @@ export default function App() {
 
       // 2. Iterate each message and upload/send to target profile
       for (let i = 0; i < msgsToForward.length; i++) {
+        if (forwardCancelledRef.current) {
+          isCancelled = true;
+          break;
+        }
+
         const msg = msgsToForward[i];
         const msgType = String(msg.type || 'TEXT').toUpperCase();
         const newMsgId = 'msg_' + (now + i) + '_' + Math.random().toString(36).substr(2, 5);
         const msgTimestamp = now + i;
+
+        let detailText = `正在转发第 ${i + 1} / ${msgsToForward.length} 条消息...`;
+        if (msgType === 'IMAGE') detailText = `正在处理并上传图片 (${i + 1}/${msgsToForward.length})...`;
+        else if (msgType === 'VIDEO') detailText = `正在处理并上传视频 (${i + 1}/${msgsToForward.length})...`;
+        else if (msgType === 'AUDIO') detailText = `正在处理并上传语音 (${i + 1}/${msgsToForward.length})...`;
+        else if (msgType === 'FILE') detailText = `正在上传文件: ${msg.fileName || msg.content || 'attachment'} (${i + 1}/${msgsToForward.length})...`;
+
+        setForwardProgress(prev => ({
+          ...prev,
+          current: i + 1,
+          currentDetail: detailText,
+          successCount
+        }));
 
         if (msgType === 'TEXT' || msgType === '' || !['IMAGE', 'VIDEO', 'AUDIO', 'FILE', 'LOCATION', 'FOLDER'].includes(msgType)) {
           const rawText = msg.resolvedText || (msg.isTextFile ? (msg.textPreview || msg.content) : msg.content) || '';
@@ -1589,7 +1632,6 @@ export default function App() {
           targetHistory.push(newMsg);
           successCount++;
         } else if (['IMAGE', 'VIDEO', 'AUDIO', 'FILE'].includes(msgType)) {
-          // Extract file Blob
           let fileBlob = null;
           try {
             fileBlob = await getCachedFile(msg.id) || await getCachedFile(msg.content);
@@ -1610,88 +1652,98 @@ export default function App() {
             if (msgType === 'IMAGE') {
               try {
                 const thumbBlob = await generateThumbnail(fileBlob);
-                if (thumbBlob) {
+                if (thumbBlob && !forwardCancelledRef.current) {
                   await targetClient.uploadFile(thumbBlob, `thumb_${newFileName}`, 'image/jpeg', () => {});
                 }
               } catch (e) {}
             }
 
-            await targetClient.uploadFile(fileBlob, newFileName, fileBlob.type || 'application/octet-stream', () => {});
+            if (!forwardCancelledRef.current) {
+              await targetClient.uploadFile(fileBlob, newFileName, fileBlob.type || 'application/octet-stream', () => {});
 
-            const newMsg = {
-              id: newMsgId,
-              sender: targetProfile.username || '我',
-              senderName: targetProfile.username || '我',
-              senderAvatar: targetProfile.avatar || '',
-              content: newFileName,
-              timestamp: msgTimestamp,
-              type: msgType,
-              remoteUrl: newFileName,
-              thumbnailUrl: msgType === 'IMAGE' ? `thumb_${newFileName}` : undefined,
-              fileSize: fileBlob.size || msg.fileSize || 0,
-              videoDuration: msg.videoDuration || 0,
-              status: 'SUCCESS',
-              categories: msg.categories || [],
-              caption: msg.caption || undefined,
-              lastModified: msgTimestamp
-            };
-            targetHistory.push(newMsg);
-            successCount++;
+              const newMsg = {
+                id: newMsgId,
+                sender: targetProfile.username || '我',
+                senderName: targetProfile.username || '我',
+                senderAvatar: targetProfile.avatar || '',
+                content: newFileName,
+                timestamp: msgTimestamp,
+                type: msgType,
+                remoteUrl: newFileName,
+                thumbnailUrl: msgType === 'IMAGE' ? `thumb_${newFileName}` : undefined,
+                fileSize: fileBlob.size || msg.fileSize || 0,
+                videoDuration: msg.videoDuration || 0,
+                status: 'SUCCESS',
+                categories: msg.categories || [],
+                caption: msg.caption || undefined,
+                lastModified: msgTimestamp
+              };
+              targetHistory.push(newMsg);
+              successCount++;
+            }
           }
+        }
+
+        if (forwardCancelledRef.current) {
+          isCancelled = true;
+          break;
         }
       }
 
-      // 3. Shard and push history to target cloud storage
-      const shards = {};
-      targetHistory.forEach(m => {
-        const date = new Date(m.timestamp);
-        const yyyy = date.getFullYear();
-        const mm = String(date.getMonth() + 1).padStart(2, '0');
-        const shardName = `chat_history_${yyyy}_${mm}.json`;
-        if (!shards[shardName]) shards[shardName] = [];
-        const { isOutgoing, url, ...clean } = m;
-        shards[shardName].push(clean);
-      });
+      // 3. Shard and push history to target cloud storage if any messages were added
+      if (successCount > 0) {
+        setForwardProgress(prev => ({
+          ...prev,
+          currentDetail: '正在同步更新目标云端索引与分片...'
+        }));
 
-      const newIndexData = Object.keys(shards);
-      for (const shardName of newIndexData) {
-        const cleanJson = JSON.stringify(shards[shardName]);
-        await targetClient.uploadText(cleanJson, shardName);
-      }
-      await targetClient.uploadText(JSON.stringify(newIndexData), 'chat_index.json');
-      cacheFile(`history_array_${targetProfile.id}`, targetHistory);
+        const shards = {};
+        targetHistory.forEach(m => {
+          const date = new Date(m.timestamp);
+          const yyyy = date.getFullYear();
+          const mm = String(date.getMonth() + 1).padStart(2, '0');
+          const shardName = `chat_history_${yyyy}_${mm}.json`;
+          if (!shards[shardName]) shards[shardName] = [];
+          const { isOutgoing, url, ...clean } = m;
+          shards[shardName].push(clean);
+        });
 
-      // If forwarding to current active profile, update local messages state
-      if (targetProfile.id === activeProfileId) {
-        setMessages(targetHistory);
+        const newIndexData = Object.keys(shards);
+        for (const shardName of newIndexData) {
+          const cleanJson = JSON.stringify(shards[shardName]);
+          await targetClient.uploadText(cleanJson, shardName);
+        }
+        await targetClient.uploadText(JSON.stringify(newIndexData), 'chat_index.json');
+        cacheFile(`history_array_${targetProfile.id}`, targetHistory);
+
+        // If forwarding to current active profile, update local messages state
+        if (targetProfile.id === activeProfileId) {
+          setMessages(targetHistory);
+        }
       }
 
       setSelectedMessageIds(new Set());
       setStatusText('Synchronized');
 
-      setConfirmConfig({
-        title: '转发完成',
-        message: `已成功将 ${successCount} 条消息逐条转发至配置【${targetProfile.name || targetProfile.username}】。`,
-        confirmText: '确定',
-        cancelText: '',
-        isDanger: false,
-        icon: 'fa-solid fa-circle-check',
-        onOk: () => setConfirmOpen(false)
-      });
-      setConfirmOpen(true);
+      setForwardProgress(prev => ({
+        ...prev,
+        isCompleted: true,
+        isCancelled: isCancelled,
+        current: isCancelled ? successCount : msgsToForward.length,
+        currentDetail: isCancelled
+          ? `转发已取消，已成功发送 ${successCount} 条消息`
+          : `已成功将全部 ${successCount} 条消息逐条发送至【${targetDisplayName}】`,
+        successCount
+      }));
 
     } catch (err) {
       console.error('[Forward Error]:', err);
-      setConfirmConfig({
-        title: '转发失败',
-        message: `转发过程中发生错误: ${err.message || err}`,
-        confirmText: '确定',
-        cancelText: '',
-        isDanger: true,
-        icon: 'fa-solid fa-circle-exclamation',
-        onOk: () => setConfirmOpen(false)
-      });
-      setConfirmOpen(true);
+      setForwardProgress(prev => ({
+        ...prev,
+        isCompleted: true,
+        isCancelled: true,
+        currentDetail: `转发失败: ${err.message || err}`
+      }));
     }
   };
 
@@ -2414,6 +2466,25 @@ export default function App() {
         messageCount={forwardTargetMsgs.length}
         onConfirm={handleForwardToProfile}
         onCancel={() => setForwardModalOpen(false)}
+      />
+
+      {/* Forward Progress Modal */}
+      <ForwardProgressModal
+        isOpen={forwardProgress.isOpen}
+        isCompleted={forwardProgress.isCompleted}
+        isCancelled={forwardProgress.isCancelled}
+        current={forwardProgress.current}
+        total={forwardProgress.total}
+        currentDetail={forwardProgress.currentDetail}
+        targetProfileName={forwardProgress.targetProfileName}
+        onCancel={() => {
+          forwardCancelledRef.current = true;
+          setForwardProgress(prev => ({
+            ...prev,
+            currentDetail: '正在取消转发并保存已完成条目...'
+          }));
+        }}
+        onClose={() => setForwardProgress(prev => ({ ...prev, isOpen: false }))}
       />
 
       {/* Settings Modal */}
