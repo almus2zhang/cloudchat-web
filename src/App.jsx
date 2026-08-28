@@ -1389,25 +1389,53 @@ export default function App() {
     if (!msgsToShare || msgsToShare.length === 0) return;
 
     let successCount = 0;
-    let failedCount = 0;
+    const generatedLinks = [];
+    const shareBaseUrl = (currentProfile?.shareBaseUrl || '').trim().replace(/\/+$/, '');
+
     for (const msg of msgsToShare) {
       try {
         const fileName = msg.fileName || (msg.type !== 'TEXT' && msg.type !== 'FOLDER' ? msg.content : null);
         const textContent = msg.type === 'TEXT' ? (msg.resolvedText || msg.content) : null;
         if (fileName || textContent) {
           if (client.copyToShare) {
-            await client.copyToShare(fileName, textContent);
-            successCount++;
+            const destFileName = await client.copyToShare(fileName, textContent);
+            if (destFileName) {
+              successCount++;
+              if (shareBaseUrl) {
+                generatedLinks.push(`${shareBaseUrl}/${destFileName}`);
+              }
+            }
           }
         }
       } catch (err) {
         console.warn('[Remote Share Error]:', err);
-        failedCount++;
       }
     }
 
     if (successCount > 0) {
-      alert(`已成功将 ${successCount} 个条目的文件拷贝至远程 share 目录`);
+      if (generatedLinks.length > 0) {
+        const now = Date.now();
+        const newMsgs = generatedLinks.map((link, idx) => ({
+          id: 'msg_' + (now + idx) + '_' + Math.random().toString(36).substr(2, 5),
+          sender: currentProfile?.username || '我',
+          senderName: currentProfile?.username || '我',
+          senderAvatar: currentProfile?.avatar || '',
+          content: link,
+          timestamp: now + idx,
+          type: 'TEXT',
+          isOutgoing: true,
+          status: 'SUCCESS',
+          categories: activeCategory && activeCategory !== 'all' ? [activeCategory] : [],
+          lastModified: now + idx
+        }));
+
+        setMessages(prev => {
+          const updated = [...prev, ...newMsgs];
+          pushHistoryToCloud(updated);
+          return updated;
+        });
+      }
+      alert(`已成功将 ${successCount} 个条目的文件拷贝至远程 share 目录${generatedLinks.length > 0 ? `，并生成了 ${generatedLinks.length} 条分享链接消息` : ''}`);
     } else {
       alert('未找到可拷贝的文件或拷贝失败');
     }

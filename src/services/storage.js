@@ -703,16 +703,16 @@ class WebDavStorageClient {
                 }
             });
             if (response.ok || response.status === 201 || response.status === 204) {
-                return true;
+                return baseName;
             }
             throw new Error(`WebDAV COPY failed: ${response.status}`);
         } else if (textContent) {
             const timestamp = Date.now();
             const textFileName = `text_${timestamp}.txt`;
             await this.uploadText(textContent, 'share/' + textFileName);
-            return true;
+            return textFileName;
         }
-        return false;
+        return null;
     }
 
     async getFileSize(fileName) {
@@ -1115,14 +1115,14 @@ class S3StorageClient {
             const baseName = cleanName.split('/').pop();
             const success = await this.copyFile(cleanName, 'share/' + baseName);
             if (!success) throw new Error('S3 COPY failed');
-            return true;
+            return baseName;
         } else if (textContent) {
             const timestamp = Date.now();
             const textFileName = `text_${timestamp}.txt`;
             await this.uploadText(textContent, 'share/' + textFileName);
-            return true;
+            return textFileName;
         }
-        return false;
+        return null;
     }
 
     async uploadText(content, fileName) {

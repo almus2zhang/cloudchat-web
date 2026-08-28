@@ -869,6 +869,26 @@ export default function SettingsModal({
                     </span>
                   </div>
 
+                  {/* Share Base URL */}
+                  <div className="flex flex-col gap-1.5 border-t border-borderColor/40 pt-3">
+                    <label className="text-xs font-semibold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <i className="fa-solid fa-share-nodes text-indigo-400"></i> 远程 Share 对外访问根 URL (Share Base URL)
+                    </label>
+                    <input 
+                      type="url" 
+                      value={editingProfile.shareBaseUrl || ''}
+                      onChange={(e) => handleFieldChange('shareBaseUrl', e.target.value)}
+                      disabled={editingProfile.preset === 'jianguoyun'}
+                      placeholder={editingProfile.preset === 'jianguoyun' ? '坚果云模式不可用' : '例如: https://share.example.com 或 http://nas.local/share'}
+                      className={`bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors w-full ${
+                        editingProfile.preset === 'jianguoyun' ? 'opacity-60 cursor-not-allowed' : ''
+                      }`}
+                    />
+                    <span className="text-[10px] text-textMuted mt-0.5">
+                      配置远程 share 目录的对外访问根 URL。设置后，远程 Share 完成将逐条自动生成对应文件的链接消息。
+                    </span>
+                  </div>
+
                   {/* Username & Sync interval */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex flex-col gap-1.5">
