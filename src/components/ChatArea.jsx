@@ -34,6 +34,15 @@ const CATEGORY_MAP = {
   'privacy': '隐私'
 };
 
+const getWeightedLength = (str) => {
+  if (!str) return 0;
+  let len = 0;
+  for (let i = 0; i < str.length; i++) {
+    len += str.charCodeAt(i) > 127 ? 2 : 1;
+  }
+  return len;
+};
+
 export default function ChatArea({
   currentProfile,
   isSameLan = false,
@@ -2056,9 +2065,7 @@ export default function ChatArea({
                                   const fullText = msg.resolvedText || (msg.isTextFile ? (msg.textPreview || msg.content) : (msg.content || (typeof msg === 'string' ? msg : '')));
                                   const isMarkdown = fullText.startsWith('<!--md-->') || fullText.startsWith('[MD]');
                                   const cleanText = fullText.replace(/^<!--md-->/, '').replace(/^\[MD\]/, '');
-                                  const lineCount = (cleanText.match(/\n/g) || []).length + 1;
-                                  const estimatedLines = Math.floor(cleanText.length / 30);
-                                  const isLong = lineCount > 3 || estimatedLines > 3 || cleanText.length > 80;
+                                  const isLong = getWeightedLength(cleanText) > 300;
                                   const isExpanded = expandedTextIds.has(msg.id);
 
                                   const toggleBtn = isLong ? (
@@ -2314,9 +2321,7 @@ export default function ChatArea({
                           const fullText = item.resolvedText || (item.isTextFile ? (item.textPreview || item.content) : item.content);
                           const isMarkdown = fullText.startsWith('<!--md-->') || fullText.startsWith('[MD]');
                           const cleanText = fullText.replace(/^<!--md-->/, '').replace(/^\[MD\]/, '');
-                          const lineCount = (cleanText.match(/\n/g) || []).length + 1;
-                          const estimatedLines = Math.floor(cleanText.length / 30);
-                          const isLong = lineCount > 3 || estimatedLines > 3 || cleanText.length > 80;
+                          const isLong = getWeightedLength(cleanText) > 300;
                           const isExpanded = expandedTextIds.has(item.id);
 
                           const toggleBtn = isLong ? (

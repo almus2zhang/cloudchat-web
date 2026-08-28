@@ -1382,7 +1382,16 @@ export default function App() {
   const handleRemoteShare = async (targetMsgs = null) => {
     const client = activeClientRef.current;
     if (!client) {
-      alert('存储服务未连接，请先检查连接配置');
+      setConfirmConfig({
+        title: '存储连接提示',
+        message: '存储服务未连接，请先在设置中检查连接配置。',
+        confirmText: '我知道了',
+        cancelText: '',
+        isDanger: true,
+        icon: 'fa-solid fa-circle-exclamation',
+        onOk: () => setConfirmOpen(false)
+      });
+      setConfirmOpen(true);
       return;
     }
     const msgsToShare = targetMsgs || messages.filter(m => selectedMessageIds.has(m.id));
@@ -1435,9 +1444,27 @@ export default function App() {
           return updated;
         });
       }
-      alert(`已成功将 ${successCount} 个条目的文件拷贝至远程 share 目录${generatedLinks.length > 0 ? `，并生成了 ${generatedLinks.length} 条分享链接消息` : ''}`);
+      setConfirmConfig({
+        title: '远程 Share 完成',
+        message: `已成功将 ${successCount} 个条目的文件拷贝至远程 share 目录${generatedLinks.length > 0 ? `，并生成了 ${generatedLinks.length} 条分享链接消息。` : '。'}`,
+        confirmText: '确定',
+        cancelText: '',
+        isDanger: false,
+        icon: 'fa-solid fa-circle-check',
+        onOk: () => setConfirmOpen(false)
+      });
+      setConfirmOpen(true);
     } else {
-      alert('未找到可拷贝的文件或拷贝失败');
+      setConfirmConfig({
+        title: '远程 Share 提示',
+        message: '未找到可拷贝的文件或拷贝失败，请检查文件状态及存储配置。',
+        confirmText: '确定',
+        cancelText: '',
+        isDanger: true,
+        icon: 'fa-solid fa-circle-exclamation',
+        onOk: () => setConfirmOpen(false)
+      });
+      setConfirmOpen(true);
     }
     setSelectedMessageIds(new Set());
   };
@@ -2180,6 +2207,10 @@ export default function App() {
         message={confirmConfig.message}
         onOk={confirmConfig.onOk}
         onCancel={() => setConfirmOpen(false)}
+        confirmText={confirmConfig.confirmText || '确定'}
+        cancelText={confirmConfig.cancelText !== undefined ? confirmConfig.cancelText : '取消'}
+        isDanger={confirmConfig.isDanger !== undefined ? confirmConfig.isDanger : true}
+        icon={confirmConfig.icon}
         customActions={confirmConfig.customActions}
       />
 
