@@ -715,6 +715,31 @@ class WebDavStorageClient {
         return null;
     }
 
+    async deleteShareFile(fileName) {
+        if (!this.isValidUserDir()) {
+            console.error('WebDAV deleteShareFile: refusing, user directory is invalid');
+            return false;
+        }
+        if (!fileName || typeof fileName !== 'string') return false;
+        const cleanName = fileName.trim().replace(/^\/+/, '');
+        if (!cleanName || cleanName.includes('..')) return false;
+        const baseName = cleanName.split('/').pop().split('?')[0].split('#')[0].trim();
+        if (!baseName) return false;
+        const sharePath = 'share/' + baseName;
+        if (!this.validateSafeName(sharePath)) return false;
+        try {
+            const url = this.getUrl(sharePath);
+            const response = await fetch(url, {
+                method: 'DELETE',
+                headers: { 'Authorization': this.getAuthHeader() }
+            });
+            return response.ok || response.status === 404;
+        } catch (e) {
+            console.warn('WebDAV deleteShareFile failed:', e);
+            return false;
+        }
+    }
+
     async getFileSize(fileName) {
         const url = this.getUrl(fileName);
         try {
@@ -1123,6 +1148,30 @@ class S3StorageClient {
             return textFileName;
         }
         return null;
+    }
+
+    async deleteShareFile(fileName) {
+        if (!this.isValidUserDir()) {
+            console.error('S3 deleteShareFile: refusing, user directory is invalid');
+            return false;
+        }
+        if (!fileName || typeof fileName !== 'string') return false;
+        const cleanName = fileName.trim().replace(/^\/+/, '');
+        if (!cleanName || cleanName.includes('..')) return false;
+        const baseName = cleanName.split('/').pop().split('?')[0].split('#')[0].trim();
+        if (!baseName) return false;
+        const sharePath = 'share/' + baseName;
+        if (!this.validateSafeName(sharePath)) return false;
+        try {
+            const url = this.getUrl(sharePath);
+            const headers = {};
+            signS3Request('DELETE', url, this.config, headers);
+            const response = await fetch(url, { method: 'DELETE', headers });
+            return response.ok || response.status === 404;
+        } catch (e) {
+            console.warn('S3 deleteShareFile failed:', e);
+            return false;
+        }
     }
 
     async uploadText(content, fileName) {

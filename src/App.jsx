@@ -1232,6 +1232,27 @@ export default function App() {
         const selectedContents = new Set(selectedMsgs.map(m => m.content).filter(Boolean));
         const selectedTimestamps = new Set(selectedMsgs.map(m => m.timestamp));
 
+        const msgsToDelete = messages.filter(m => idsToDelete.has(m.id) || (m.content && selectedContents.has(m.content) && selectedTimestamps.has(m.timestamp)));
+
+        // If URL matches shareBaseUrl, delete corresponding file from share/ directory
+        const shareBaseUrl = (currentProfile?.shareBaseUrl || '').trim().replace(/\/+$/, '');
+        if (shareBaseUrl && client.deleteShareFile) {
+          for (const m of msgsToDelete) {
+            const rawContent = (m.resolvedText || m.content || '').trim();
+            if (rawContent.startsWith(shareBaseUrl)) {
+              const remaining = rawContent.slice(shareBaseUrl.length).replace(/^\/+/, '');
+              const shareFileName = remaining.split(/[\s?#\n]/)[0].trim();
+              if (shareFileName) {
+                try {
+                  await client.deleteShareFile(shareFileName);
+                } catch (e) {
+                  console.warn('[Delete Share File Error]:', e);
+                }
+              }
+            }
+          }
+        }
+
         const updatedMessages = messages.map(m => {
           if (idsToDelete.has(m.id) || (m.content && selectedContents.has(m.content) && selectedTimestamps.has(m.timestamp))) {
             return { ...m, isDeleted: true, lastModified: Date.now() };
@@ -1255,6 +1276,23 @@ export default function App() {
         setConfirmOpen(false);
         const client = activeClientRef.current;
         if (!client) return;
+
+        // If URL matches shareBaseUrl, delete corresponding file from share/ directory
+        const shareBaseUrl = (currentProfile?.shareBaseUrl || '').trim().replace(/\/+$/, '');
+        if (shareBaseUrl && client.deleteShareFile) {
+          const rawContent = (msg.resolvedText || msg.content || '').trim();
+          if (rawContent.startsWith(shareBaseUrl)) {
+            const remaining = rawContent.slice(shareBaseUrl.length).replace(/^\/+/, '');
+            const shareFileName = remaining.split(/[\s?#\n]/)[0].trim();
+            if (shareFileName) {
+              try {
+                await client.deleteShareFile(shareFileName);
+              } catch (e) {
+                console.warn('[Delete Share File Error]:', e);
+              }
+            }
+          }
+        }
 
         const updatedMessages = messages.map(m => {
           if (m.id === msg.id || (m.content && m.content === msg.content && m.timestamp === msg.timestamp)) {
