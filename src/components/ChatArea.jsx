@@ -2001,7 +2001,7 @@ export default function ChatArea({
                         </div>
                       ) : (
                         /* RENDER COMPOSITE GROUP (MIXED / NON-MEDIA CARD) */
-                        <div className={`p-3 rounded-2xl border shadow-sm max-w-[300px] flex flex-col gap-1.5 font-sans ${
+                        <div className={`p-3 rounded-2xl border shadow-sm max-w-[620px] w-full min-w-[260px] flex flex-col gap-1.5 font-sans ${
                           item.isOutgoing
                             ? 'bg-accentColor border-accentColor/40 text-white rounded-tr-none'
                             : 'bg-bgSecondary border-borderColor text-textPrimary rounded-tl-none'
@@ -2060,8 +2060,31 @@ export default function ChatArea({
                                   const isLong = lineCount > 3 || estimatedLines > 3 || cleanText.length > 80;
                                   const isExpanded = expandedTextIds.has(msg.id);
 
+                                  const toggleBtn = isLong ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpandedTextIds(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(msg.id)) next.delete(msg.id);
+                                          else next.add(msg.id);
+                                          return new Set(next);
+                                        });
+                                      }}
+                                      className={`text-[12px] font-bold cursor-pointer flex items-center gap-1 px-2.5 py-0.5 rounded-full transition-all ${
+                                        item.isOutgoing 
+                                          ? 'text-amber-300 hover:text-amber-200 bg-black/25' 
+                                          : 'text-blue-600 hover:text-blue-700 dark:text-amber-400 dark:hover:text-amber-300 bg-blue-500/10 dark:bg-amber-400/10'
+                                      }`}
+                                    >
+                                      {isExpanded ? '▲ 收起' : '▼ 展开全文'}
+                                    </button>
+                                  ) : null;
+
                                   return (
                                     <div className="flex flex-col items-start pr-4 w-full">
+                                      {isLong && <div className="mb-1.5">{toggleBtn}</div>}
                                       {isMarkdown ? (
                                         <div className={`w-full select-text ${isLong && !isExpanded ? 'max-h-[4.8rem] overflow-hidden relative' : ''}`}>
                                           <MarkdownView content={fullText} isOutgoing={item.isOutgoing} />
@@ -2074,27 +2097,7 @@ export default function ChatArea({
                                           {fullText}
                                         </span>
                                       )}
-                                      {isLong && (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setExpandedTextIds(prev => {
-                                              const next = new Set(prev);
-                                              if (next.has(msg.id)) next.delete(msg.id);
-                                              else next.add(msg.id);
-                                              return new Set(next);
-                                            });
-                                          }}
-                                          className={`text-[12px] font-bold cursor-pointer mt-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full transition-all ${
-                                            item.isOutgoing 
-                                              ? 'text-amber-300 hover:text-amber-200 bg-black/25' 
-                                              : 'text-blue-600 hover:text-blue-700 dark:text-amber-400 dark:hover:text-amber-300 bg-blue-500/10 dark:bg-amber-400/10'
-                                          }`}
-                                        >
-                                          {isExpanded ? '▲ 收起' : '▼ 展开全文'}
-                                        </button>
-                                      )}
+                                      {isLong && <div className="mt-1.5">{toggleBtn}</div>}
                                     </div>
                                   );
                                 })()}
@@ -2315,8 +2318,31 @@ export default function ChatArea({
                           const isLong = lineCount > 3 || estimatedLines > 3 || cleanText.length > 80;
                           const isExpanded = expandedTextIds.has(item.id);
 
+                          const toggleBtn = isLong ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedTextIds(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(item.id)) next.delete(item.id);
+                                  else next.add(item.id);
+                                  return new Set(next);
+                                });
+                              }}
+                              className={`text-[12px] font-bold cursor-pointer flex items-center gap-1 px-2.5 py-0.5 rounded-full transition-all ${
+                                item.isOutgoing 
+                                  ? 'text-amber-300 hover:text-amber-200 bg-black/25' 
+                                  : 'text-blue-600 hover:text-blue-700 dark:text-amber-400 dark:hover:text-amber-300 bg-blue-500/10 dark:bg-amber-400/10'
+                              }`}
+                            >
+                              {isExpanded ? '▲ 收起' : '▼ 展开全文'}
+                            </button>
+                          ) : null;
+
                           return (
                             <div className="flex flex-col items-start w-full">
+                              {isLong && <div className="mb-1.5">{toggleBtn}</div>}
                               {isMarkdown ? (
                                 <div className={`w-full select-text ${isLong && !isExpanded ? 'max-h-[4.8rem] overflow-hidden relative' : ''}`}>
                                   <MarkdownView content={fullText} isOutgoing={item.isOutgoing} />
@@ -2329,27 +2355,7 @@ export default function ChatArea({
                                   {fullText}
                                 </span>
                               )}
-                              {isLong && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setExpandedTextIds(prev => {
-                                      const next = new Set(prev);
-                                      if (next.has(item.id)) next.delete(item.id);
-                                      else next.add(item.id);
-                                      return new Set(next);
-                                    });
-                                  }}
-                                  className={`text-[12px] font-bold cursor-pointer mt-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full transition-all ${
-                                    item.isOutgoing 
-                                      ? 'text-amber-300 hover:text-amber-200 bg-black/25' 
-                                      : 'text-blue-600 hover:text-blue-700 dark:text-amber-400 dark:hover:text-amber-300 bg-blue-500/10 dark:bg-amber-400/10'
-                                  }`}
-                                >
-                                  {isExpanded ? '▲ 收起' : '▼ 展开全文'}
-                                </button>
-                              )}
+                              {isLong && <div className="mt-1.5">{toggleBtn}</div>}
                             </div>
                           );
                         })()}
