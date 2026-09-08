@@ -401,6 +401,15 @@ export default function ChatArea({
   const [contextMenu, setContextMenu] = useState(null);
   const contextMenuRef = useRef(null);
 
+  // Toast notification state
+  const [toast, setToast] = useState(null);
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(prev => (prev?.message === message ? null : prev));
+    }, 3500);
+  };
+
   // Scroll lock preference state (persisted in localStorage)
   const [lockScroll, setLockScroll] = useState(() => {
     return typeof localStorage !== 'undefined' && localStorage.getItem('cloudchat_lock_scroll') === 'true';
@@ -1117,6 +1126,142 @@ export default function ChatArea({
       setTimeout(() => URL.revokeObjectURL(url), 10000);
     } catch (err) {
       console.error('Save as error:', err);
+    }
+  };
+
+  // --- Copy File To Clipboard (Desktop native file copy & Web image/link copy) ---
+  const handleCopyFile = async (msgOrMsgs) => {
+    const msgs = Array.isArray(msgOrMsgs) ? msgOrMsgs : [msgOrMsgs];
+    const validMsgs = msgs.filter(m => m && m.type !== 'FOLDER');
+    if (validMsgs.length === 0) return;
+
+    const isTauri = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+
+    if (isTauri) {
+      try {
+        const savedPaths = [];
+        for (const msg of validMsgs) {
+          if (msg.type === 'TEXT') {
+            const raw = msg.content || '';
+            const clean = raw.replace(/^<!--md-->/, '').replace(/^\[MD\]/, '');
+            await navigator.clipboard.writeText(clean).catch(() => {});
+            continue;
+          }
+
+          const displayName = msg.fileName || (msg.content ? msg.content.replace(/^\d+_/, '') : 'file');
+          let blob = await getCachedFile(msg.id);
+          if (!blob && msg.url && msg.url.startsWith('blob:')) {
+            try {
+              const res = await fetch(msg.url);
+              blob = await res.blob();
+            } catch (e) {}
+          }
+          if (!blob && storageClient) {
+            blob = await storageClient.downloadFile(msg.content);
+            if (blob) cacheFile(msg.id, blob);
+          }
+
+          if (blob) {
+            await new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = async () => {
+                const base64 = reader.result.split(',')[1];
+                const savedPath = await invokeTauri('save_file_to_downloads', {
+                  suggestedName: displayName,
+                  suggested_name: displayName,
+                  base64Content: base64,
+                  base64_content: base64
+                });
+                if (savedPath) {
+                  savedPaths.push(savedPath);
+                  lastSavedFilePathRef.current = savedPath;
+                }
+                resolve();
+              };
+              reader.readAsDataURL(blob);
+            });
+          }
+        }
+
+        if (savedPaths.length > 0) {
+          await invokeTauri('copy_files_to_clipboard', { paths: savedPaths });
+          showToast(
+            savedPaths.length === 1 
+              ? `已复制文件到剪贴板，可直接在微信/文件夹中粘贴 (Ctrl+V)` 
+              : `已复制 ${savedPaths.length} 个文件到剪贴板，可直接粘贴 (Ctrl+V)`,
+            'success'
+          );
+        } else if (validMsgs.some(m => m.type === 'TEXT')) {
+          showToast('已复制文本到剪贴板', 'success');
+        } else {
+          showToast('无法获取文件数据', 'error');
+        }
+      } catch (err) {
+        console.error('Tauri copy file error:', err);
+        showToast('复制文件失败: ' + (err.message || err), 'error');
+      }
+      return;
+    }
+
+    // Web 浏览器环境：
+    // 如果是单张图片，支持写入剪贴板图片位图
+    const firstMsg = validMsgs[0];
+    if (validMsgs.length === 1 && firstMsg.type === 'IMAGE') {
+      try {
+        let blob = await getCachedFile(firstMsg.id);
+        if (!blob && firstMsg.url && firstMsg.url.startsWith('blob:')) {
+          try {
+            const res = await fetch(firstMsg.url);
+            blob = await res.blob();
+          } catch (e) {}
+        }
+        if (!blob && storageClient) {
+          blob = await storageClient.downloadFile(firstMsg.content);
+          if (blob) cacheFile(firstMsg.id, blob);
+        }
+        if (blob) {
+          let pngBlob = blob;
+          if (blob.type !== 'image/png') {
+            const img = new Image();
+            const url = URL.createObjectURL(blob);
+            await new Promise((resolve, reject) => {
+              img.onload = resolve;
+              img.onerror = reject;
+              img.src = url;
+            });
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            pngBlob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+            URL.revokeObjectURL(url);
+          }
+          if (navigator.clipboard && window.ClipboardItem) {
+            await navigator.clipboard.write([
+              new ClipboardItem({ 'image/png': pngBlob })
+            ]);
+            showToast('已复制图片到剪贴板，可在聊天软件或编辑器中直接粘贴 (Ctrl+V)', 'success');
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Copy image to clipboard failed:', e);
+      }
+    }
+
+    // 其他类型或多选：复制内容/链接/文件名，并提示用户浏览器限制
+    const textList = validMsgs.map(m => m.resolvedText || m.content || m.fileName || '').filter(Boolean);
+    if (textList.length > 0) {
+      try {
+        await navigator.clipboard.writeText(textList.join('\n'));
+        showToast(
+          '已复制文件名/链接。Web端因浏览器安全沙箱限制无法直接复制系统文件，桌面端支持直接粘贴文件实体 (Ctrl+V)',
+          'info'
+        );
+      } catch (e) {
+        showToast(`复制失败: ${e.message || e}`, 'error');
+      }
     }
   };
 
@@ -2944,6 +3089,17 @@ export default function ChatArea({
               <button
                 onClick={() => {
                   const selectedMsgs = messages.filter(m => selectedMessageIds.has(m.id));
+                  handleCopyFile(selectedMsgs);
+                  setContextMenu(null);
+                }}
+                className="w-full px-4 py-2 text-xs font-semibold text-amber-400 hover:bg-amber-500/10 transition-colors flex items-center gap-2.5"
+              >
+                <i className="fa-regular fa-copy text-amber-400 w-4 text-center"></i> 复制所选文件 ({selectedMessageIds.size})
+              </button>
+
+              <button
+                onClick={() => {
+                  const selectedMsgs = messages.filter(m => selectedMessageIds.has(m.id));
                   if (onOpenDiaryExport) onOpenDiaryExport(selectedMsgs);
                   setContextMenu(null);
                 }}
@@ -3080,6 +3236,17 @@ export default function ChatArea({
           {/* Add/Edit Caption — for non-text & non-folder messages */}
           {selectedMessageIds.size <= 1 && contextMenu.msg.type !== 'TEXT' && contextMenu.msg.type !== 'FOLDER' && (
             <>
+              <button
+                onClick={() => {
+                  const targetMsg = contextMenu.msg;
+                  setContextMenu(null);
+                  handleCopyFile(targetMsg);
+                }}
+                className="w-full px-4 py-2 text-xs text-amber-400 hover:bg-amber-500/10 transition-colors flex items-center gap-2.5 font-semibold"
+              >
+                <i className="fa-regular fa-copy text-amber-400 w-4 text-center"></i> 复制文件
+              </button>
+
               <button
                 onClick={() => {
                   const targetMsg = contextMenu.msg;
@@ -3272,6 +3439,20 @@ export default function ChatArea({
         onConfirm={inputModalConfig.onConfirm}
         onCancel={() => setInputModalConfig(prev => ({ ...prev, isOpen: false }))}
       />
+
+      {/* Floating Toast Notification */}
+      {toast && (
+        <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl shadow-2xl text-xs font-semibold flex items-center gap-2.5 animate-fade-in border ${
+          toast.type === 'success' 
+            ? 'bg-emerald-600 text-white border-emerald-400/40 shadow-emerald-950/40' 
+            : toast.type === 'error'
+            ? 'bg-red-600 text-white border-red-400/40 shadow-red-950/40'
+            : 'bg-slate-800 text-slate-100 border-slate-700 shadow-black/50'
+        }`}>
+          <i className={`fa-solid ${toast.type === 'success' ? 'fa-circle-check' : toast.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'}`}></i>
+          <span>{toast.message}</span>
+        </div>
+      )}
     </main>
   );
 }
