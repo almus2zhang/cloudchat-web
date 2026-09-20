@@ -2,9 +2,9 @@ import React from 'react';
 
 /**
  * Lightweight and fast Markdown renderer for CloudChat Web/Desktop
- * Supports: Headers (###), Bold (**text**), Lists (- item), Blockquotes (> text), Code blocks, Line breaks
+ * Supports: Headers (###), Bold (**text**), Lists (- item), Blockquotes (> text), Code blocks, Links, Raw URLs
  */
-export default function MarkdownView({ content, isOutgoing = false, className = '' }) {
+export default function MarkdownView({ content, isOutgoing = false, className = '', onUrlClick }) {
   if (!content) return null;
 
   // Strip leading <!--md--> or [MD] prefix
@@ -23,7 +23,7 @@ export default function MarkdownView({ content, isOutgoing = false, className = 
         <ul key={`list-${keyIndex++}`} className="list-disc pl-5 my-1.5 space-y-1">
           {listItems.map((it, idx) => (
             <li key={idx} className="leading-relaxed">
-              {renderInline(it, isOutgoing)}
+              {renderInline(it, isOutgoing, onUrlClick)}
             </li>
           ))}
         </ul>
@@ -48,7 +48,7 @@ export default function MarkdownView({ content, isOutgoing = false, className = 
       const text = trimmed.replace(/^#+\s*/, '');
       elements.push(
         <h4 key={`h-${keyIndex++}`} className="font-bold text-[14.5px] mt-2 mb-1 opacity-95 flex items-center gap-1.5">
-          {renderInline(text, isOutgoing)}
+          {renderInline(text, isOutgoing, onUrlClick)}
         </h4>
       );
     }
@@ -58,7 +58,7 @@ export default function MarkdownView({ content, isOutgoing = false, className = 
       const text = trimmed.replace(/^#+\s*/, '');
       elements.push(
         <h3 key={`h-${keyIndex++}`} className="font-bold text-[15.5px] mt-2.5 mb-1.5 opacity-100 flex items-center gap-1.5">
-          {renderInline(text, isOutgoing)}
+          {renderInline(text, isOutgoing, onUrlClick)}
         </h3>
       );
     }
@@ -73,7 +73,7 @@ export default function MarkdownView({ content, isOutgoing = false, className = 
             isOutgoing ? 'border-white/60 text-white/90 bg-white/10 rounded-r' : 'border-accentColor/60 text-textSecondary bg-black/5 dark:bg-white/5 rounded-r'
           }`}
         >
-          {renderInline(text, isOutgoing)}
+          {renderInline(text, isOutgoing, onUrlClick)}
         </blockquote>
       );
     }
@@ -87,7 +87,7 @@ export default function MarkdownView({ content, isOutgoing = false, className = 
       flushList();
       elements.push(
         <p key={`p-${keyIndex++}`} className="my-1 leading-relaxed text-[13.5px]">
-          {renderInline(trimmed, isOutgoing)}
+          {renderInline(trimmed, isOutgoing, onUrlClick)}
         </p>
       );
     }
@@ -102,12 +102,16 @@ export default function MarkdownView({ content, isOutgoing = false, className = 
   );
 }
 
-function renderInline(text, isOutgoing) {
+export function renderInline(text, isOutgoing, onUrlClick) {
   if (!text) return null;
 
-  // Split by bold (**text**)
+  // Regex matching:
+  // 1. Markdown link: [text](url)
+  // 2. Bold: **text**
+  // 3. Inline code: `code`
+  // 4. Raw URLs: https://... or http://... or www....
+  const regex = /(\[([^\]]+)\]\((https?:\/\/[^\s)]+|www\.[^\s)]+)\)|\*\*.*?\*\*|`.*?`|https?:\/\/[^\s<>'"()]+|www\.[^\s<>'"()]+)/gi;
   const parts = [];
-  const regex = /(\*\*.*?\*\*|`.*?`)/g;
   let lastIdx = 0;
   let match;
   let idx = 0;
@@ -117,13 +121,40 @@ function renderInline(text, isOutgoing) {
       parts.push(text.slice(lastIdx, match.index));
     }
     const token = match[0];
-    if (token.startsWith('**') && token.endsWith('**')) {
+
+    // Markdown link: [text](url)
+    if (token.startsWith('[') && match[2] && match[3]) {
+      const linkText = match[2];
+      let linkUrl = match[3];
+      if (!linkUrl.startsWith('http://') && !linkUrl.startsWith('https://')) {
+        linkUrl = 'https://' + linkUrl;
+      }
+      parts.push(
+        <span
+          key={`md-link-${idx++}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onUrlClick) onUrlClick(linkUrl);
+          }}
+          className={`underline decoration-current underline-offset-2 cursor-pointer font-medium hover:opacity-80 transition-opacity ${
+            isOutgoing ? 'text-amber-200' : 'text-blue-600 dark:text-cyan-400'
+          }`}
+          title={linkUrl}
+        >
+          {linkText}
+        </span>
+      );
+    }
+    // Bold: **text**
+    else if (token.startsWith('**') && token.endsWith('**')) {
       parts.push(
         <strong key={`bold-${idx++}`} className="font-bold opacity-100">
           {token.slice(2, -2)}
         </strong>
       );
-    } else if (token.startsWith('`') && token.endsWith('`')) {
+    }
+    // Inline code: `code`
+    else if (token.startsWith('`') && token.endsWith('`')) {
       parts.push(
         <code 
           key={`code-${idx++}`} 
@@ -134,6 +165,80 @@ function renderInline(text, isOutgoing) {
           {token.slice(1, -1)}
         </code>
       );
+    }
+    // Raw URL: https://... or http://... or www....
+    else if (/^(https?:\/\/|www\.)/i.test(token)) {
+      const cleanUrl = token.replace(/[.,;!?]+$/, '');
+      const trailing = token.slice(cleanUrl.length);
+      let targetUrl = cleanUrl;
+      if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+        targetUrl = 'https://' + targetUrl;
+      }
+      parts.push(
+        <span
+          key={`url-${idx++}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onUrlClick) onUrlClick(targetUrl);
+          }}
+          className={`underline decoration-current underline-offset-2 cursor-pointer font-medium hover:opacity-80 transition-opacity ${
+            isOutgoing ? 'text-amber-200' : 'text-blue-600 dark:text-cyan-400'
+          }`}
+          title={targetUrl}
+        >
+          {cleanUrl}
+        </span>
+      );
+      if (trailing) {
+        parts.push(trailing);
+      }
+    }
+    lastIdx = regex.lastIndex;
+  }
+
+  if (lastIdx < text.length) {
+    parts.push(text.slice(lastIdx));
+  }
+
+  return parts;
+}
+
+export function renderTextWithUrls(text, isOutgoing, onUrlClick) {
+  if (!text) return null;
+  const regex = /(https?:\/\/[^\s<>'"()]+|www\.[^\s<>'"()]+)/gi;
+  const parts = [];
+  let lastIdx = 0;
+  let match;
+  let idx = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      parts.push(text.slice(lastIdx, match.index));
+    }
+    const token = match[0];
+    const cleanUrl = token.replace(/[.,;!?]+$/, '');
+    const trailing = token.slice(cleanUrl.length);
+    let targetUrl = cleanUrl;
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      targetUrl = 'https://' + targetUrl;
+    }
+    parts.push(
+      <span
+        key={`raw-url-${idx++}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (onUrlClick) onUrlClick(targetUrl);
+        }}
+        className={`underline decoration-current underline-offset-2 cursor-pointer font-medium hover:opacity-80 transition-opacity ${
+          isOutgoing ? 'text-amber-200' : 'text-blue-600 dark:text-cyan-400'
+        }`}
+        title={targetUrl}
+      >
+        {cleanUrl}
+      </span>
+    );
+    if (trailing) {
+      parts.push(trailing);
     }
     lastIdx = regex.lastIndex;
   }

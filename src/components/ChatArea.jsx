@@ -4,7 +4,7 @@ import { createDownloadState } from '../services/storage';
 import { getCachedFile, cacheFile } from '../services/db';
 import CalendarModal from './CalendarModal';
 import InputModal from './InputModal';
-import MarkdownView from './MarkdownView';
+import MarkdownView, { renderTextWithUrls } from './MarkdownView';
 import { getInitialAvatar } from '../utils/avatar';
 import { openExternalLink } from '../utils/openLink';
 import { getAiConfig, transcribeAndSummarizeAudio } from '../services/aiService';
@@ -409,6 +409,9 @@ export default function ChatArea({
       setToast(prev => (prev?.message === message ? null : prev));
     }, 3500);
   };
+
+  // URL click action modal state: { isOpen: true, url: string } or null
+  const [urlActionModal, setUrlActionModal] = useState(null);
 
   // Scroll lock preference state (persisted in localStorage)
   const [lockScroll, setLockScroll] = useState(() => {
@@ -2265,14 +2268,18 @@ export default function ChatArea({
                                       {isLong && <div className="mb-1.5">{toggleBtn}</div>}
                                       {isMarkdown ? (
                                         <div className={`select-text max-w-full ${isLong && !isExpanded ? 'max-h-[4.8rem] overflow-hidden relative' : ''}`}>
-                                          <MarkdownView content={fullText} isOutgoing={item.isOutgoing} />
+                                          <MarkdownView 
+                                            content={fullText} 
+                                            isOutgoing={item.isOutgoing} 
+                                            onUrlClick={(url) => setUrlActionModal({ isOpen: true, url })}
+                                          />
                                         </div>
                                       ) : (
                                         <span
                                           style={isLong && !isExpanded ? { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}}
                                           className={`text-[14.5px] whitespace-pre-wrap break-words leading-relaxed select-text font-normal ${item.isOutgoing ? 'text-white' : 'text-textPrimary'}`}
                                         >
-                                          {fullText}
+                                          {renderTextWithUrls(fullText, item.isOutgoing, (url) => setUrlActionModal({ isOpen: true, url }))}
                                         </span>
                                       )}
                                       {isLong && <div className="mt-1.5">{toggleBtn}</div>}
@@ -2521,14 +2528,18 @@ export default function ChatArea({
                               {isLong && <div className="mb-1.5">{toggleBtn}</div>}
                               {isMarkdown ? (
                                 <div className={`select-text max-w-full ${isLong && !isExpanded ? 'max-h-[4.8rem] overflow-hidden relative' : ''}`}>
-                                  <MarkdownView content={fullText} isOutgoing={item.isOutgoing} />
+                                  <MarkdownView 
+                                    content={fullText} 
+                                    isOutgoing={item.isOutgoing} 
+                                    onUrlClick={(url) => setUrlActionModal({ isOpen: true, url })}
+                                  />
                                 </div>
                               ) : (
                                 <span
                                   style={isLong && !isExpanded ? { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}}
                                   className="whitespace-pre-wrap break-words leading-relaxed select-text font-normal text-[14.5px]"
                                 >
-                                  {fullText}
+                                  {renderTextWithUrls(fullText, item.isOutgoing, (url) => setUrlActionModal({ isOpen: true, url }))}
                                 </span>
                               )}
                               {isLong && <div className="mt-1.5">{toggleBtn}</div>}
@@ -3451,6 +3462,67 @@ export default function ChatArea({
         }`}>
           <i className={`fa-solid ${toast.type === 'success' ? 'fa-circle-check' : toast.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'}`}></i>
           <span>{toast.message}</span>
+        </div>
+      )}
+
+      {/* URL Click Action Modal */}
+      {urlActionModal && urlActionModal.isOpen && (
+        <div 
+          className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => setUrlActionModal(null)}
+        >
+          <div 
+            className="bg-bgSecondary border border-borderColor rounded-2xl shadow-2xl p-5 max-w-sm w-full animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2.5 text-textPrimary font-semibold text-sm mb-3">
+              <i className="fa-solid fa-link text-accentColor"></i>
+              <span>链接操作</span>
+            </div>
+
+            <div className="bg-bgPrimary/80 border border-borderColor/60 rounded-xl p-3 mb-4 max-h-28 overflow-y-auto">
+              <span className="text-xs text-textSecondary break-all font-mono select-all">
+                {urlActionModal.url}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  const targetUrl = urlActionModal.url;
+                  setUrlActionModal(null);
+                  openExternalLink(targetUrl);
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-accentColor hover:bg-accentHover text-white font-medium text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+              >
+                <i className="fa-solid fa-arrow-up-right-from-square"></i>
+                <span>打开链接</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const targetUrl = urlActionModal.url;
+                  setUrlActionModal(null);
+                  navigator.clipboard.writeText(targetUrl).then(() => {
+                    showToast('已复制链接到剪贴板', 'success');
+                  }).catch(() => {
+                    showToast('复制链接失败', 'error');
+                  });
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-bgPrimary hover:bg-white/10 text-textPrimary border border-borderColor font-medium text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <i className="fa-regular fa-copy"></i>
+                <span>复制链接</span>
+              </button>
+
+              <button
+                onClick={() => setUrlActionModal(null)}
+                className="w-full py-2 px-4 rounded-xl text-textMuted hover:text-textPrimary hover:bg-white/5 font-medium text-xs transition-all mt-1 cursor-pointer"
+              >
+                取消
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </main>
