@@ -136,9 +136,7 @@ export function renderInline(text, isOutgoing, onUrlClick) {
             e.stopPropagation();
             if (onUrlClick) onUrlClick(linkUrl);
           }}
-          className={`underline decoration-current underline-offset-2 cursor-pointer font-medium hover:opacity-80 transition-opacity ${
-            isOutgoing ? 'text-amber-200' : 'text-blue-600 dark:text-cyan-400'
-          }`}
+          className="underline decoration-current underline-offset-2 cursor-pointer font-medium hover:opacity-80 transition-opacity text-blue-600 dark:text-cyan-400"
           title={linkUrl}
         >
           {linkText}
@@ -181,9 +179,7 @@ export function renderInline(text, isOutgoing, onUrlClick) {
             e.stopPropagation();
             if (onUrlClick) onUrlClick(targetUrl);
           }}
-          className={`underline decoration-current underline-offset-2 cursor-pointer font-medium hover:opacity-80 transition-opacity ${
-            isOutgoing ? 'text-amber-200' : 'text-blue-600 dark:text-cyan-400'
-          }`}
+          className="underline decoration-current underline-offset-2 cursor-pointer font-medium hover:opacity-80 transition-opacity text-blue-600 dark:text-cyan-400"
           title={targetUrl}
         >
           {cleanUrl}
@@ -229,9 +225,7 @@ export function renderTextWithUrls(text, isOutgoing, onUrlClick) {
           e.stopPropagation();
           if (onUrlClick) onUrlClick(targetUrl);
         }}
-        className={`underline decoration-current underline-offset-2 cursor-pointer font-medium hover:opacity-80 transition-opacity ${
-          isOutgoing ? 'text-amber-200' : 'text-blue-600 dark:text-cyan-400'
-        }`}
+        className="underline decoration-current underline-offset-2 cursor-pointer font-medium hover:opacity-80 transition-opacity text-blue-600 dark:text-cyan-400"
         title={targetUrl}
       >
         {cleanUrl}
