@@ -3,6 +3,7 @@ import { cacheFile } from '../services/db';
 import { StorageClient } from '../services/storage';
 import { PRESET_AVATARS, getInitialAvatar } from '../utils/avatar';
 import { getAiConfig, saveAiConfig, testAiConnection, DEFAULT_AI_CONFIG } from '../services/aiService';
+import { checkDesktopUpdate, APP_VERSION, OTA_MANIFEST_URL } from '../services/otaService';
 
 // 校验「设定的用户目录」合法性：目录各段只能包含数字、字母、下划线、连字符。
 // 返回 null 表示合法，否则返回错误提示文案。
@@ -32,9 +33,14 @@ export default function SettingsModal({
   onDeleteProfile,
   onSwitchProfile,
   storageClient,
-  resolveAvatarUrl
+  resolveAvatarUrl,
+  onTriggerOtaCheck
 }) {
-  const [activeTab, setActiveTab] = useState('storage'); // 'storage' | 'ai'
+  const [activeTab, setActiveTab] = useState('storage'); // 'storage' | 'ai' | 'about'
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [otaCheckStatus, setOtaCheckStatus] = useState(null); // null | 'latest' | 'available' | 'error'
+  const [otaCheckMsg, setOtaCheckMsg] = useState('');
+  const [foundUpdateInfo, setFoundUpdateInfo] = useState(null);
   
   const handleInitNewProfileData = () => ({
     id: 'profile_' + Date.now(),
@@ -288,6 +294,21 @@ export default function SettingsModal({
             >
               <i className="fa-solid fa-wand-magic-sparkles"></i> AI 大模型
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('about');
+                setOtaCheckStatus(null);
+                setOtaCheckMsg('');
+              }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                activeTab === 'about'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-textSecondary hover:text-textPrimary hover:bg-white/5'
+              }`}
+            >
+              <i className="fa-solid fa-cloud-arrow-down"></i> 关于与更新
+            </button>
           </div>
           <button onClick={onClose} className="text-textMuted hover:text-textPrimary transition-colors">
             <i className="fa-solid fa-xmark text-lg"></i>
@@ -297,7 +318,141 @@ export default function SettingsModal({
         {/* Body */}
         <div className="p-6 max-h-[75vh] overflow-y-auto flex flex-col gap-5">
           
-          {activeTab === 'ai' ? (
+          {activeTab === 'about' ? (
+            /* ABOUT & OTA UPDATE TAB */
+            <div className="flex flex-col gap-5 animate-fade-in">
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-bgPrimary border border-borderColor">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white text-2xl shadow-lg shadow-blue-500/20">
+                  <i className="fa-solid fa-cloud"></i>
+                </div>
+                <div className="flex flex-col">
+                  <h3 className="text-base font-bold text-textPrimary flex items-center gap-2">
+                    CloudChat 跨端云聊天
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                      v{APP_VERSION}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-textMuted mt-0.5">
+                    基于 WebDAV / S3 协议的高私密性双向同步聊天传输客户端
+                  </p>
+                </div>
+              </div>
+
+              {/* OTA Check Card */}
+              <div className="p-4 rounded-xl bg-bgPrimary border border-borderColor flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-textPrimary uppercase tracking-wider">
+                      软件在线更新 (OTA)
+                    </h4>
+                    <p className="text-xs text-textMuted mt-0.5">
+                      检查最新版本发布，支持一键下载与自动升级
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={checkingUpdate}
+                    onClick={async () => {
+                      setCheckingUpdate(true);
+                      setOtaCheckStatus(null);
+                      try {
+                        const update = await checkDesktopUpdate(APP_VERSION);
+                        setCheckingUpdate(false);
+                        if (update) {
+                          setOtaCheckStatus('available');
+                          setFoundUpdateInfo(update);
+                          if (onTriggerOtaCheck) onTriggerOtaCheck(update);
+                        } else {
+                          setOtaCheckStatus('latest');
+                          setOtaCheckMsg(`当前已是最新版本 (v${APP_VERSION})`);
+                        }
+                      } catch (e) {
+                        setCheckingUpdate(false);
+                        setOtaCheckStatus('error');
+                        setOtaCheckMsg('检查更新失败，请确认网络连接');
+                      }
+                    }}
+                    className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    {checkingUpdate ? (
+                      <>
+                        <i className="fa-solid fa-spinner fa-spin"></i>
+                        <span>检查中...</span>
+                      </>
+                    ) : (
+                      <>
+                        <i className="fa-solid fa-rotate"></i>
+                        <span>检查更新</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {otaCheckStatus === 'latest' && (
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+                    <i className="fa-solid fa-circle-check text-base"></i>
+                    <span>{otaCheckMsg}</span>
+                  </div>
+                )}
+
+                {otaCheckStatus === 'available' && (
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <i className="fa-solid fa-cloud-arrow-down text-base"></i>
+                      <span>检测到新版本 v{foundUpdateInfo?.version}！更新弹窗已开启。</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onTriggerOtaCheck && onTriggerOtaCheck(foundUpdateInfo)}
+                      className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium text-xs transition-colors"
+                    >
+                      查看详情
+                    </button>
+                  </div>
+                )}
+
+                {otaCheckStatus === 'error' && (
+                  <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+                    <i className="fa-solid fa-circle-exclamation text-base"></i>
+                    <span>{otaCheckMsg}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Release links */}
+              <div className="p-4 rounded-xl bg-bgPrimary border border-borderColor flex flex-col gap-2.5">
+                <span className="text-xs font-semibold text-textSecondary uppercase tracking-wider">
+                  多端发布资源
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <a
+                    href="https://chat.a66.nasnas.site/web/c7x9k2m5p8q3v6w1n4t7b8d2/app-debug.apk"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-2.5 rounded-lg bg-bgSecondary hover:bg-white/5 border border-borderColor flex items-center justify-between text-textPrimary group transition-all"
+                  >
+                    <span className="flex items-center gap-2">
+                      <i className="fa-brands fa-android text-emerald-400 text-base"></i>
+                      <span>Android APK 安装包</span>
+                    </span>
+                    <i className="fa-solid fa-download text-textMuted group-hover:text-accentColor transition-colors"></i>
+                  </a>
+                  <a
+                    href="https://chat.a66.nasnas.site/web/c7x9k2m5p8q3v6w1n4t7b8d2/CloudChat_1.0.1_x64-setup.exe"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-2.5 rounded-lg bg-bgSecondary hover:bg-white/5 border border-borderColor flex items-center justify-between text-textPrimary group transition-all"
+                  >
+                    <span className="flex items-center gap-2">
+                      <i className="fa-brands fa-windows text-blue-400 text-base"></i>
+                      <span>Windows 桌面安装包</span>
+                    </span>
+                    <i className="fa-solid fa-download text-textMuted group-hover:text-accentColor transition-colors"></i>
+                  </a>
+                </div>
+              </div>
+            </div>
+          ) : activeTab === 'ai' ? (
             /* AI CONFIGURATION TAB */
             <div className="flex flex-col gap-4 animate-fade-in">
               <div className="flex flex-col gap-1">
@@ -974,18 +1129,29 @@ export default function SettingsModal({
 
         {/* Footer */}
         <div className="px-6 py-4 bg-bgPrimary/30 border-t border-borderColor flex justify-end gap-3">
-          <button 
-            className="px-4 py-2 text-sm font-medium text-textSecondary hover:bg-white/5 rounded-lg transition-colors border border-borderColor"
-            onClick={onClose}
-          >
-            取消
-          </button>
-          <button 
-            className="px-5 py-2 text-sm font-semibold text-white bg-accentColor hover:bg-accentHover rounded-lg transition-colors shadow-lg shadow-accentColor/10"
-            onClick={handleSave}
-          >
-            保存配置方案
-          </button>
+          {activeTab === 'about' ? (
+            <button 
+              className="px-5 py-2 text-sm font-semibold text-white bg-accentColor hover:bg-accentHover rounded-lg transition-colors shadow-lg shadow-accentColor/10"
+              onClick={onClose}
+            >
+              关闭
+            </button>
+          ) : (
+            <>
+              <button 
+                className="px-4 py-2 text-sm font-medium text-textSecondary hover:bg-white/5 rounded-lg transition-colors border border-borderColor"
+                onClick={onClose}
+              >
+                取消
+              </button>
+              <button 
+                className="px-5 py-2 text-sm font-semibold text-white bg-accentColor hover:bg-accentHover rounded-lg transition-colors shadow-lg shadow-accentColor/10"
+                onClick={handleSave}
+              >
+                保存配置方案
+              </button>
+            </>
+          )}
         </div>
 
       </div>

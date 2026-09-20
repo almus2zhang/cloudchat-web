@@ -1,0 +1,51 @@
+import pkg from '../../package.json';
+
+export const OTA_MANIFEST_URL = 'https://chat.a66.nasnas.site/web/c7x9k2m5p8q3v6w1n4t7b8d2/version.json';
+export const APP_VERSION = pkg.version || '1.0.1';
+
+// Compare semver: returns 1 if v1 > v2, -1 if v1 < v2, 0 if equal
+export function compareVersions(v1, v2) {
+  if (!v1 || !v2) return 0;
+  const p1 = v1.replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+  const p2 = v2.replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+    const num1 = p1[i] || 0;
+    const num2 = p2[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
+export async function checkDesktopUpdate(currentVersion = APP_VERSION) {
+  try {
+    const res = await fetch(OTA_MANIFEST_URL + '?t=' + Date.now(), {
+      cache: 'no-store'
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const desktop = data.desktop;
+    if (!desktop || !desktop.version || !desktop.downloadUrl) return null;
+
+    if (compareVersions(desktop.version, currentVersion) > 0) {
+      return desktop;
+    }
+    return null;
+  } catch (err) {
+    console.warn('OTA check error:', err);
+    return null;
+  }
+}
+
+export async function fetchFullVersionManifest() {
+  try {
+    const res = await fetch(OTA_MANIFEST_URL + '?t=' + Date.now(), {
+      cache: 'no-store'
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.warn('Fetch manifest error:', err);
+    return null;
+  }
+}

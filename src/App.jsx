@@ -12,6 +12,8 @@ import DebugLogsModal from './components/DebugLogsModal';
 import GuideModal from './components/GuideModal';
 import ForwardToProfileModal from './components/ForwardToProfileModal';
 import ForwardProgressModal from './components/ForwardProgressModal';
+import OtaUpdateModal from './components/OtaUpdateModal';
+import { checkDesktopUpdate, APP_VERSION } from './services/otaService';
 import { StorageClient, checkWebLanStatus } from './services/storage';
 import { initDB, cacheFile, getCachedFile, clearAllCache, deleteCachedFile } from './services/db';
 import { generateInitialAvatarBlob } from './utils/avatar';
@@ -75,6 +77,25 @@ export default function App() {
   const [diaryExportOpen, setDiaryExportOpen] = useState(false);
   const [diaryExportFolder, setDiaryExportFolder] = useState(null);
   const [diaryExportSelectedMsgs, setDiaryExportSelectedMsgs] = useState(null);
+
+  // OTA Update States
+  const [otaUpdateInfo, setOtaUpdateInfo] = useState(null);
+  const [showOtaModal, setShowOtaModal] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const update = await checkDesktopUpdate(APP_VERSION);
+        if (update) {
+          setOtaUpdateInfo(update);
+          setShowOtaModal(true);
+        }
+      } catch (err) {
+        console.warn('Startup OTA check failed:', err);
+      }
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Folder nesting states: 移入文件夹 & 打包时选择父文件夹
   const [moveIntoFolderOpen, setMoveIntoFolderOpen] = useState(false);
@@ -2536,6 +2557,10 @@ export default function App() {
         onSwitchProfile={(pId) => { setActiveProfileId(pId); localStorage.setItem('cloudchat_web_active_profile_id', pId); }}
         storageClient={activeClientRef.current}
         resolveAvatarUrl={resolveAvatarUrl}
+        onTriggerOtaCheck={(update) => {
+          setOtaUpdateInfo(update);
+          setShowOtaModal(true);
+        }}
       />
 
       {/* Category Selection Modal */}
@@ -2660,6 +2685,14 @@ export default function App() {
       <GuideModal
         isOpen={guideModalOpen}
         onClose={() => setGuideModalOpen(false)}
+      />
+
+      {/* OTA Update Modal */}
+      <OtaUpdateModal
+        isOpen={showOtaModal}
+        onClose={() => setShowOtaModal(false)}
+        updateInfo={otaUpdateInfo}
+        currentVersion={APP_VERSION}
       />
 
     </div>
