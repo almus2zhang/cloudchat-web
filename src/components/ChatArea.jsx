@@ -428,6 +428,40 @@ export default function ChatArea({
   const [folderStack, setFolderStack] = useState([]);
   const currentFolderId = folderStack.length > 0 ? folderStack[folderStack.length - 1] : null;
 
+  // Helper to resolve real text content for offloaded or regular text messages
+  const getMessageResolvedText = async (msg) => {
+    if (!msg) return '';
+    if (msg.resolvedText) return msg.resolvedText;
+    const isTextFile = msg.isTextFile || (msg.type === 'TEXT' && msg.content && typeof msg.content === 'string' && msg.content.startsWith('text_') && msg.content.endsWith('.txt'));
+    if (isTextFile) {
+      try {
+        const cacheKey1 = `${msg.id}_${msg.content}`;
+        const cacheKey2 = msg.id;
+        let blob = await getCachedFile(cacheKey1) || await getCachedFile(cacheKey2);
+        if (blob) {
+          const text = await blob.text();
+          msg.resolvedText = text;
+          return text;
+        }
+        if (storageClient) {
+          const text = typeof storageClient.downloadText === 'function'
+            ? await storageClient.downloadText(msg.content)
+            : await (await storageClient.downloadFile(msg.content)).text();
+          if (text) {
+            msg.resolvedText = text;
+            const textBlob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            cacheFile(cacheKey1, textBlob);
+            return text;
+          }
+        }
+      } catch (e) {
+        console.warn('[ChatArea] Failed to download text file content:', e);
+      }
+      return msg.textPreview || msg.content || '';
+    }
+    return msg.content || '';
+  };
+
   // Pagination & Lazy Load States
   const [visibleCount, setVisibleCount] = useState(100);
 
@@ -1145,7 +1179,7 @@ export default function ChatArea({
         const savedPaths = [];
         for (const msg of validMsgs) {
           if (msg.type === 'TEXT') {
-            const raw = msg.content || '';
+            const raw = await getMessageResolvedText(msg);
             const clean = raw.replace(/^<!--md-->/, '').replace(/^\[MD\]/, '');
             await navigator.clipboard.writeText(clean).catch(() => {});
             continue;
@@ -1254,7 +1288,14 @@ export default function ChatArea({
     }
 
     // 其他类型或多选：复制内容/链接/文件名，并提示用户浏览器限制
-    const textList = validMsgs.map(m => m.resolvedText || m.content || m.fileName || '').filter(Boolean);
+    const resolvedTexts = await Promise.all(validMsgs.map(async m => {
+      if (m.type === 'TEXT') {
+        const t = await getMessageResolvedText(m);
+        return t.replace(/^<!--md-->/, '').replace(/^\[MD\]/, '');
+      }
+      return m.fileName || m.content || '';
+    }));
+    const textList = resolvedTexts.filter(Boolean);
     if (textList.length > 0) {
       try {
         await navigator.clipboard.writeText(textList.join('\n'));
@@ -3163,11 +3204,18 @@ export default function ChatArea({
           {selectedMessageIds.size <= 1 && contextMenu.msg.type === 'TEXT' && (
             <>
               <button
-                onClick={() => {
-                  const raw = contextMenu.msg.content || '';
-                  const clean = raw.replace(/^<!--md-->/, '').replace(/^\[MD\]/, '');
-                  navigator.clipboard.writeText(clean).catch(() => {});
+                onClick={async () => {
+                  const targetMsg = contextMenu.msg;
                   setContextMenu(null);
+                  try {
+                    const raw = await getMessageResolvedText(targetMsg);
+                    const clean = raw.replace(/^<!--md-->/, '').replace(/^\[MD\]/, '');
+                    await navigator.clipboard.writeText(clean);
+                    showToast('已复制文本', 'success');
+                  } catch (e) {
+                    console.error('Failed to copy text:', e);
+                    showToast('复制文本失败', 'error');
+                  }
                 }}
                 className="w-full px-4 py-2 text-xs text-textPrimary hover:bg-white/5 transition-colors flex items-center gap-2.5"
               >
@@ -3175,14 +3223,15 @@ export default function ChatArea({
               </button>
 
               <button
-                onClick={() => {
+                onClick={async () => {
                   const targetMsg = contextMenu.msg;
                   setContextMenu(null);
+                  const raw = await getMessageResolvedText(targetMsg);
                   setInputModalConfig({
                     isOpen: true,
                     title: '编辑文本消息',
                     hint: '修改后的文本内容将同步更新：',
-                    defaultValue: targetMsg.content || '',
+                    defaultValue: raw || '',
                     placeholder: '请输入消息内容...',
                     confirmText: '保存编辑',
                     onConfirm: (newText) => {
