@@ -49,3 +49,24 @@ export async function fetchFullVersionManifest() {
     return null;
   }
 }
+
+export function getIgnoredDesktopVersion() {
+  try {
+    return localStorage.getItem('cloudchat_ignored_ota_version') || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+export function setIgnoredDesktopVersion(version) {
+  try {
+    localStorage.setItem('cloudchat_ignored_ota_version', version || '');
+  } catch (e) {}
+}
+
+export function clearIgnoredDesktopVersion() {
+  try {
+    localStorage.removeItem('cloudchat_ignored_ota_version');
+  } catch (e) {}
+}
+

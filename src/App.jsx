@@ -13,7 +13,7 @@ import GuideModal from './components/GuideModal';
 import ForwardToProfileModal from './components/ForwardToProfileModal';
 import ForwardProgressModal from './components/ForwardProgressModal';
 import OtaUpdateModal from './components/OtaUpdateModal';
-import { checkDesktopUpdate, APP_VERSION } from './services/otaService';
+import { checkDesktopUpdate, APP_VERSION, getIgnoredDesktopVersion, compareVersions } from './services/otaService';
 import { StorageClient, checkWebLanStatus } from './services/storage';
 import { initDB, cacheFile, getCachedFile, clearAllCache, deleteCachedFile } from './services/db';
 import { generateInitialAvatarBlob } from './utils/avatar';
@@ -87,8 +87,11 @@ export default function App() {
       try {
         const update = await checkDesktopUpdate(APP_VERSION);
         if (update) {
-          setOtaUpdateInfo(update);
-          setShowOtaModal(true);
+          const ignored = getIgnoredDesktopVersion();
+          if (!ignored || compareVersions(update.version, ignored) > 0) {
+            setOtaUpdateInfo(update);
+            setShowOtaModal(true);
+          }
         }
       } catch (err) {
         console.warn('Startup OTA check failed:', err);
