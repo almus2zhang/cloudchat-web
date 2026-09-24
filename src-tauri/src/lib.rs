@@ -33,8 +33,10 @@ fn open_file(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        let _ = std::process::Command::new("cmd")
-            .args(["/C", "start", "", &path])
+        let p = path.replace("'", "''");
+        let script = format!("Start-Process -FilePath '{}'", p);
+        let _ = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script])
             .creation_flags(0x08000000)
             .spawn();
     }
@@ -57,8 +59,7 @@ fn open_folder(path: String) -> Result<(), String> {
 
         if p.is_file() {
             let _ = std::process::Command::new("explorer")
-                .arg("/select,")
-                .arg(&p)
+                .arg(format!("/select,{}", p.to_string_lossy()))
                 .spawn();
         } else {
             let _ = std::process::Command::new("explorer")

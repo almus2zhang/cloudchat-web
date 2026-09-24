@@ -1,7 +1,20 @@
 import pkg from '../../package.json';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 
 export const OTA_MANIFEST_URL = 'https://chat.a66.nasnas.site/web/c7x9k2m5p8q3v6w1n4t7b8d2/version.json';
-export const APP_VERSION = pkg.version || '1.0.1';
+export const APP_VERSION = pkg.version || '1.0.2';
+
+export async function universalFetch(url, options = {}) {
+  const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+  if (isTauri) {
+    try {
+      return await tauriFetch(url, options);
+    } catch (e) {
+      console.warn('[OTA] tauriFetch error, falling back to window.fetch:', e);
+    }
+  }
+  return await window.fetch(url, options);
+}
 
 // Compare semver: returns 1 if v1 > v2, -1 if v1 < v2, 0 if equal
 export function compareVersions(v1, v2) {
@@ -19,10 +32,13 @@ export function compareVersions(v1, v2) {
 
 export async function checkDesktopUpdate(currentVersion = APP_VERSION) {
   try {
-    const res = await fetch(OTA_MANIFEST_URL + '?t=' + Date.now(), {
+    const res = await universalFetch(OTA_MANIFEST_URL + '?t=' + Date.now(), {
       cache: 'no-store'
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn('OTA check non-ok HTTP status:', res.status);
+      return null;
+    }
     const data = await res.json();
     const desktop = data.desktop;
     if (!desktop || !desktop.version || !desktop.downloadUrl) return null;
@@ -32,14 +48,14 @@ export async function checkDesktopUpdate(currentVersion = APP_VERSION) {
     }
     return null;
   } catch (err) {
-    console.warn('OTA check error:', err);
-    return null;
+    console.error('OTA check error:', err);
+    throw err;
   }
 }
 
 export async function fetchFullVersionManifest() {
   try {
-    const res = await fetch(OTA_MANIFEST_URL + '?t=' + Date.now(), {
+    const res = await universalFetch(OTA_MANIFEST_URL + '?t=' + Date.now(), {
       cache: 'no-store'
     });
     if (!res.ok) return null;

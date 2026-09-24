@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { setIgnoredDesktopVersion } from '../services/otaService';
+import { setIgnoredDesktopVersion, universalFetch } from '../services/otaService';
 
 async function invokeTauri(cmd, args = {}) {
   if (typeof window !== 'undefined') {
@@ -47,7 +47,7 @@ export default function OtaUpdateModal({
 
     try {
       if (isTauri) {
-        const response = await fetch(updateInfo.downloadUrl, { cache: 'no-store' });
+        const response = await universalFetch(updateInfo.downloadUrl, { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`下载失败 (HTTP ${response.status})`);
         }
@@ -85,7 +85,9 @@ export default function OtaUpdateModal({
         const fileName = updateInfo.downloadUrl.split('/').pop() || `CloudChat_${updateInfo.version}_Setup.exe`;
 
         const savedPath = await invokeTauri('save_file_to_downloads', {
+          suggestedName: fileName,
           suggested_name: fileName,
+          base64Content: base64,
           base64_content: base64
         });
 

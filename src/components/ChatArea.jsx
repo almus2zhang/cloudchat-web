@@ -894,11 +894,20 @@ export default function ChatArea({
                   logDebug(`[Tauri Open File] Saved path: ${savedPath}. Launching open_file...`);
                   if (savedPath) {
                     lastSavedFilePathRef.current = savedPath;
-                    await invokeTauri('open_file', { path: savedPath });
-                    logDebug(`[Tauri Open File] open_file invoked successfully!`);
+                    if (ext === 'apk') {
+                      await invokeTauri('open_folder', { path: savedPath });
+                      showToast('APK 文件为安卓安装包，已保存至下载目录并定位，请发送至手机安装', 'info');
+                    } else if (ext === 'exe') {
+                      showToast('已保存安装程序，正在启动...', 'info');
+                      await invokeTauri('open_file', { path: savedPath });
+                    } else {
+                      await invokeTauri('open_file', { path: savedPath });
+                    }
+                    logDebug(`[Tauri Open File] open_file/open_folder invoked successfully!`);
                   }
                 } catch (e) {
                   logDebug(`[Tauri Open File ERR] ${e.message || e}`);
+                  showToast(`打开文件失败: ${e.message || e}`, 'error');
                 }
               }
             } else {
@@ -914,6 +923,9 @@ export default function ChatArea({
                 logDebug(`[Tauri Download] Saved path: ${savedPath}. Opening explorer folder...`);
                 if (savedPath) {
                   lastSavedFilePathRef.current = savedPath;
+                  if (ext === 'apk') {
+                    showToast('APK 为安卓安装包，已保存至下载目录', 'info');
+                  }
                   if (autoOpenFolder) {
                     await invokeTauri('open_folder', { path: savedPath });
                     logDebug(`[Tauri Download] open_folder invoked successfully!`);
@@ -921,6 +933,7 @@ export default function ChatArea({
                 }
               } catch (e) {
                 logDebug(`[Tauri Download ERR] ${e.message || e}`);
+                showToast(`保存文件失败: ${e.message || e}`, 'error');
               }
             }
           };
