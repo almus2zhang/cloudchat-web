@@ -105,13 +105,44 @@ fn copy_files_to_clipboard(paths: Vec<String>) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn get_clipboard_files() -> Result<Vec<String>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let script = "(Get-Clipboard -Format FileDropList).FullName";
+        let output = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", script])
+            .creation_flags(0x08000000)
+            .output()
+            .map_err(|e| e.to_string())?;
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let paths: Vec<String> = stdout
+                .lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty() && std::path::Path::new(l).exists())
+                .collect();
+            return Ok(paths);
+        }
+    }
+    Ok(Vec::new())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_store::Builder::default().build())
     .plugin(tauri_plugin_window_state::Builder::default().build())
     .plugin(tauri_plugin_http::init())
-    .invoke_handler(tauri::generate_handler![save_file_to_downloads, open_file, open_folder, read_file_binary, copy_files_to_clipboard])
+    .invoke_handler(tauri::generate_handler![
+        save_file_to_downloads,
+        open_file,
+        open_folder,
+        read_file_binary,
+        copy_files_to_clipboard,
+        get_clipboard_files
+    ])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

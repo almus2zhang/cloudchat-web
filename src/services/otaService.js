@@ -2,7 +2,7 @@ import pkg from '../../package.json';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 
 export const OTA_MANIFEST_URL = 'https://chat.a66.nasnas.site/web/c7x9k2m5p8q3v6w1n4t7b8d2/version.json';
-export const APP_VERSION = pkg.version || '1.0.2';
+export const APP_VERSION = pkg.version || '1.0.3';
 
 export async function universalFetch(url, options = {}) {
   const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);

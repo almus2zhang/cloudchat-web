@@ -17,6 +17,7 @@ import { checkDesktopUpdate, APP_VERSION, getIgnoredDesktopVersion, compareVersi
 import { StorageClient, checkWebLanStatus } from './services/storage';
 import { initDB, cacheFile, getCachedFile, clearAllCache, deleteCachedFile } from './services/db';
 import { generateInitialAvatarBlob } from './utils/avatar';
+import { getMimeType, isImageFile, isVideoFile, isAudioFile, getMessageType, ensureProperFile } from './utils/mimeUtils';
 
 // Global media URL lookup cache
 const cachedMediaUrls = {};
@@ -871,7 +872,7 @@ export default function App() {
   // --- Thumbnail Helper ---
   const generateThumbnail = async (file) => {
     return new Promise((resolve) => {
-      if (!file.type.startsWith('image/')) return resolve(null);
+      if (!isImageFile(file)) return resolve(null);
       const img = new Image();
       const url = URL.createObjectURL(file);
       img.src = url;
@@ -911,11 +912,11 @@ export default function App() {
     const client = activeClientRef.current;
 
     if (file) {
-      const isImage = file.type.startsWith('image/');
-      const isVideo = file.type.startsWith('video/');
-      const type = isImage ? 'IMAGE' : (isVideo ? 'VIDEO' : 'FILE');
-      const fileName = `${Date.now()}_${file.name}`;
-      const fileSize = file.size;
+      const properFile = ensureProperFile(file);
+      const type = getMessageType(properFile);
+      const isImage = type === 'IMAGE';
+      const fileName = `${Date.now()}_${properFile.name}`;
+      const fileSize = properFile.size;
 
       const chunkingThreshold = currentProfile.webDavChunkSize || 0;
       const useChunking = (currentProfile.type === 'WEBDAV' && chunkingThreshold > 0 && fileSize > chunkingThreshold);
@@ -932,7 +933,7 @@ export default function App() {
         type: type,
         isOutgoing: true,
         status: 'SENDING',
-        url: URL.createObjectURL(file), // Show local object URL immediately
+        url: URL.createObjectURL(properFile), // Show local object URL immediately
         fileSize: fileSize,
         isChunked: useChunking,
         chunkSize: chunkSize,
@@ -946,7 +947,7 @@ export default function App() {
       };
 
       // Cache file locally
-      cacheFile(newMsg.id, file);
+      cacheFile(newMsg.id, properFile);
 
       setMessages(prev => {
         return [...prev, newMsg];
@@ -978,7 +979,7 @@ export default function App() {
 
           if (isImage) {
             try {
-              const thumbBlob = await generateThumbnail(file);
+              const thumbBlob = await generateThumbnail(properFile);
               if (thumbBlob) {
                 const thumbName = `thumb_${fileName}`;
                 await client.uploadFile(thumbBlob, thumbName, 'image/jpeg', () => {});
@@ -1018,8 +1019,8 @@ export default function App() {
               for (let i = 0; i < totalChunks; i++) {
                 const start = i * chunkSize;
                 const end = Math.min(start + chunkSize, fileSize);
-                const chunk = file.slice(start, end);
-                await client.uploadFileRange(chunk, fileName, file.type, start, end - 1, fileSize, (prog) => {
+                const chunk = properFile.slice(start, end);
+                await client.uploadFileRange(chunk, fileName, properFile.type, start, end - 1, fileSize, (prog) => {
                   const overall = Math.round(((i * 100) / totalChunks) + (prog / totalChunks));
                   updateProgress(overall);
                 });
@@ -1029,16 +1030,16 @@ export default function App() {
               for (let i = 0; i < totalChunks; i++) {
                 const start = i * chunkSize;
                 const end = Math.min(start + chunkSize, fileSize);
-                const chunk = file.slice(start, end);
+                const chunk = properFile.slice(start, end);
                 const partName = `${fileName}.part${i}`;
-                await client.uploadFile(chunk, partName, file.type, (prog) => {
+                await client.uploadFile(chunk, partName, properFile.type, (prog) => {
                   const overall = Math.round(((i * 100) / totalChunks) + (prog / totalChunks));
                   updateProgress(overall);
                 });
               }
             }
           } else {
-            await client.uploadFile(file, fileName, file.type, (prog) => {
+            await client.uploadFile(properFile, fileName, properFile.type, (prog) => {
               updateProgress(prog);
             });
           }
@@ -2308,6 +2309,63 @@ export default function App() {
         setIsDraggingOver(false);
       }
     };
+    const processPath = async (filePath) => {
+      if (!filePath) return;
+      const now = Date.now();
+      const lastTime = lastProcessedPathRef.current[filePath] || 0;
+      // 防重复/防刷：1秒内同一文件路径仅处理一次
+      if (now - lastTime < 1000) {
+        return;
+      }
+      lastProcessedPathRef.current[filePath] = now;
+
+      addDebugLog(`[Tauri File] 收到文件路径: ${filePath}`);
+      try {
+        let file = null;
+        const fileName = filePath.split(/[/\\]/).pop() || 'file';
+        const mimeType = getMimeType(fileName, 'application/octet-stream');
+
+        // 1. 优先通过 Rust read_file_binary 读取
+        try {
+          const invoke = window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
+          if (invoke) {
+            const base64Str = await invoke('read_file_binary', { path: filePath });
+            const byteCharacters = atob(base64Str);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            file = new File([byteArray], fileName, { type: mimeType });
+            addDebugLog(`[Tauri File] 框架 Rust 读取二进制成功: ${fileName} (${file.size} bytes, type=${mimeType})`);
+          }
+        } catch (eRust) {
+          addDebugLog(`[Tauri File Warning] Rust read_file_binary 失败: ${eRust.message || eRust}，尝试 asset 协议...`);
+        }
+
+        // 2. 回退：使用 convertFileSrc + fetch
+        if (!file && typeof window !== 'undefined') {
+          try {
+            const { convertFileSrc } = await import('@tauri-apps/api/core');
+            const assetUrl = convertFileSrc(filePath);
+            const resp = await window.fetch(assetUrl);
+            const blob = await resp.blob();
+            file = new File([blob], fileName, { type: mimeType || blob.type });
+            addDebugLog(`[Tauri File] convertFileSrc 读取成功: ${fileName} (${file.size} bytes, type=${file.type})`);
+          } catch (eAsset) {
+            addDebugLog(`[Tauri File Warning] convertFileSrc 失败: ${eAsset.message || eAsset}`);
+          }
+        }
+
+        if (file) {
+          handleSendMessageRef.current(null, file);
+        }
+      } catch (err) {
+        addDebugLog(`[Tauri File ERR] 文件解析发送失败: ${err.stack || err.message || err}`);
+        console.error('[Tauri File Error]:', err);
+      }
+    };
+
     const handleDrop = async (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -2315,7 +2373,76 @@ export default function App() {
       if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         const files = Array.from(e.dataTransfer.files);
         for (const file of files) {
+          handleSendMessageRef.current(null, ensureProperFile(file));
+        }
+      }
+    };
+
+    const handlePaste = async (e) => {
+      // 若当前在模态弹窗的输入框内，不拦截粘贴事件
+      const isInsideModal = e.target && e.target.closest && e.target.closest('[role="dialog"], .fixed.inset-0:not([data-chat-area])');
+      if (isInsideModal) {
+        return;
+      }
+
+      const clipboardData = e.clipboardData;
+      if (!clipboardData) return;
+
+      // 1. 系统剪贴板如果是图片本身（如截图工具 Win+Shift+S、网页右键复制图片），直接发送图片
+      const items = Array.from(clipboardData.items || []);
+      const imageItem = items.find(it => it.kind === 'file' && it.type.startsWith('image/'));
+      if (imageItem) {
+        e.preventDefault();
+        e.stopPropagation();
+        const blob = imageItem.getAsFile();
+        if (blob) {
+          const nowStr = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+          const ext = blob.type.split('/')[1] || 'png';
+          const file = new File([blob], `image_${nowStr}.${ext}`, { type: blob.type || 'image/png' });
+          addDebugLog(`[Paste Image] 剪贴板检测到图片数据，直接发送: ${file.name} (${file.size} bytes)`);
           handleSendMessageRef.current(null, file);
+        }
+        return;
+      }
+
+      // 2. 剪贴板中直接包含文件对象（支持 HTML5 File API 剪贴板的场景）
+      if (clipboardData.files && clipboardData.files.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        const files = Array.from(clipboardData.files);
+        addDebugLog(`[Paste Files] 剪贴板包含 ${files.length} 个文件，直接发送`);
+        for (const f of files) {
+          handleSendMessageRef.current(null, ensureProperFile(f));
+        }
+        return;
+      }
+
+      // 3. 在 Windows 桌面端（Tauri）：检测文件资源管理器复制的文件列表（CF_HDROP）
+      if (isTauri) {
+        const textContent = clipboardData.getData('text');
+        const isEditingText = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
+
+        // 如果用户正在编辑文本框且剪贴板含有纯文本，则保留默认文本粘贴
+        if (isEditingText && textContent) {
+          return;
+        }
+
+        try {
+          const invoke = window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
+          if (invoke) {
+            const filePaths = await invoke('get_clipboard_files');
+            if (Array.isArray(filePaths) && filePaths.length > 0) {
+              e.preventDefault();
+              e.stopPropagation();
+              addDebugLog(`[Tauri Paste] 剪贴板读取到 Windows 复制文件列表: ${JSON.stringify(filePaths)}`);
+              for (const p of filePaths) {
+                await processPath(p);
+              }
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn('[Tauri Paste] get_clipboard_files error:', err);
         }
       }
     };
@@ -2323,66 +2450,14 @@ export default function App() {
     window.addEventListener('dragover', handleDragOver);
     window.addEventListener('dragleave', handleDragLeave);
     window.addEventListener('drop', handleDrop);
+    window.addEventListener('paste', handlePaste, true);
 
     let unlistenTauri = null;
     let isCancelled = false;
-    const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
     if (isTauri) {
       (async () => {
         try {
           const { getCurrentWindow } = await import('@tauri-apps/api/window');
-          const { convertFileSrc } = await import('@tauri-apps/api/core');
-
-          const processPath = async (filePath) => {
-            if (!filePath) return;
-            const now = Date.now();
-            const lastTime = lastProcessedPathRef.current[filePath] || 0;
-            // 防重复/防刷：1.5秒内同一文件路径仅处理一次
-            if (now - lastTime < 1500) {
-              return;
-            }
-            lastProcessedPathRef.current[filePath] = now;
-
-            addDebugLog(`[Tauri DragDrop] 收到拖入文件路径: ${filePath}`);
-            try {
-              let file = null;
-              // 1. 优先通过 Rust read_file_binary 读取
-              try {
-                const invoke = window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
-                if (invoke) {
-                  const base64Str = await invoke('read_file_binary', { path: filePath });
-                  const byteCharacters = atob(base64Str);
-                  const byteNumbers = new Array(byteCharacters.length);
-                  for (let i = 0; i < byteCharacters.length; i++) {
-                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                  }
-                  const byteArray = new Uint8Array(byteNumbers);
-                  const fileName = filePath.split(/[/\\]/).pop() || 'file';
-                  file = new File([byteArray], fileName, { type: 'application/octet-stream' });
-                  addDebugLog(`[Tauri DragDrop] 框架 Rust 读取二进制成功: ${fileName} (${file.size} bytes)`);
-                }
-              } catch (eRust) {
-                addDebugLog(`[Tauri DragDrop Warning] Rust read_file_binary 失败: ${eRust.message || eRust}，尝试 asset 协议...`);
-              }
-
-              // 2. 回退：使用 convertFileSrc + fetch
-              if (!file) {
-                const assetUrl = convertFileSrc(filePath);
-                const resp = await window.fetch(assetUrl);
-                const blob = await resp.blob();
-                const fileName = filePath.split(/[/\\]/).pop() || 'file';
-                file = new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
-                addDebugLog(`[Tauri DragDrop] convertFileSrc 读取成功: ${fileName} (${file.size} bytes)`);
-              }
-
-              if (file) {
-                handleSendMessageRef.current(null, file);
-              }
-            } catch (err) {
-              addDebugLog(`[Tauri DragDrop ERR] 文件解析发送失败: ${err.stack || err.message || err}`);
-              console.error('[Tauri DragDrop Error]:', err);
-            }
-          };
 
           const extractPathsFromEvent = (evt) => {
             if (!evt) return [];
@@ -2432,6 +2507,7 @@ export default function App() {
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('dragleave', handleDragLeave);
       window.removeEventListener('drop', handleDrop);
+      window.removeEventListener('paste', handlePaste, true);
       if (unlistenTauri) unlistenTauri();
     };
   }, []);
