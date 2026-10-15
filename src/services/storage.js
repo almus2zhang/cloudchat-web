@@ -1,5 +1,6 @@
 import CryptoJS from 'crypto-js';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { resolveDynamicWebDavUrl, parseDynamicUrlPrefix } from '../utils/dynamicUrlResolver';
 
 function logDebug(msg) {
     if (typeof window !== 'undefined' && window.__addDebugLog) {
@@ -239,6 +240,11 @@ export async function checkWebLanStatus(profileOrUrl, fallbackUrl) {
         webDavFallbackUrl = fallbackUrl || '';
     }
 
+    // 若配置为动态地址 (302: 或 txt:)，跳过固定局域网检测
+    if (parseDynamicUrlPrefix(webDavUrl)) {
+        return { isServerLan: false, isSameLan: false, debugMessage: `[Web LAN Debug] 主服务为动态地址 (${webDavUrl})，跳过局域网检测` };
+    }
+
     const host = extractHost(webDavUrl);
     if (!host) {
         return { isServerLan: false, isSameLan: false, debugMessage: '[Web LAN Debug] 主服务 URL 为空' };
@@ -271,18 +277,72 @@ class WebDavStorageClient {
     constructor(config) {
         this.config = config;
         this.type = 'WEBDAV';
+        this._resolvedBaseUrl = null;
+    }
+
+    async resolveEffectiveWebDavUrl(forceRefresh = false) {
+        const primary = (this.config.webDavUrl || '').trim();
+        const fallback = (this.config.webDavFallbackUrl || '').trim();
+        const host = extractHost(primary);
+        
+        let target = primary;
+        if (isPrivateOrLanIp(host) && this.config.isSameLan === false && fallback) {
+            logDebug(`[WebDav Client Switch] Same LAN = false -> Instantly using fallback URL: ${fallback}`);
+            target = fallback;
+        }
+
+        if (parseDynamicUrlPrefix(target)) {
+            try {
+                const resolved = await resolveDynamicWebDavUrl(target, forceRefresh);
+                if (resolved) {
+                    this._resolvedBaseUrl = resolved;
+                    return resolved;
+                }
+            } catch (err) {
+                logDebug(`[Dynamic URL Resolve Error] ${err.message || err}`);
+                if (this._resolvedBaseUrl && !forceRefresh) {
+                    return this._resolvedBaseUrl;
+                }
+            }
+        } else {
+            this._resolvedBaseUrl = target;
+        }
+        return target;
     }
 
     getEffectiveWebDavUrl() {
+        if (this._resolvedBaseUrl) {
+            return this._resolvedBaseUrl;
+        }
         const primary = (this.config.webDavUrl || '').trim();
         const fallback = (this.config.webDavFallbackUrl || '').trim();
         const host = extractHost(primary);
         
         if (isPrivateOrLanIp(host) && this.config.isSameLan === false && fallback) {
-            logDebug(`[WebDav Client Switch] Same LAN = false -> Instantly using fallback URL: ${fallback}`);
             return fallback;
         }
         return primary;
+    }
+
+    async executeWithDynamicRetry(fn) {
+        await this.resolveEffectiveWebDavUrl(false);
+        try {
+            return await fn();
+        } catch (err) {
+            const primary = (this.config.webDavUrl || '').trim();
+            const fallback = (this.config.webDavFallbackUrl || '').trim();
+            const isDynamic = parseDynamicUrlPrefix(primary) || parseDynamicUrlPrefix(fallback);
+            if (isDynamic) {
+                logDebug(`[WebDAV Dynamic Retry] 请求失败 (${err.message || err})，尝试重新解析动态地址并重试...`);
+                try {
+                    await this.resolveEffectiveWebDavUrl(true);
+                    return await fn();
+                } catch (retryErr) {
+                    throw retryErr;
+                }
+            }
+            throw err;
+        }
     }
 
     getAuthHeader() {
@@ -290,32 +350,8 @@ class WebDavStorageClient {
         return `Basic ${creds}`;
     }
 
-    async testConnection() {
-        if (!this.config.webDavUrl) {
-            throw new Error('WebDAV 服务器地址不能为空');
-        }
-        await this.ensureDirectoriesExist();
-        const baseUrl = this.getEffectiveWebDavUrl().replace(/\/+$/, '');
-        const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
-        const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
-        const parts = [];
-        if (root) parts.push(root);
-        if (userDirClean) parts.push(userDirClean);
-        const folderUrl = parts.length > 0 ? `${baseUrl}/${parts.join('/')}` : baseUrl;
-
-        const res = await fetchWithTimeout(folderUrl, {
-            method: 'PROPFIND',
-            headers: { 'Authorization': this.getAuthHeader(), 'Depth': '0' }
-        }, 10000);
-
-        if (res.ok || res.status === 207 || res.status === 405) {
-            return { success: true, message: `WebDAV 连接测试成功！(HTTP Status ${res.status})` };
-        } else {
-            throw new Error(`WebDAV 连接失败 (HTTP Status ${res.status})`);
-        }
-    }
-
     async ensureDirectoriesExist() {
+        await this.resolveEffectiveWebDavUrl(false);
         const baseUrl = this.getEffectiveWebDavUrl().replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
@@ -409,84 +445,96 @@ class WebDavStorageClient {
     }
 
     async uploadFile(file, fileName, contentType, onProgress) {
-        await this.ensureDirectoriesExist();
-        const url = this.getUrl(fileName);
-        const response = await fetchWithTimeout(url, {
-            method: 'PUT',
-            headers: {
-                'Authorization': this.getAuthHeader(),
-                'Content-Type': contentType || 'application/octet-stream'
-            },
-            body: file
-        }, 60000);
+        return this.executeWithDynamicRetry(async () => {
+            await this.ensureDirectoriesExist();
+            const url = this.getUrl(fileName);
+            const response = await fetchWithTimeout(url, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': this.getAuthHeader(),
+                    'Content-Type': contentType || 'application/octet-stream'
+                },
+                body: file
+            }, 60000);
 
-        if (!response.ok) {
-            throw new Error(`Upload failed: ${response.status} ${response.statusText || ''}`);
-        }
-        if (onProgress) onProgress(100);
-        return url;
+            if (!response.ok) {
+                throw new Error(`Upload failed: ${response.status} ${response.statusText || ''}`);
+            }
+            if (onProgress) onProgress(100);
+            return url;
+        });
     }
 
     async uploadFileRange(fileChunk, fileName, contentType, startByte, endByte, totalLength, onProgress) {
-        await this.ensureDirectoriesExist();
-        const url = this.getUrl(fileName);
-        const response = await fetchWithTimeout(url, {
-            method: 'PUT',
-            headers: {
-                'Authorization': this.getAuthHeader(),
-                'Content-Type': contentType || 'application/octet-stream',
-                'Content-Range': `bytes ${startByte}-${endByte}/${totalLength}`
-            },
-            body: fileChunk
-        }, 60000);
+        return this.executeWithDynamicRetry(async () => {
+            await this.ensureDirectoriesExist();
+            const url = this.getUrl(fileName);
+            const response = await fetchWithTimeout(url, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': this.getAuthHeader(),
+                    'Content-Type': contentType || 'application/octet-stream',
+                    'Content-Range': `bytes ${startByte}-${endByte}/${totalLength}`
+                },
+                body: fileChunk
+            }, 60000);
 
-        if (!response.ok) {
-            throw new Error(`Range upload failed: ${response.status} ${response.statusText || ''}`);
-        }
-        if (onProgress) onProgress(100);
-        return url;
+            if (!response.ok) {
+                throw new Error(`Range upload failed: ${response.status} ${response.statusText || ''}`);
+            }
+            if (onProgress) onProgress(100);
+            return url;
+        });
     }
 
     async uploadText(content, fileName) {
-        const url = this.getUrl(fileName);
-        const response = await fetchWithTimeout(url, {
-            method: 'PUT',
-            headers: {
-                'Authorization': this.getAuthHeader(),
-                'Content-Type': 'application/json'
-            },
-            body: content
-        }, 12000);
-        if (!response.ok) throw new Error(`Upload text failed: ${response.status}`);
-        return url;
+        return this.executeWithDynamicRetry(async () => {
+            const url = this.getUrl(fileName);
+            const response = await fetchWithTimeout(url, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': this.getAuthHeader(),
+                    'Content-Type': 'application/json'
+                },
+                body: content
+            }, 12000);
+            if (!response.ok) throw new Error(`Upload text failed: ${response.status}`);
+            return url;
+        });
     }
 
     async downloadFile(fileName) {
-        const url = this.getUrl(fileName);
-        const response = await fetchWithTimeout(url, {
-            headers: { 'Authorization': this.getAuthHeader() }
-        }, 20000);
-        if (!response.ok) throw new Error(`Download failed: ${response.status}`);
-        return await response.blob();
+        return this.executeWithDynamicRetry(async () => {
+            const url = this.getUrl(fileName);
+            const response = await fetchWithTimeout(url, {
+                headers: { 'Authorization': this.getAuthHeader() }
+            }, 20000);
+            if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+            return await response.blob();
+        });
     }
 
     async downloadText(fileName) {
-        const url = this.getUrl(fileName);
-        const response = await fetchWithTimeout(url, {
-            headers: { 'Authorization': this.getAuthHeader() }
-        }, 20000);
-        if (!response.ok) throw new Error(`Download text failed: ${response.status}`);
-        return await response.text();
+        return this.executeWithDynamicRetry(async () => {
+            const url = this.getUrl(fileName);
+            const response = await fetchWithTimeout(url, {
+                headers: { 'Authorization': this.getAuthHeader() }
+            }, 20000);
+            if (!response.ok) throw new Error(`Download text failed: ${response.status}`);
+            return await response.text();
+        });
     }
 
     async downloadFileWithProgress(fileName, onProgress, dlState) {
-        const url = this.getUrl(fileName);
-        const response = await fetchWithTimeout(url, {
-            headers: { 'Authorization': this.getAuthHeader() },
-            signal: dlState?.controller?.signal
-        }, 60000);
-        if (!response.ok) throw new Error(`Download failed: ${response.status}`);
-        return await readResponseWithProgress(response, onProgress, dlState);
+        return this.executeWithDynamicRetry(async () => {
+            const url = this.getUrl(fileName);
+            const response = await fetchWithTimeout(url, {
+                headers: { 'Authorization': this.getAuthHeader() },
+                signal: dlState?.controller?.signal
+            }, 60000);
+            if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+            return await readResponseWithProgress(response, onProgress, dlState);
+        });
     }
 
     // 校验文件名安全：拒绝空、绝对路径、路径穿越(..)、保留名及非法字符。
@@ -518,27 +566,30 @@ class WebDavStorageClient {
     }
 
     async deleteFile(fileName) {
-        if (!this.isValidUserDir()) {
-            console.error('WebDAV deleteFile: refusing, user directory is invalid (must be alphanumeric/_- only)');
-            return;
-        }
-        if (!this.validateSafeName(fileName)) {
-            console.error('WebDAV deleteFile: refusing unsafe fileName:', fileName);
-            return;
-        }
-        const url = this.getUrl(fileName);
-        const response = await fetch(url, {
-            method: 'DELETE',
-            headers: { 'Authorization': this.getAuthHeader() }
+        return this.executeWithDynamicRetry(async () => {
+            if (!this.isValidUserDir()) {
+                console.error('WebDAV deleteFile: refusing, user directory is invalid (must be alphanumeric/_- only)');
+                return;
+            }
+            if (!this.validateSafeName(fileName)) {
+                console.error('WebDAV deleteFile: refusing unsafe fileName:', fileName);
+                return;
+            }
+            const url = this.getUrl(fileName);
+            const response = await fetchWithTimeout(url, {
+                method: 'DELETE',
+                headers: { 'Authorization': this.getAuthHeader() }
+            }, 15000);
+            if (!response.ok && response.status !== 404) {
+                throw new Error(`Delete failed: ${response.status}`);
+            }
         });
-        if (!response.ok && response.status !== 404) {
-            throw new Error(`Delete failed: ${response.status}`);
-        }
     }
 
     // 删除 diary 目录下的日记文件。fileName 可能为 "subDir/index.html" 或 "xxx.html"
     // 安全策略：永不物理删除，只移动到 recycle_bin 回收站（目录连同内容一并移入）。
     async deleteDiaryFile(fileName) {
+        await this.resolveEffectiveWebDavUrl(false);
         // 移动/删除仅限设定的用户目录内
         if (!this.isValidUserDir()) {
             console.error('WebDAV deleteDiaryFile: refusing, user directory is invalid (must be alphanumeric/_- only)');
@@ -603,6 +654,7 @@ class WebDavStorageClient {
     }
 
     async recycleFile(fileName) {
+        await this.resolveEffectiveWebDavUrl(false);
         if (!this.isValidUserDir()) {
             console.error('WebDAV recycleFile: refusing, user directory is invalid (must be alphanumeric/_- only)');
             return;
@@ -661,6 +713,7 @@ class WebDavStorageClient {
     }
 
     async copyFile(sourceFileName, destSubPath) {
+        await this.resolveEffectiveWebDavUrl(false);
         const sourceUrl = this.getUrl(sourceFileName);
         const destUrl = this.getUrl(destSubPath);
         try {
@@ -680,6 +733,7 @@ class WebDavStorageClient {
     }
 
     async copyToShare(fileName, textContent) {
+        await this.resolveEffectiveWebDavUrl(false);
         if (!this.isValidUserDir()) {
             throw new Error('非法的用户目录名');
         }
@@ -716,6 +770,7 @@ class WebDavStorageClient {
     }
 
     async deleteShareFile(fileName) {
+        await this.resolveEffectiveWebDavUrl(false);
         if (!this.isValidUserDir()) {
             console.error('WebDAV deleteShareFile: refusing, user directory is invalid');
             return false;
@@ -741,6 +796,7 @@ class WebDavStorageClient {
     }
 
     async getFileSize(fileName) {
+        await this.resolveEffectiveWebDavUrl(false);
         const url = this.getUrl(fileName);
         try {
             const response = await fetchWithTimeout(url, {
@@ -755,6 +811,7 @@ class WebDavStorageClient {
     }
 
     async getLastModified(fileName) {
+        await this.resolveEffectiveWebDavUrl(false);
         const url = this.getUrl(fileName);
 
         const parseDate = (val) => {
@@ -818,6 +875,7 @@ class WebDavStorageClient {
     }
 
     async listDiaryFiles() {
+        await this.resolveEffectiveWebDavUrl(false);
         const baseUrl = this.getEffectiveWebDavUrl().replace(/\/+$/, '');
         const root = (this.config.serverPath || '').replace(/^\/+|\/+$/g, '');
         const userDirClean = (this.config.saveDir || '').replace(/^\/+|\/+$/g, '');
@@ -970,8 +1028,20 @@ class WebDavStorageClient {
                 return parts.length > 0 ? `${baseUrl}/${parts.join('/')}` : baseUrl;
             };
 
-            const testSingleUrl = async (targetUrl) => {
-                if (!targetUrl) return { ok: false, message: 'URL 不能为空' };
+            const testSingleUrl = async (rawUrl) => {
+                if (!rawUrl) return { ok: false, message: 'URL 不能为空' };
+                let resolved = rawUrl;
+                const isDynamic = parseDynamicUrlPrefix(rawUrl);
+                if (isDynamic) {
+                    try {
+                        resolved = await resolveDynamicWebDavUrl(rawUrl, true);
+                    } catch (e) {
+                        return { ok: false, message: `动态地址解析失败: ${e.message || e}` };
+                    }
+                }
+                const targetUrl = buildUrl(resolved);
+                if (!targetUrl) return { ok: false, message: 'URL 路径构建失败' };
+                const dynamicTip = isDynamic ? ` [动态解析至: ${resolved}]` : '';
                 const xmlBody = '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>';
                 
                 try {
@@ -1006,21 +1076,18 @@ class WebDavStorageClient {
                         const text = await response.text();
                         const count = (text.match(/<(?:\w+:)?response\b/gi) || []).length;
                         const tip = createdDir ? `(目录已自动创建，已列出 ${count} 项)` : `(已成功列出 ${count} 项)`;
-                        return { ok: true, message: `HTTP ${response.status} ${tip}` };
+                        return { ok: true, message: `HTTP ${response.status} ${tip}${dynamicTip}` };
                     } else if (response.status === 401 || response.status === 403) {
-                        return { ok: false, message: `HTTP ${response.status} (认证失败，账号或密码错误)` };
+                        return { ok: false, message: `HTTP ${response.status} (认证失败，账号或密码错误)${dynamicTip}` };
                     } else {
-                        return { ok: false, message: `HTTP ${response.status} (${response.statusText || '连接异常'})` };
+                        return { ok: false, message: `HTTP ${response.status} (${response.statusText || '连接异常'})${dynamicTip}` };
                     }
                 } catch (e) {
-                    return { ok: false, message: `网络连接失败 (${e.message || '无法访问'})` };
+                    return { ok: false, message: `网络连接失败 (${e.message || '无法访问'})${dynamicTip}` };
                 }
             };
 
-            const primaryTargetUrl = buildUrl(this.config.webDavUrl);
-            if (!primaryTargetUrl) throw new Error('主 WebDAV 地址不能为空');
-
-            const primaryResult = await testSingleUrl(primaryTargetUrl);
+            const primaryResult = await testSingleUrl(this.config.webDavUrl);
             const report = [];
             
             if (primaryResult.ok) {
@@ -1030,8 +1097,7 @@ class WebDavStorageClient {
             }
 
             if (this.config.webDavFallbackUrl && this.config.webDavFallbackUrl.trim()) {
-                const fallbackTargetUrl = buildUrl(this.config.webDavFallbackUrl);
-                const fallbackResult = await testSingleUrl(fallbackTargetUrl);
+                const fallbackResult = await testSingleUrl(this.config.webDavFallbackUrl);
                 if (fallbackResult.ok) {
                     report.push(`备用地址: ${fallbackResult.message}`);
                 } else {

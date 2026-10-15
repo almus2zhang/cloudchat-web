@@ -805,15 +805,16 @@ export default function SettingsModal({
                       <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">WebDAV 服务器 URL 地址</label>
                         <input 
-                          type="url" 
+                          type="text" 
                           value={editingProfile.webDavUrl || ''}
                           onChange={(e) => handleFieldChange('webDavUrl', e.target.value)}
                           disabled={editingProfile.preset === 'jianguoyun'}
-                          placeholder="https://nas.local:5006/dav"
+                          placeholder="https://nas.local:5006/dav 或 txt:a.b.com 或 302:https://..."
                           className={`bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor transition-colors w-full ${
                             editingProfile.preset === 'jianguoyun' ? 'opacity-60 cursor-not-allowed' : ''
                           }`}
                         />
+                        <span className="text-[10px] text-textMuted mt-0.5">支持普通 URL、txt:域名（高可用 DoH 并发解析 TXT 记录）与 302:地址（自动提取重定向真实地址）。</span>
                       </div>
 
                       {/* 坚果云应用密码获取步骤提示 */}
@@ -866,11 +867,11 @@ export default function SettingsModal({
                         <div className="flex flex-col gap-1.5">
                           <label className="text-xs font-medium text-textSecondary uppercase tracking-wider">WebDAV 局域网/回退地址 (可选)</label>
                           <input 
-                            type="url" 
+                            type="text" 
                             value={editingProfile.webDavFallbackUrl || ''}
                             onChange={(e) => handleFieldChange('webDavFallbackUrl', e.target.value)}
                             disabled={editingProfile.preset === 'jianguoyun'}
-                            placeholder={editingProfile.preset === 'jianguoyun' ? '坚果云模式不可用' : 'http://192.168.1.100:5005/dav'}
+                            placeholder={editingProfile.preset === 'jianguoyun' ? '坚果云模式不可用' : 'http://192.168.1.100:5005/dav 或 txt:... 或 302:...'}
                             className={`bg-bgPrimary text-textPrimary border border-borderColor rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accentColor transition-colors w-full ${
                               editingProfile.preset === 'jianguoyun' ? 'opacity-60 cursor-not-allowed' : ''
                             }`}
